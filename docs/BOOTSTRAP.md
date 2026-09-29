@@ -130,7 +130,7 @@ CI runs the same targets as separate jobs (`tf-test` runs `make test`), so a loc
 
 ## 6. Bootstrap stack (Terraform, applied once locally)
 
-`bootstrap/` creates the Terraform state bucket, the GitHub OIDC provider and the `github-infra-management` role in the management account. It is applied from a laptop once. Its own state lives in the bucket it creates, so the first apply uses local state, which is then migrated.
+`bootstrap/` creates the Terraform state bucket, the GitHub OIDC provider and two roles, `github-infra-management` and `github-infra-management-plan`, in the management account. It is applied from a laptop once. Its own state lives in the bucket it creates, so the first apply uses local state, which is then migrated.
 
 What it creates:
 
@@ -138,7 +138,9 @@ What it creates:
 - **OIDC provider** for `token.actions.githubusercontent.com`, audience `sts.amazonaws.com`.
 - **Role `github-infra-management`:** assumable only by the subject `repo:<owner>@<owner-id>/<repo>@<repo-id>:environment:management` (an exact `StringEquals`, no wildcard). This repository issues **immutable subjects** with numeric IDs, which the defaults in `variables.tf` carry; check the format with `gh api repos/<owner>/<repo>/actions/oidc/customization/sub`. Permissions: list the state bucket, read the bootstrap state, lock and unlock its lockfile, and read the resources of this stack.
 
-The only guard on the role is the protection of the `management` GitHub Environment: anyone who can push a workflow to the repository could otherwise create an unprotected environment of that name and obtain a token. The GitHub App that authors commits (`buzzl-workforce-agent`) must therefore have neither the Administration nor the Environments write permission, or it could weaken that protection.
+- **Role `github-infra-management-plan`:** read-only, for plans on pull requests. It can be assumed only by the subject `repo:<owner>@<owner-id>/<repo>@<repo-id>:environment:management-plan`. It lists the bucket, reads the object `bootstrap/terraform.tfstate` (no other stack) and reads the bootstrap resources, with S3 and IAM `Get` and `List` actions only. It has no lockfile access, so plans that use it must run with `-lock=false`.
+
+The only guard on the `github-infra-management` role is the protection of the `management` GitHub Environment: anyone who can push a workflow to the repository could otherwise create an unprotected environment of that name and obtain a token. The GitHub App that authors commits (`buzzl-workforce-agent`) must therefore have neither the Administration nor the Environments write permission, or it could weaken that protection.
 
 ### Step 0: protect the `management` environment (maintainer, before the apply)
 
@@ -155,6 +157,14 @@ gh api repos/BuzzL/workforce-infra/environments/management/deployment-branch-pol
 ```
 
 `prevent_self_review` is `false` because the maintainer is the only reviewer, as on `production`. If `can_admins_bypass` is still `true`, turn off "Allow administrators to bypass configured protection rules" in the environment's settings.
+
+### Step 0b: the `management-plan` environment (maintainer)
+
+This environment has **no reviewer and accepts any branch**, on purpose: pull requests must be able to plan. What limits it is the role behind it, which is read-only. Anyone who can push a branch to the repository can run code with that role's reads, so the role must never gain a write action.
+
+```sh
+gh api -X PUT repos/BuzzL/workforce-infra/environments/management-plan
+```
 
 ### Apply
 
@@ -188,7 +198,7 @@ If the migration fails, the local `terraform.tfstate` is still there: fix the ca
 
 ### Verify
 
-`$BUCKET` is the bucket name; the role is `github-infra-management`.
+`$BUCKET` is the bucket name; the roles are `github-infra-management` and `github-infra-management-plan`.
 
 ```sh
 aws s3api get-bucket-versioning --bucket "$BUCKET" --query Status --output text             # Enabled
@@ -197,7 +207,23 @@ aws s3api get-bucket-encryption --bucket "$BUCKET" \
 aws s3api get-public-access-block --bucket "$BUCKET" --query 'PublicAccessBlockConfiguration' --output text   # True x4
 aws s3api get-bucket-policy --bucket "$BUCKET" --query Policy --output text                 # Deny aws:SecureTransport=false
 aws iam get-role --role-name github-infra-management --query 'Role.AssumeRolePolicyDocument' # exact sub, StringEquals
+aws iam get-role --role-name github-infra-management-plan --query 'Role.AssumeRolePolicyDocument' # exact sub (…:environment:management-plan), StringEquals
 aws s3 ls "s3://$BUCKET/bootstrap/"                                                          # terraform.tfstate
 ```
 
-Keep the role ARN and the bucket name out of the repository.
+Keep the role ARNs and the bucket name out of the repository.
+
+### Change an applied bootstrap
+
+`backend.hcl` and `terraform.tfvars` stay in `bootstrap/`, and the state is in the bucket. Change the code through a PR, and apply locally from the merged `main`:
+
+```sh
+export AWS_PROFILE=workforce-management
+git switch main && git pull --ff-only
+cd bootstrap
+terraform init -backend-config=backend.hcl
+terraform plan -out=bootstrap.tfplan        # read it
+terraform apply bootstrap.tfplan
+terraform plan -detailed-exitcode           # 0: nothing left to change
+rm -f bootstrap.tfplan
+```
