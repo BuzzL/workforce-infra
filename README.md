@@ -16,7 +16,7 @@ Terraform monorepo for the AI Workforce on AWS:
 | Repository | Purpose |
 |---|---|
 | **workforce-infra** | This repo: AWS Organization, accounts and roles |
-| [workforce-images](https://github.com/BuzzL/workforce-images) | Developer container images (Python, Java) for agents and devcontainers |
+| [workforce-images](https://github.com/BuzzL/workforce-images) | Developer container images (base, Python) for agents and devcontainers |
 | [workforce-testbed](https://github.com/BuzzL/workforce-testbed) | The TypeScript codebase the agents iterate on |
 
 ## Contributing
