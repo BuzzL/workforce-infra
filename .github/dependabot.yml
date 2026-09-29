@@ -6,13 +6,5 @@ updates:
       interval: weekly
     commit-message:
       prefix: ci
-  - package-ecosystem: terraform
-    directories:
-      - /bootstrap
-      - /modules/*
-      - /live/*
-      - /live/environments/*
-    schedule:
-      interval: weekly
-    commit-message:
-      prefix: build
+  # The terraform ecosystem is added per directory by the PR that creates each stack
+  # or module: Dependabot fails on directories that do not exist yet.
