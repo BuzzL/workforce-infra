@@ -80,47 +80,54 @@ resource "aws_iam_role_policy" "plan_bootstrap" {
   role = aws_iam_role.github_infra_management.id
 
   policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "ReadStateBucketConfiguration"
-        Effect = "Allow"
-        Action = [
-          "s3:GetAccelerateConfiguration",
-          "s3:GetBucketAcl",
-          "s3:GetBucketCORS",
-          "s3:GetBucketLogging",
-          "s3:GetBucketObjectLockConfiguration",
-          "s3:GetBucketOwnershipControls",
-          "s3:GetBucketPolicy",
-          "s3:GetBucketPublicAccessBlock",
-          "s3:GetBucketRequestPayment",
-          "s3:GetBucketTagging",
-          "s3:GetBucketVersioning",
-          "s3:GetBucketWebsite",
-          "s3:GetEncryptionConfiguration",
-          "s3:GetLifecycleConfiguration",
-          "s3:GetReplicationConfiguration",
-        ]
-        Resource = [local.state_bucket_arn]
-      },
-      {
-        Sid    = "ReadGithubProviderAndRole"
-        Effect = "Allow"
-        Action = [
-          "iam:GetOpenIDConnectProvider",
-          "iam:GetRole",
-          "iam:GetRolePolicy",
-          "iam:ListAttachedRolePolicies",
-          "iam:ListOpenIDConnectProviderTags",
-          "iam:ListRolePolicies",
-          "iam:ListRoleTags",
-        ]
-        Resource = [
-          aws_iam_openid_connect_provider.github.arn,
-          aws_iam_role.github_infra_management.arn,
-        ]
-      }
-    ]
+    Version   = "2012-10-17"
+    Statement = local.bootstrap_read_statements
   })
+}
+
+# What a plan of this stack reads: shared by the management role and the plan role.
+locals {
+  bootstrap_read_statements = [
+    {
+      Sid    = "ReadStateBucketConfiguration"
+      Effect = "Allow"
+      Action = [
+        "s3:GetAccelerateConfiguration",
+        "s3:GetBucketAcl",
+        "s3:GetBucketCORS",
+        "s3:GetBucketLogging",
+        "s3:GetBucketObjectLockConfiguration",
+        "s3:GetBucketOwnershipControls",
+        "s3:GetBucketPolicy",
+        "s3:GetBucketPublicAccessBlock",
+        "s3:GetBucketRequestPayment",
+        "s3:GetBucketTagging",
+        "s3:GetBucketVersioning",
+        "s3:GetBucketWebsite",
+        "s3:GetEncryptionConfiguration",
+        "s3:GetLifecycleConfiguration",
+        "s3:GetReplicationConfiguration",
+        "s3:ListTagsForResource",
+      ]
+      Resource = [local.state_bucket_arn]
+    },
+    {
+      Sid    = "ReadGithubProviderAndRole"
+      Effect = "Allow"
+      Action = [
+        "iam:GetOpenIDConnectProvider",
+        "iam:GetRole",
+        "iam:GetRolePolicy",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListOpenIDConnectProviderTags",
+        "iam:ListRolePolicies",
+        "iam:ListRoleTags",
+      ]
+      Resource = [
+        aws_iam_openid_connect_provider.github.arn,
+        aws_iam_role.github_infra_management.arn,
+        aws_iam_role.github_infra_management_plan.arn,
+      ]
+    }
+  ]
 }

@@ -90,6 +90,7 @@ run "role_permissions_are_exactly_the_documented_ones" {
             "s3:GetEncryptionConfiguration",
             "s3:GetLifecycleConfiguration",
             "s3:GetReplicationConfiguration",
+            "s3:ListTagsForResource",
           ]
           Resource = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4"]
         },
@@ -108,6 +109,7 @@ run "role_permissions_are_exactly_the_documented_ones" {
           Resource = [
             aws_iam_openid_connect_provider.github.arn,
             aws_iam_role.github_infra_management.arn,
+            aws_iam_role.github_infra_management_plan.arn,
           ]
         }
       ]
@@ -128,6 +130,119 @@ run "role_has_no_other_permissions" {
   assert {
     condition     = length(aws_iam_role_policy_attachments_exclusive.github_infra_management.policy_arns) == 0
     error_message = "No managed policy may be attached to the role."
+  }
+}
+
+run "plan_role_trust_admits_only_the_management_plan_environment" {
+  command = apply
+
+  assert {
+    condition = jsondecode(aws_iam_role.github_infra_management_plan.assume_role_policy) == {
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Effect    = "Allow"
+          Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
+          Action    = "sts:AssumeRoleWithWebIdentity"
+          Condition = {
+            StringEquals = {
+              "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+              "token.actions.githubusercontent.com:sub" = "repo:BuzzL@6116516/workforce-infra@1394667495:environment:management-plan"
+            }
+          }
+        }
+      ]
+    }
+    error_message = "The plan role must be assumable only by the immutable subject of the management-plan environment."
+  }
+
+  assert {
+    condition     = aws_iam_role.github_infra_management_plan.name == "github-infra-management-plan" && aws_iam_role.github_infra_management_plan.max_session_duration == 3600
+    error_message = "The plan role must keep its documented name and a one-hour session."
+  }
+}
+
+run "plan_role_is_read_only" {
+  command = apply
+
+  assert {
+    condition = jsondecode(aws_iam_role_policy.plan_state_read.policy) == {
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Sid      = "ListStateBucket"
+          Effect   = "Allow"
+          Action   = ["s3:ListBucket"]
+          Resource = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4"]
+        },
+        {
+          Sid      = "ReadBootstrapState"
+          Effect   = "Allow"
+          Action   = ["s3:GetObject"]
+          Resource = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4/bootstrap/terraform.tfstate"]
+        }
+      ]
+    }
+    error_message = "The plan role may only list the bucket and read the bootstrap state: no other stack, no lockfile, no writes."
+  }
+
+  # Every action of every policy of this role is a Get or a List.
+  assert {
+    condition = alltrue([
+      for s in concat(
+        jsondecode(aws_iam_role_policy.plan_state_read.policy).Statement,
+        jsondecode(aws_iam_role_policy.plan_bootstrap_read.policy).Statement,
+        ) : alltrue([
+          for a in flatten([s.Action]) : can(regex("^(s3|iam):(Get|List)[A-Za-z]*$", a))
+      ])
+    ])
+    error_message = "The plan role may only have S3 and IAM Get and List actions, and exactly the documented ones (see the literals above and below)."
+  }
+
+  assert {
+    condition     = jsondecode(aws_iam_role_policy.plan_bootstrap_read.policy) == jsondecode(aws_iam_role_policy.plan_bootstrap.policy)
+    error_message = "Both roles must read exactly the same bootstrap resources, in the same policy document."
+  }
+
+  # Each policy is attached to the role it is written for.
+  assert {
+    condition = (
+      aws_iam_role_policy.plan_state_read.role == aws_iam_role.github_infra_management_plan.id &&
+      aws_iam_role_policy.plan_bootstrap_read.role == aws_iam_role.github_infra_management_plan.id &&
+      aws_iam_role_policy.state_access.role == aws_iam_role.github_infra_management.id &&
+      aws_iam_role_policy.plan_bootstrap.role == aws_iam_role.github_infra_management.id
+    )
+    error_message = "Every inline policy must be attached to its own role."
+  }
+
+  assert {
+    condition = (
+      aws_iam_role_policies_exclusive.github_infra_management_plan.role_name == "github-infra-management-plan" &&
+      aws_iam_role_policy_attachments_exclusive.github_infra_management_plan.role_name == "github-infra-management-plan" &&
+      aws_iam_role_policies_exclusive.github_infra_management.role_name == "github-infra-management" &&
+      aws_iam_role_policy_attachments_exclusive.github_infra_management.role_name == "github-infra-management"
+    )
+    error_message = "The exclusive resources must manage the role they are named after."
+  }
+
+  assert {
+    condition = (
+      aws_iam_role.github_infra_management_plan.permissions_boundary == null &&
+      (aws_iam_role.github_infra_management_plan.path == null || aws_iam_role.github_infra_management_plan.path == "/") &&
+      output.github_infra_management_plan_role_arn == aws_iam_role.github_infra_management_plan.arn &&
+      output.github_infra_management_role_arn == aws_iam_role.github_infra_management.arn
+    )
+    error_message = "The plan role has the default path and no boundary, and each output is the ARN of its own role."
+  }
+
+  assert {
+    condition     = aws_iam_role_policies_exclusive.github_infra_management_plan.policy_names == toset(["terraform-state-read", "plan-bootstrap-stack"])
+    error_message = "Only the two documented inline policies may exist on the plan role."
+  }
+
+  assert {
+    condition     = length(aws_iam_role_policy_attachments_exclusive.github_infra_management_plan.policy_arns) == 0
+    error_message = "No managed policy may be attached to the plan role."
   }
 }
 
@@ -223,6 +338,9 @@ run "no_wildcards_in_any_allow" {
         jsondecode(aws_iam_role.github_infra_management.assume_role_policy).Statement,
         jsondecode(aws_iam_role_policy.state_access.policy).Statement,
         jsondecode(aws_iam_role_policy.plan_bootstrap.policy).Statement,
+        jsondecode(aws_iam_role.github_infra_management_plan.assume_role_policy).Statement,
+        jsondecode(aws_iam_role_policy.plan_state_read.policy).Statement,
+        jsondecode(aws_iam_role_policy.plan_bootstrap_read.policy).Statement,
         ) : (
         s.Effect == "Allow" &&
         !anytrue([for a in flatten([s.Action]) : a == "*" || endswith(a, ":*")]) &&
