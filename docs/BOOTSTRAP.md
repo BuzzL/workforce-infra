@@ -110,6 +110,24 @@ aws budgets describe-subscribers-for-notification --account-id "$ACCT" --budget-
 
 Verified in the console only, with no CLI check: IAM access to Billing (step 2.2), always-on Identity Center MFA (step 2.6) and the second root MFA device.
 
+## 5. Terraform tooling
+
+The Terraform version is pinned in `.terraform-version` (CI reads it too), so update it there when bumping. Every stack and module declares `required_version = ">= 1.9"` and pins the AWS provider to `~> 6`. `make versions` checks those values (a text match, so keep each constraint on one line), and tflint checks that constraints exist at all. Each stack that declares providers must also be listed in the terraform block of `.github/dependabot.yml` (`make dependabot`), which is added by the PR that creates the stack. Directories are discovered by `scripts/stacks.sh`: `bootstrap/`, `live/**` and `modules/**` (`tests/` directories are skipped).
+
+```sh
+make fmt        # terraform fmt -check
+make validate   # per directory: init -backend=false, then validate
+make lint       # tflint (installs the pinned AWS ruleset on first run)
+make versions   # required_version >= 1.9 and AWS ~> 6
+make dependabot # every stack with providers is in dependabot.yml
+make sec        # trivy config, HIGH and CRITICAL fail
+make test       # terraform test, in directories that have *.tftest.hcl files
+make selftest   # proves the gates above pass on valid code and fail on broken code
+make check      # all of the above
+```
+
+CI runs the same targets as separate jobs (`tf-test` runs `make test`), so a local `make check` predicts CI. The loops live in `scripts/each.sh` and stop at the first error, because macOS ships Make 3.81, which cannot do that from a recipe. With no stack yet, every gate passes on the empty tree. The remote state bucket, the GitHub OIDC provider, the CI roles and the one-time local apply are documented here when the `bootstrap/` stack lands.
+
 ## What comes next
 
 The Terraform stacks are added one PR at a time. The first one to touch this account is `bootstrap/` (state bucket, GitHub OIDC provider, `github-infra-management` role). It is the only stack applied locally. Centralized root access management for member accounts is added later in Terraform.
