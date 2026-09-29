@@ -50,8 +50,15 @@ case "$gate" in
   lint) tflint --init ;;
 esac
 
+# validate and test initialise into a throwaway data dir, so they ignore (and leave alone)
+# a backend cached by a local `terraform init` in the same directory.
+data_dir=$(mktemp -d)
+trap 'rm -rf "$data_dir"' EXIT
+export TF_DATA_DIR="$data_dir"
+
 status=0
 while IFS= read -r d; do
+  rm -rf "${data_dir:?}"/* "${data_dir:?}"/.[!.]* 2>/dev/null || true
   case "$gate" in
     validate)
       echo "== validate $d"

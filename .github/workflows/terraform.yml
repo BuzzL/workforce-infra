@@ -1,0 +1,272 @@
+name: Terraform
+
+# Pull requests: a read-only plan through the management-plan environment, posted as a
+# comment. Merges to main: one job per stack, which waits for the approval of its GitHub
+# Environment (the maintainer), then plans and, for stacks that CI applies, applies
+# exactly that plan.
+#
+# This repository is public, so logs, artifacts and comments are too. The role ARN, the
+# role unique ID and the state bucket name are environment SECRETS: a secret is masked
+# everywhere, including in the step headers that print an action's inputs, which a variable
+# is not. Terraform output goes through scripts/redact.sh before it is printed or stored.
+on:
+  pull_request:
+    paths:
+      - bootstrap/**
+      - live/**
+      - modules/**
+      - .terraform-version
+      - scripts/stacks.sh
+      - scripts/ci-stacks.sh
+      - scripts/redact.sh
+      - .github/workflows/terraform.yml
+  push:
+    branches: [main]
+    paths:
+      - bootstrap/**
+      - live/**
+      - modules/**
+      - .terraform-version
+      - scripts/stacks.sh
+      - scripts/ci-stacks.sh
+      - scripts/redact.sh
+      - .github/workflows/terraform.yml
+
+permissions: {}
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      apply_stacks: ${{ steps.stacks.outputs.apply }}
+      plan_stacks: ${{ steps.stacks.outputs.plan }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: stacks
+        run: |
+          apply=$(scripts/ci-stacks.sh apply)
+          plan=$(scripts/ci-stacks.sh plan)
+          echo "apply=$apply" >> "$GITHUB_OUTPUT"
+          echo "plan=$plan" >> "$GITHUB_OUTPUT"
+
+  # Runs the code of the pull request (providers, data sources) with a role that can only
+  # read. No pull-requests permission here: the comment is posted by the job below.
+  # Pull requests from forks get no OIDC token, so they are skipped.
+  plan:
+    needs: discover
+    if: >
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      needs.discover.outputs.plan_stacks != '[]'
+    name: plan ${{ matrix.stack }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.discover.outputs.plan_stacks) }}
+    environment: ${{ matrix.environment }}
+    concurrency:
+      group: plan-${{ github.event.pull_request.number }}-${{ matrix.stack }}
+      cancel-in-progress: true
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_VAR_region: ${{ vars.AWS_REGION }}
+      TF_VAR_state_bucket_name: ${{ secrets.STATE_BUCKET }}
+      AWS_REGION_NAME: ${{ vars.AWS_REGION }}
+      STATE_BUCKET: ${{ secrets.STATE_BUCKET }}
+      # Registered as a secret only to be masked: the credentials action prints the role's
+      # unique ID, which decodes to the account ID.
+      AWS_ROLE_ID: ${{ secrets.AWS_ROLE_ID }}
+      STACK: ${{ matrix.stack }}
+      INDEX: ${{ strategy.job-index }}
+    defaults:
+      run:
+        working-directory: ${{ matrix.stack }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: tf
+        working-directory: .
+        run: echo "version=$(cat .terraform-version)" >> "$GITHUB_OUTPUT"
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ steps.tf.outputs.version }}
+          terraform_wrapper: false
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          mask-aws-account-id: true
+      - name: Init
+        run: |
+          set -o pipefail
+          terraform init -input=false \
+            -backend-config="bucket=$STATE_BUCKET" \
+            -backend-config="key=$STACK/terraform.tfstate" \
+            -backend-config="region=$AWS_REGION_NAME" 2>&1 | "$GITHUB_WORKSPACE/scripts/redact.sh"
+      # -lock=false: the plan role cannot write the lockfile. The output is redacted before
+      # it reaches the log or the artifact; an artifact of a public repository is public.
+      - name: Plan
+        id: plan
+        run: |
+          set +e
+          terraform plan -input=false -lock=false -no-color -detailed-exitcode 2>&1 | "$GITHUB_WORKSPACE/scripts/redact.sh" | tee "$RUNNER_TEMP/plan.txt"
+          code=${PIPESTATUS[0]}
+          case "$code" in
+            0) status="No changes." ;;
+            2) status="Changes to review." ;;
+            *) status="The plan failed." ;;
+          esac
+          {
+            echo "### \`$STACK\`: $status"
+            echo
+            head -c 20000 "$RUNNER_TEMP/plan.txt"
+          } > "$RUNNER_TEMP/plan-$INDEX.md"
+          echo "exitcode=$code" >> "$GITHUB_OUTPUT"
+          [ "$code" -eq 0 ] || [ "$code" -eq 2 ]
+      # A failure before the plan (for example in init) must still replace the comment.
+      - name: Placeholder when there is no plan
+        if: always()
+        run: |
+          f="$RUNNER_TEMP/plan-$INDEX.md"
+          [ -s "$f" ] || printf '%s\n\n%s\n' "### \`$STACK\`: The plan failed." "The job failed before the plan; see the job log." > "$f"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: plan-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/plan-${{ strategy.job-index }}.md
+          retention-days: 3
+          if-no-files-found: error
+
+  # Redacts, fences and posts what the plan job produced, which it treats as untrusted text.
+  # No AWS credentials and no environment; it checks out one script, nothing else.
+  comment:
+    needs: plan
+    if: always() && (needs.plan.result == 'success' || needs.plan.result == 'failure')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: comment-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/redact.sh
+          sparse-checkout-cone-mode: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: plan-*
+          merge-multiple: true
+          path: plans
+      - name: Post the plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Terraform plan"
+            echo
+            echo "Read-only plan through the management-plan environment, without a lock, for commit \`${SHA:0:7}\`."
+            echo
+            while IFS= read -r f; do
+              # Only a header of the expected shape is printed outside the code fence.
+              header=$(head -n 1 "$f")
+              if ! printf '%s\n' "$header" | grep -Eq "^### \`[a-z0-9/_-]+\`: (No changes\.|Changes to review\.|The plan failed\.)\$"; then
+                header="### (unrecognised plan header)"
+              fi
+              echo "$header"
+              echo
+              echo "~~~~~~~~~~text"
+              # Redact again, and drop any line that could close the 10-tilde fence.
+              tail -n +3 "$f" | ./scripts/redact.sh | grep -v -E '^ {0,3}~{10,}[[:space:]]*$' || true
+              echo
+              echo "~~~~~~~~~~"
+            done < <(find plans -maxdepth 1 -type f | grep -E '^plans/plan-[0-9]+\.md$' | sort -V)
+          } > full.md
+          head -c 60000 full.md > body.md
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --edit-last --create-if-none --body-file body.md
+
+  apply:
+    needs: discover
+    if: github.event_name == 'push' && needs.discover.outputs.apply_stacks != '[]'
+    name: ${{ matrix.stack }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include: ${{ fromJSON(needs.discover.outputs.apply_stacks) }}
+    environment: ${{ matrix.environment }}
+    concurrency:
+      group: terraform-${{ matrix.stack }}
+      cancel-in-progress: false
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_VAR_region: ${{ vars.AWS_REGION }}
+      TF_VAR_state_bucket_name: ${{ secrets.STATE_BUCKET }}
+      AWS_REGION_NAME: ${{ vars.AWS_REGION }}
+      STATE_BUCKET: ${{ secrets.STATE_BUCKET }}
+      AWS_ROLE_ID: ${{ secrets.AWS_ROLE_ID }}
+      STACK: ${{ matrix.stack }}
+    defaults:
+      run:
+        working-directory: ${{ matrix.stack }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: tf
+        working-directory: .
+        run: echo "version=$(cat .terraform-version)" >> "$GITHUB_OUTPUT"
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ steps.tf.outputs.version }}
+          terraform_wrapper: false
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          mask-aws-account-id: true
+      - name: Init
+        run: |
+          set -o pipefail
+          terraform init -input=false \
+            -backend-config="bucket=$STATE_BUCKET" \
+            -backend-config="key=$STACK/terraform.tfstate" \
+            -backend-config="region=$AWS_REGION_NAME" 2>&1 | "$GITHUB_WORKSPACE/scripts/redact.sh"
+      - name: Plan
+        id: plan
+        run: |
+          set +e
+          terraform plan -input=false -detailed-exitcode -out=tfplan 2>&1 | "$GITHUB_WORKSPACE/scripts/redact.sh"
+          code=${PIPESTATUS[0]}
+          echo "exitcode=$code" >> "$GITHUB_OUTPUT"
+          [ "$code" -eq 0 ] || [ "$code" -eq 2 ]
+      # A bootstrap plan with changes means the local apply has not been done yet (or the
+      # account drifted): approve this job after the local apply.
+      - name: Drift in a stack that CI does not apply
+        if: matrix.apply == false && steps.plan.outputs.exitcode == '2'
+        run: |
+          echo "::error::The plan for $STACK has changes, but this stack is applied locally. See docs/BOOTSTRAP.md."
+          exit 1
+      - name: Apply
+        if: matrix.apply == true && steps.plan.outputs.exitcode == '2'
+        run: |
+          set -o pipefail
+          terraform apply -input=false tfplan 2>&1 | "$GITHUB_WORKSPACE/scripts/redact.sh"
