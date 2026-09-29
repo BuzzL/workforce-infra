@@ -1,12 +1,12 @@
 # Bootstrap: management account, Organization and SSO
 
-One-time, manual setup of the AWS **Organization management account**. Everything after this is Terraform applied from CI, except the `bootstrap/` stack (see the end). The root user is used **only** for section 2 and afterwards only as break-glass.
+One-time, manual setup of the AWS **Organization management account**, the local Terraform tooling and the `bootstrap/` stack. The root user is used **only** for section 2 and afterwards only as break-glass.
 
 Values written `<like-this>` are real values that must **not** be committed (see `CLAUDE.md`). They live in your local `~/.aws/config`, in GitHub Environment variables, or in the password manager.
 
 | Setting | Value |
 |---|---|
-| Region | `<region>`. **Choose it for the data-residency guarantees you need**: this is the critical decision, and it is hard to change later (Identity Center home region, region-restricting SCPs). Also check that Bedrock models are available there before the Bedrock work, since cross-region inference profiles may route to other regions. If it is an opt-in region, enable it in step 2.3. |
+| Region | `<region>`. **Choose it for the data-residency guarantees you need**: this is the critical decision, and it is hard to change later (Identity Center home region, region-restricting SCPs). If it is an opt-in region, enable it in step 2.3. |
 | Monthly budget | **Test budget** for this proof of concept: 20 USD, named `Workforce Budget`, alerts at 50 / 80 / 100 % of actual cost. Size your own. |
 | Identity Center home region | `<region>` |
 
@@ -45,7 +45,7 @@ Sign in as root, then:
 1. **Enable MFA** on root (Security credentials). Register a **second** MFA device as the recovery path, and secure the root email mailbox with MFA too, since it is the password-reset channel.
 2. **Account → IAM user and role access to Billing information → Activate IAM Access.**
 3. **Account → AWS Regions:** enable `<region>` if it is an opt-in region. Do not disable it later: it would break SSO. Set the alternate contacts (security, billing) on the same page.
-4. **Budgets:** create a monthly **test** cost budget named `Workforce Budget`: 20 USD, recurring, fixed, alerts at 50, 80 and 100 % of actual cost by email. It is imported into Terraform later.
+4. **Budgets:** create a monthly **test** cost budget named `Workforce Budget`: 20 USD, recurring, fixed, alerts at 50, 80 and 100 % of actual cost by email.
 5. **AWS Organizations → Create an organization** with **All features** (cannot be downgraded). Click the verification link AWS emails to the root address.
 6. **IAM Identity Center:** first switch the console region to `<region>`, then click Enable. The home region cannot be moved without deleting the instance, which loses every user, permission set and assignment. Enable it with AWS Organizations, then
    - create your user,
@@ -112,7 +112,7 @@ Verified in the console only, with no CLI check: IAM access to Billing (step 2.2
 
 ## 5. Terraform tooling
 
-The Terraform version is pinned in `.terraform-version` (CI reads it too), so update it there when bumping. Every stack and module declares `required_version = ">= 1.9"` and pins the AWS provider to `~> 6`. `make versions` checks those values (a text match, so keep each constraint on one line), and tflint checks that constraints exist at all. Each stack that declares providers must also be listed in the terraform block of `.github/dependabot.yml` (`make dependabot`), which is added by the PR that creates the stack. Directories are discovered by `scripts/stacks.sh`: `bootstrap/`, `live/**` and `modules/**` (`tests/` directories are skipped).
+The Terraform version is pinned in `.terraform-version` (CI reads it too), so update it there when bumping. Every stack and module declares a `required_version` of at least `>= 1.9` (`bootstrap/` uses `>= 1.10`, which the S3 lockfile needs) and pins the AWS provider to `~> 6`. `make versions` checks those values (a text match, so keep each constraint on one line), and tflint checks that constraints exist at all. Each stack that declares providers must also be listed in the terraform block of `.github/dependabot.yml` (`make dependabot`). Directories are discovered by `scripts/stacks.sh`: `bootstrap/`, `live/**` and `modules/**` (`tests/` directories are skipped).
 
 ```sh
 make fmt        # terraform fmt -check
@@ -126,8 +126,78 @@ make selftest   # proves the gates above pass on valid code and fail on broken c
 make check      # all of the above
 ```
 
-CI runs the same targets as separate jobs (`tf-test` runs `make test`), so a local `make check` predicts CI. The loops live in `scripts/each.sh` and stop at the first error, because macOS ships Make 3.81, which cannot do that from a recipe. With no stack yet, every gate passes on the empty tree. The remote state bucket, the GitHub OIDC provider, the CI roles and the one-time local apply are documented here when the `bootstrap/` stack lands.
+CI runs the same targets as separate jobs (`tf-test` runs `make test`), so a local `make check` predicts CI. The loops live in `scripts/each.sh` and stop at the first error, because macOS ships Make 3.81, which cannot do that from a recipe.
 
-## What comes next
+## 6. Bootstrap stack (Terraform, applied once locally)
 
-The Terraform stacks are added one PR at a time. The first one to touch this account is `bootstrap/` (state bucket, GitHub OIDC provider, `github-infra-management` role). It is the only stack applied locally. Centralized root access management for member accounts is added later in Terraform.
+`bootstrap/` creates the Terraform state bucket, the GitHub OIDC provider and the `github-infra-management` role in the management account. It is applied from a laptop once. Its own state lives in the bucket it creates, so the first apply uses local state, which is then migrated.
+
+What it creates:
+
+- **State bucket:** versioned, encrypted at rest (SSE-S3), all public access blocked, ACLs disabled, TLS-only bucket policy, old versions expire after 90 days (the newest 10 are always kept), `prevent_destroy`. The name is random-suffixed and passed in, never derived from an account ID.
+- **OIDC provider** for `token.actions.githubusercontent.com`, audience `sts.amazonaws.com`.
+- **Role `github-infra-management`:** assumable only by the subject `repo:<owner>@<owner-id>/<repo>@<repo-id>:environment:management` (an exact `StringEquals`, no wildcard). This repository issues **immutable subjects** with numeric IDs, which the defaults in `variables.tf` carry; check the format with `gh api repos/<owner>/<repo>/actions/oidc/customization/sub`. Permissions: list the state bucket, read the bootstrap state, lock and unlock its lockfile, and read the resources of this stack.
+
+The only guard on the role is the protection of the `management` GitHub Environment: anyone who can push a workflow to the repository could otherwise create an unprotected environment of that name and obtain a token. The GitHub App that authors commits (`buzzl-workforce-agent`) must therefore have neither the Administration nor the Environments write permission, or it could weaken that protection.
+
+### Step 0: protect the `management` environment (maintainer, before the apply)
+
+```sh
+gh api -X PUT repos/BuzzL/workforce-infra/environments/management --input - <<'JSON'
+{"reviewers":[{"type":"User","id":6116516}],"prevent_self_review":false,"can_admins_bypass":false,
+ "deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}
+JSON
+gh api -X POST repos/BuzzL/workforce-infra/environments/management/deployment-branch-policies -f name=main -f type=branch
+
+# Verify: one required reviewer, no admin bypass, only main may deploy
+gh api repos/BuzzL/workforce-infra/environments/management --jq '{reviewers: [.protection_rules[] | select(.type=="required_reviewers") | .reviewers[].reviewer.login], can_admins_bypass, deployment_branch_policy}'
+gh api repos/BuzzL/workforce-infra/environments/management/deployment-branch-policies --jq '.branch_policies[].name'
+```
+
+`prevent_self_review` is `false` because the maintainer is the only reviewer, as on `production`. If `can_admins_bypass` is still `true`, turn off "Allow administrators to bypass configured protection rules" in the environment's settings.
+
+### Apply
+
+Values in `<...>` stay local; the files below are gitignored.
+
+```sh
+export AWS_PROFILE=workforce-management
+cd bootstrap
+
+# 1. Choose the bucket name and write the local files.
+BUCKET="workforce-tfstate-$(openssl rand -hex 4)"
+cp terraform.tfvars.example terraform.tfvars   # set region and state_bucket_name=$BUCKET
+cp backend.hcl.example backend.hcl             # set bucket=$BUCKET and region
+
+# 2. First apply with local state: an override file swaps the S3 backend for a local one.
+printf 'terraform {\n  backend "local" {}\n}\n' > backend_override.tf
+terraform init
+terraform plan -out=bootstrap.tfplan           # read it
+terraform apply bootstrap.tfplan
+
+# 3. Migrate the state into the bucket (answer yes to copying it), and check it is there
+#    and that nothing is left to change before the local copy is removed.
+rm backend_override.tf
+terraform init -migrate-state -backend-config=backend.hcl
+terraform plan -detailed-exitcode \
+  && aws s3 ls "s3://$BUCKET/bootstrap/terraform.tfstate" \
+  && rm -f terraform.tfstate terraform.tfstate.backup bootstrap.tfplan
+```
+
+If the migration fails, the local `terraform.tfstate` is still there: fix the cause and run `init -migrate-state` again. The plan file and the state hold account IDs, which is why `*.tfplan`, `*.tfstate*` and `*_override.tf` are gitignored.
+
+### Verify
+
+`$BUCKET` is the bucket name; the role is `github-infra-management`.
+
+```sh
+aws s3api get-bucket-versioning --bucket "$BUCKET" --query Status --output text             # Enabled
+aws s3api get-bucket-encryption --bucket "$BUCKET" \
+  --query 'ServerSideEncryptionConfiguration.Rules[0].ApplyServerSideEncryptionByDefault.SSEAlgorithm' --output text   # AES256
+aws s3api get-public-access-block --bucket "$BUCKET" --query 'PublicAccessBlockConfiguration' --output text   # True x4
+aws s3api get-bucket-policy --bucket "$BUCKET" --query Policy --output text                 # Deny aws:SecureTransport=false
+aws iam get-role --role-name github-infra-management --query 'Role.AssumeRolePolicyDocument' # exact sub, StringEquals
+aws s3 ls "s3://$BUCKET/bootstrap/"                                                          # terraform.tfstate
+```
+
+Keep the role ARN and the bucket name out of the repository.

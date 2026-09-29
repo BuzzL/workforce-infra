@@ -11,10 +11,8 @@ Terraform monorepo for the AWS side of the AI Workforce: Organization, the workf
 
 ## Layout
 
-- `bootstrap/`: state bucket, OIDC provider and management CI role. The only stack applied locally.
-- `live/`: per-account and per-environment root stacks. `modules/`: reusable modules.
+- `bootstrap/`: state bucket, GitHub OIDC provider and the `github-infra-management` role. Applied once locally (runbook in `docs/BOOTSTRAP.md`). Requires Terraform >= 1.10 for the S3 lockfile.
 - `docs/BOOTSTRAP.md`: manual bootstrap of the management account, SSO and the Terraform tooling.
 - `Makefile`, `scripts/`: `make check` runs fmt, validate, tflint, version and Dependabot conventions, trivy, `terraform test` and `make selftest` (the gates' own test). CI runs the same targets. Loops live in `scripts/each.sh`, not in recipes (macOS Make 3.81). Terraform version: `.terraform-version`.
-- Each stack or module declares `required_version >= 1.9` and pins AWS to `~> 6`; `make versions` enforces the values, tflint that constraints exist. A stack that declares providers must be in the terraform block of `.github/dependabot.yml` (`make dependabot`).
+- Each stack or module declares `required_version` (>= 1.9) and pins AWS to `~> 6`; `make versions` enforces the values, tflint that constraints exist. A stack that declares providers must be in the terraform block of `.github/dependabot.yml` (`make dependabot`).
 
-_Stacks and modules are added commit by commit; the tree is empty for now._
