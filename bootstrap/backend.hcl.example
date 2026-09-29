@@ -1,0 +1,5 @@
+# Copy to backend.hcl (gitignored) and fill in the real values.
+# terraform init -backend-config=backend.hcl
+bucket = "<state-bucket-name>"
+key    = "bootstrap/terraform.tfstate"
+region = "<region>"
