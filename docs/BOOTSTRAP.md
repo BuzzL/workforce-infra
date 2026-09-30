@@ -166,7 +166,7 @@ What it creates:
 
 - **Role `github-infra-management-plan`:** read-only, for plans on pull requests. It can be assumed only by the subject `repo:<owner>@<owner-id>/<repo>@<repo-id>:environment:management-plan`. It lists the bucket, reads the object `bootstrap/terraform.tfstate` (no other stack) and reads the bootstrap resources, with S3 and IAM `Get` and `List` actions only. It has no lockfile access, so plans that use it must run with `-lock=false`.
 
-The only guard on the `github-infra-management` role is the protection of the `management` GitHub Environment: anyone who can push a workflow to the repository could otherwise create an unprotected environment of that name and obtain a token. The GitHub App that authors commits (`buzzl-workforce-agent`) must therefore have neither the Administration nor the Environments write permission, or it could weaken that protection.
+The only guard on the `github-infra-management` role is the protection of the `management` GitHub Environment: anyone who can push a workflow to the repository could otherwise create an unprotected environment of that name and obtain a token. The GitHub App that authors commits (`devworkforce`) must therefore have neither the Administration nor the Environments write permission, or it could weaken that protection.
 
 ### Step 0: protect the `management` environment (maintainer, before the apply)
 
