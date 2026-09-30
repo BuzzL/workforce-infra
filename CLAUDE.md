@@ -1,12 +1,12 @@
 # workforce-infra
 
-Terraform monorepo for the AWS side of the AI Workforce: Organization, the workforce account and the `development` / `production` environment accounts. Cross-repo context lives in the workspace `CLAUDE.md` one level up, when it's present.
+Terraform monorepo for the AWS side of the AI Workforce: Organization, the workforce account and the `test` / `qa` / `demo` environment accounts. Cross-repo context lives in the workspace `CLAUDE.md` one level up, when it's present.
 
 ## Rules
 
 - **Commit rule**: every commit is short (one logical change), testable (`terraform validate`, `terraform test` with mocked providers, tflint, trivy) and not breakable (CI green on its own). Conventional Commits.
 - Changes land on `main` only through a squash-merged PR with green CI.
-- Least privilege: cross-account trust always carries conditions (source account, ExternalId, principal ARN). Never use a `*` principal or `*:*` action.
+- Least privilege: cross-account trust always carries conditions (source account, ExternalId, principal ARN). Never use a `*` principal, a `*` or `service:*` action, or `NotAction`/`NotPrincipal`/`NotResource` in an Allow. A `Deny` may use wildcards only when it is narrowed by a `Condition` or specific resources and is asserted literally in a test (the TLS-only state bucket policy). An SCP, a permissions boundary, or any Deny that could lock out a principal needs the maintainer's explicit approval first.
 - Public repo: never commit account IDs, account emails, ARNs, state, `*.tfvars` or `backend.hcl`. Commit `*.example` files instead.
 
 ## Layout
