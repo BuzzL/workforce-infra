@@ -8,7 +8,7 @@
 #   stack                 apply environment   applied by CI   plan environment
 #   bootstrap             management          no (local)      management-plan
 #   live/management       management          yes             management-plan
-#   live/environments/development|production  same name  yes  none
+#   live/environments/test|qa|demo  same name  yes  none
 #
 # A stack name is used in JSON and in job names, so it is limited to [a-z0-9/_-], and only
 # the environments named below exist: a directory name cannot inject anything or select
@@ -28,7 +28,7 @@ while IFS= read -r stack; do
   case "$stack" in
     bootstrap)             env=management apply=false plan_env=management-plan ;;
     live/management)       env=management apply=true plan_env=management-plan ;;
-    live/environments/development | live/environments/production)
+    live/environments/test | live/environments/qa | live/environments/demo)
       env=${stack#live/environments/} apply=true ;;
     *)                     echo "unmapped stack: $stack" >&2; exit 1 ;;
   esac

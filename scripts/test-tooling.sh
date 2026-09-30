@@ -55,9 +55,9 @@ run "input_is_a" {
 TF
 }
 
-# Sorted discovery order: bootstrap, live/environments/development, modules/m
+# Sorted discovery order: bootstrap, live/environments/test, modules/m
 first=bootstrap
-middle=live/environments/development
+middle=live/environments/test
 last=modules/m
 write_valid() {
   rm -rf bootstrap live modules .github
@@ -125,9 +125,9 @@ dependabot_yml '/live/environments/*'
 expect pass "dependabot accepts a stack matched by a glob" make dependabot
 
 write_valid
-mkdir -p live/environments/production
-echo '{"terraform":{"required_version":">= 0.1"}}' > live/environments/production/main.tf.json
-expect fail:live/environments/production "versions discovers stacks written as *.tf.json" make versions
+mkdir -p live/environments/demo
+echo '{"terraform":{"required_version":">= 0.1"}}' > live/environments/demo/main.tf.json
+expect fail:live/environments/demo "versions discovers stacks written as *.tf.json" make versions
 
 write_valid
 cat > "$first/bucket.tf" <<'TF'
@@ -142,10 +142,11 @@ write_valid
 rm -rf bootstrap live modules
 write_stack bootstrap
 write_stack live/management
-write_stack live/environments/development
-write_stack live/environments/production
+write_stack live/environments/test
+write_stack live/environments/qa
+write_stack live/environments/demo
 got=$(scripts/ci-stacks.sh apply)
-want='[{"stack":"bootstrap","environment":"management","apply":false},{"stack":"live/environments/development","environment":"development","apply":true},{"stack":"live/environments/production","environment":"production","apply":true},{"stack":"live/management","environment":"management","apply":true}]'
+want='[{"stack":"bootstrap","environment":"management","apply":false},{"stack":"live/environments/demo","environment":"demo","apply":true},{"stack":"live/environments/qa","environment":"qa","apply":true},{"stack":"live/environments/test","environment":"test","apply":true},{"stack":"live/management","environment":"management","apply":true}]'
 if [ "$got" = "$want" ]; then echo "ok   ci-stacks apply maps paths to environments"; else echo "FAIL ci-stacks apply mapping"; echo "$got"; failed=1; fi
 got=$(scripts/ci-stacks.sh plan)
 want='[{"stack":"bootstrap","environment":"management-plan"},{"stack":"live/management","environment":"management-plan"}]'
@@ -160,6 +161,9 @@ rm -rf live/environments/dev
 write_stack live/environments/staging
 expect fail:"unmapped stack: live/environments/staging" "ci-stacks rejects an environment that is not allowed" scripts/ci-stacks.sh
 rm -rf live/environments/staging
+write_stack live/environments/development
+expect fail:"unmapped stack: live/environments/development" "ci-stacks rejects the former environment name development" scripts/ci-stacks.sh
+rm -rf live/environments/development
 # A directory name must not inject into the matrix or into a shell (job names, run scripts).
 mkdir -p 'live/environments/x","environment":"management'
 printf 'terraform {}\n' > 'live/environments/x","environment":"management/main.tf'

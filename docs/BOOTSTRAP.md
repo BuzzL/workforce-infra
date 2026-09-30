@@ -159,7 +159,7 @@ gh api repos/BuzzL/workforce-infra/environments/management --jq '{reviewers: [.p
 gh api repos/BuzzL/workforce-infra/environments/management/deployment-branch-policies --jq '.branch_policies[].name'
 ```
 
-`prevent_self_review` is `false` because the maintainer is the only reviewer, as on `production`. If `can_admins_bypass` is still `true`, turn off "Allow administrators to bypass configured protection rules" in the environment's settings.
+`prevent_self_review` is `false` because the maintainer is the only reviewer. If `can_admins_bypass` is still `true`, turn off "Allow administrators to bypass configured protection rules" in the environment's settings.
 
 ### Step 0b: the `management-plan` environment (maintainer)
 
@@ -235,15 +235,15 @@ Keep the role ARN and the bucket name out of the repository.
 
 ## 7. CI: Terraform workflow
 
-`.github/workflows/terraform.yml` runs when a pull request or a push to `main` touches Terraform files (`bootstrap/`, `live/`, `modules/`, `.terraform-version`, the stack scripts or the workflow itself). Stacks are discovered by `scripts/ci-stacks.sh`, which limits stack names to `[a-z0-9/_-]`, derives the GitHub Environments from the path and fails on a path or an environment it does not know (`development` and `production` are the only environment stacks).
+`.github/workflows/terraform.yml` runs when a pull request or a push to `main` touches Terraform files (`bootstrap/`, `live/`, `modules/`, `.terraform-version`, the stack scripts or the workflow itself). Stacks are discovered by `scripts/ci-stacks.sh`, which limits stack names to `[a-z0-9/_-]`, derives the GitHub Environments from the path and fails on a path or an environment it does not know (`test`, `qa` and `demo` are the only environment stacks).
 
 | Stack | Applied by CI | Environment after a merge | Environment for the plan on a PR |
 |---|---|---|---|
 | `bootstrap` | no, applied locally (section 6) | `management` | `management-plan` |
 | `live/management` | yes | `management` | `management-plan` |
-| `live/environments/development`, `.../production` | yes | the same name | none |
+| `live/environments/test`, `.../qa`, `.../demo` | yes | the same name | none |
 
-The `management` role can currently only manage its own state and read the bootstrap resources: a stack that needs more permissions gets them in `bootstrap/ci_role.tf`, applied locally. The `development` GitHub Environment has no reviewer and no branch restriction, so a job in it does not wait for approval until that is added.
+The `management` role can currently only manage its own state and read the bootstrap resources: a stack that needs more permissions gets them in `bootstrap/ci_role.tf`, applied locally. The GitHub Environments `test`, `qa` and `demo` do not exist. GitHub creates a referenced environment without any protection on its first use, so each one must be created with a required reviewer before its stack is added.
 
 - **Pull requests:** a plan job per stack with a plan environment, through the read-only role of `management-plan`, with `-lock=false`. The job runs the code of the pull request, so it has no `pull-requests` permission. A separate `comment` job with no AWS credentials and no environment checks out `scripts/redact.sh` only and posts the plan as a PR comment for the commit, updated in place. Pull requests from forks are skipped: they get no OIDC token.
 - **After a merge to `main`:** one job per stack waits for the required reviewer of its environment, then plans and applies exactly that plan when it has changes. The approval is given before the plan exists, so the reviewer relies on the plan shown on the pull request. `bootstrap/` is plan only: a plan with changes fails the job, so approve its job after the local apply.
