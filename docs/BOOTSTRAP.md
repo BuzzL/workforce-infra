@@ -22,6 +22,12 @@ No Homebrew is required. Download each release binary and put it on your `PATH` 
 | aws-cli | 2.37.5 | Apple notarization and Developer ID signature |
 | ruby | any (macOS and the CI runners ship it) | used by `scripts/check-workflow.sh` to parse the workflow |
 | actionlint | 1.7.12 | SHA256 against the release `checksums.txt` (CI pins the linux checksum) |
+| node | 24.21.0 (same as the `workforce-images` base image) | darwin-x64 tarball SHA256 against nodejs.org `SHASUMS256.txt`. Its GPG signature was **not** checked |
+| uv | 0.12.20 | SHA256 against the `.sha256` file of the astral-sh release |
+| pre-commit | 4.6.2 | installed with `--require-hashes --no-deps --only-binary :all:`, then `uv pip check` clean |
+| lima | 2.2.0 | SHA256 against the release `SHA256SUMS`. The GPG signature (`SHA256SUMS.asc`) was **not** checked |
+| colima | 0.10.3 | SHA256 against the release `.sha256sum` |
+| docker CLI | 29.8.1 (static build) | **None**: download.docker.com publishes no checksum, so it was fetched over HTTPS only |
 
 Check the checksum, ignoring the other platforms listed in the file:
 
@@ -30,6 +36,19 @@ shasum -a 256 -c --ignore-missing <checksums-file>
 ```
 
 A checksum downloaded from the same place as the binary proves integrity, not who published it. Where the vendor signs its checksums (for example Terraform's GPG-signed `SHA256SUMS`), verify the signature too. This bootstrap was done with checksums only.
+
+**Prerequisites** (install them however suits your machine):
+
+- `git`, `gh` and the AWS CLI, with a `gh` login and an SSO session (section 3)
+- `terraform`, `tflint`, `trivy` and `actionlint`, which `make check` runs
+- `ruby`, which `scripts/check-workflow.sh` uses
+- `node` and `uv` for the testbed and the Python tooling
+- `pre-commit`, installed from the hash-pinned `images/base/requirements/pre-commit.txt` in `workforce-images` where you can (`--require-hashes`). That file pins Linux wheels, so on macOS the `pyyaml` hash has to be replaced by the one of the matching macOS wheel from PyPI
+- a container runtime with the `docker` CLI, for image builds and devcontainers (on macOS, for example Colima with Lima)
+
+Hints for macOS: a package manager such as Homebrew or plain release binaries both work. Put binaries somewhere on your `PATH`, prefer a user-owned directory over `/usr/local`, and check each download against the vendor checksum as above. Verify the container runtime with `docker run --rm hello-world`.
+
+**Tested on:** an Intel Mac (x86_64), macOS 13, with the versions in the table. This is what was verified, not a required setup.
 
 **AWS CLI v2 (macOS)** has no published checksum and no usable detached signature. Verify the installer instead:
 
@@ -74,7 +93,9 @@ sso_role_name = AdministratorAccess
 region = <region>
 ```
 
-Log in with `aws sso login --sso-session workforce`. The callback is on `127.0.0.1`, so the browser must run on the same machine. On a headless or remote machine use `aws sso login --sso-session workforce --use-device-code` instead and open the printed URL on any device.
+Log in with `aws sso login --sso-session workforce` (the token expires, so repeat it when the CLI reports `Token has expired`). The callback is on `127.0.0.1`, so the browser must run on the same machine. On a headless or remote machine use `aws sso login --sso-session workforce --use-device-code` instead and open the printed URL on any device.
+
+Confirm the login with `AWS_PROFILE=workforce-management aws sts get-caller-identity --query Arn --output text` (the full output includes the account ID, so do not paste it into issues or PRs). It prints an assumed `AWSReservedSSO_AdministratorAccess` role ARN.
 
 ## 4. Verify
 
