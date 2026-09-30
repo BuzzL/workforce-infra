@@ -20,6 +20,8 @@ No Homebrew is required. Download each release binary and put it on your `PATH` 
 | tflint | 0.64.0 | SHA256 against the release `checksums.txt` |
 | trivy | 0.74.0 | SHA256 against the release checksums file |
 | aws-cli | 2.37.5 | Apple notarization and Developer ID signature |
+| ruby | any (macOS and the CI runners ship it) | used by `scripts/check-workflow.sh` to parse the workflow |
+| actionlint | 1.7.12 | SHA256 against the release `checksums.txt` (CI pins the linux checksum) |
 
 Check the checksum, ignoring the other platforms listed in the file:
 
@@ -122,6 +124,7 @@ make versions   # required_version >= 1.9 and AWS ~> 6
 make dependabot # every stack with providers is in dependabot.yml
 make sec        # trivy config, HIGH and CRITICAL fail
 make test       # terraform test, in directories that have *.tftest.hcl files
+make workflows  # actionlint and the structure checks of the Terraform workflow
 make selftest   # proves the gates above pass on valid code and fail on broken code
 make check      # all of the above
 ```
@@ -211,7 +214,7 @@ aws iam get-role --role-name github-infra-management-plan --query 'Role.AssumeRo
 aws s3 ls "s3://$BUCKET/bootstrap/"                                                          # terraform.tfstate
 ```
 
-Keep the role ARNs and the bucket name out of the repository.
+Keep the role ARNs and the bucket name out of the repository. `scripts/set-environment-secrets.sh` (idempotent) reads them from the outputs of `bootstrap/` and from IAM, validates them, sets the secrets `AWS_ROLE_ARN`, `AWS_ROLE_ID` and `STATE_BUCKET` of the `management` and `management-plan` environments without printing them, and deletes the variables of the same names (`--check` lists names only).
 
 ### Change an applied bootstrap
 
@@ -227,3 +230,27 @@ terraform apply bootstrap.tfplan
 terraform plan -detailed-exitcode           # 0: nothing left to change
 rm -f bootstrap.tfplan
 ```
+
+Keep the role ARN and the bucket name out of the repository.
+
+## 7. CI: Terraform workflow
+
+`.github/workflows/terraform.yml` runs when a pull request or a push to `main` touches Terraform files (`bootstrap/`, `live/`, `modules/`, `.terraform-version`, the stack scripts or the workflow itself). Stacks are discovered by `scripts/ci-stacks.sh`, which limits stack names to `[a-z0-9/_-]`, derives the GitHub Environments from the path and fails on a path or an environment it does not know (`development` and `production` are the only environment stacks).
+
+| Stack | Applied by CI | Environment after a merge | Environment for the plan on a PR |
+|---|---|---|---|
+| `bootstrap` | no, applied locally (section 6) | `management` | `management-plan` |
+| `live/management` | yes | `management` | `management-plan` |
+| `live/environments/development`, `.../production` | yes | the same name | none |
+
+The `management` role can currently only manage its own state and read the bootstrap resources: a stack that needs more permissions gets them in `bootstrap/ci_role.tf`, applied locally. The `development` GitHub Environment has no reviewer and no branch restriction, so a job in it does not wait for approval until that is added.
+
+- **Pull requests:** a plan job per stack with a plan environment, through the read-only role of `management-plan`, with `-lock=false`. The job runs the code of the pull request, so it has no `pull-requests` permission. A separate `comment` job with no AWS credentials and no environment checks out `scripts/redact.sh` only and posts the plan as a PR comment for the commit, updated in place. Pull requests from forks are skipped: they get no OIDC token.
+- **After a merge to `main`:** one job per stack waits for the required reviewer of its environment, then plans and applies exactly that plan when it has changes. The approval is given before the plan exists, so the reviewer relies on the plan shown on the pull request. `bootstrap/` is plan only: a plan with changes fails the job, so approve its job after the local apply.
+- **Authentication:** GitHub OIDC only, no stored keys. `AWS_ROLE_ARN`, `AWS_ROLE_ID` and `STATE_BUCKET` are **secrets** of each GitHub Environment (`management`, `management-plan`), set by `scripts/set-environment-secrets.sh`. `AWS_REGION` is a variable. `AWS_ROLE_ID` is the role's unique ID: the credentials action prints it, and it decodes to the account ID, so it is referenced in the job `env:` only to be masked.
+- **This repository is public, so logs, artifacts and comments are too.** A secret is masked everywhere in the logs, including in the step headers that print an action's inputs, which a variable is not. Masking prevents accidents only: any branch of this repository can print a secret of `management-plan` in encoded form. Terraform output is never printed raw: `scripts/redact.sh` replaces 12-digit numbers, the state bucket name, AWS unique IDs and email addresses before the output reaches a log or the plan artifact, and the comment job redacts it again, treating the artifact as untrusted. Only a header of the expected shape is printed outside the code fence, lines that could close the fence are dropped and the size is capped. The comment keeps its edit history, so a redaction miss stays visible until the comment is deleted.
+- **No expression in scripts:** values reach shell scripts through `env:`, never through `${{ }}` in a `run:` block. Every action is pinned by commit SHA.
+- **State key** of a stack: `<stack>/terraform.tfstate`. The plan role can read only `bootstrap/terraform.tfstate`, so a plan of another stack needs its read access to be added to `bootstrap/plan_role.tf` first.
+- **Concurrency:** one apply per stack at a time, stacks apply one after the other, a newer push cancels the older plan of a pull request.
+- **Checks of the workflow:** `actionlint` and `scripts/check-workflow.sh` (`make workflows`, needs Ruby) parse the workflow and compare each job with an exact allowlist: permissions, conditions, environments, actions and pins, contexts (the only variable is `AWS_REGION`), secrets, masking, and that every Terraform call goes through the redaction. `make selftest` proves each check rejects the matching bad change and that the redaction hides what it must.
+- An `AccessDenied` in a plan means the role lacks a read permission for a resource of the stack: add it in `bootstrap/` and apply locally.

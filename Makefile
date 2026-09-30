@@ -1,7 +1,7 @@
 # Every gate that loops over stacks lives in scripts/each.sh. Recipes stay one-liners
 # because macOS ships Make 3.81, which cannot make recipes fail fast on its own.
-.PHONY: fmt validate lint versions dependabot sec test selftest check
-check: fmt validate lint versions dependabot sec test selftest
+.PHONY: fmt validate lint versions dependabot sec test workflows selftest check
+check: fmt validate lint versions dependabot sec test workflows selftest
 
 fmt:
 	terraform fmt -check -recursive -diff
@@ -23,6 +23,10 @@ sec:
 
 test:
 	scripts/each.sh test
+
+workflows:
+	actionlint
+	scripts/check-workflow.sh
 
 # Proves the gates above pass on valid code and fail on broken code.
 selftest:

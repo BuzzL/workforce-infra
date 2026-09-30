@@ -122,3 +122,17 @@ jobs:
       - run: make selftest
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  workflows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install actionlint (checksum-pinned)
+        run: |
+          v=1.7.12
+          curl -fsSLO "https://github.com/rhysd/actionlint/releases/download/v${v}/actionlint_${v}_linux_amd64.tar.gz"
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  actionlint_${v}_linux_amd64.tar.gz" | sha256sum -c -
+          tar -xzf "actionlint_${v}_linux_amd64.tar.gz" actionlint
+      - run: PATH="$PWD:$PATH" make workflows
