@@ -1,6 +1,6 @@
 # Organization inputs: region, SCP exceptions and account emails
 
-Decision record for IAT-28. It fixes the inputs the rest of milestone M2 (Organization stack, accounts, SCPs) reads, so no later change guesses them.
+Decision record. It fixes the inputs the rest of milestone M2 (Organization stack, accounts, SCPs) reads, so no later change guesses them.
 
 ## 1. Region
 
@@ -11,15 +11,15 @@ Decision record for IAT-28. It fixes the inputs the rest of milestone M2 (Organi
 - Bedrock offers Claude there. Checked read-only on the management account: the Anthropic foundation models and the `eu.` and `global.` inference profiles are listed in this region, including the current Sonnet, Opus and Haiku models.
 - It keeps data in the EU.
 
-**Open risk, to be proven in IAT-36:** Bedrock cross-region inference profiles send the request to other regions. A region-deny SCP evaluates the region where the request runs, so a `eu.` profile needs the EU regions it routes to, and a `global.` profile needs all of them. The workforce account must therefore be tested with the SCP in place, and one of these must be chosen, each with a cost to the single-region goal:
+**Open risk, to be proven when the SCPs are attached:** Bedrock cross-region inference profiles send the request to other regions. A region-deny SCP evaluates the region where the request runs, so a `eu.` profile needs the EU regions it routes to, and a `global.` profile needs all of them. The workforce account must therefore be tested with the SCP in place, and one of these must be chosen, each with a cost to the single-region goal:
 - call the model in `eu-south-1` only, if the models accept on-demand calls there;
 - allow the destination regions of one `eu.` profile for Bedrock actions only, through a `Deny` narrowed by `Condition`.
 
-Attach the SCP in stages (IAT-36) and run a Bedrock call from the workforce account after each stage. The SCP itself needs the maintainer's explicit approval first.
+Attach the SCP in stages and run a Bedrock call from the workforce account after each stage. The SCP itself needs the maintainer's explicit approval first.
 
 ## 2. Global-service exceptions for the region-deny SCP
 
-The SCP denies every action outside the allowed region, except the actions of services that are global or served from `us-east-1` only. The exceptions are an explicit list of service prefixes, asserted literally in a test (IAT-35). Whether the SCP expresses them with `NotAction` in a `Deny` is decided in IAT-35 and needs the maintainer's approval like any SCP.
+The SCP denies every action outside the allowed region, except the actions of services that are global or served from `us-east-1` only. The exceptions are an explicit list of service prefixes, asserted literally in a test. Whether the SCP expresses them with `NotAction` in a `Deny` is decided in the SCP definition PR and needs the maintainer's approval like any SCP.
 
 | Area | Service prefixes |
 |---|---|
@@ -44,13 +44,11 @@ Notes:
 - Emails are redacted from logs and plan comments by `scripts/redact.sh`.
 - The Organization stack sets `email` on each account and ignores later changes to it in `lifecycle`, since the Organizations API cannot change the email of a member account.
 
-**Done when (IAT-28):** `ACCOUNT_EMAIL_BASE` exists in the `management` environment, checked by name only. `scripts/set-environment-secrets.sh --check` lists names and must include it once the script is extended in the PR of IAT-29.
-
 ## 4. Where each value lives
 
 | Value | Kind | Location | Read by |
 |---|---|---|---|
 | Region | variable | `AWS_REGION` in `management` and `management-plan` | workflow, as `TF_VAR_region` |
-| Global-service exceptions | code | SCP module (IAT-35), with a literal test | Terraform |
+| Global-service exceptions | code | SCP module, with a literal test | Terraform |
 | Account email base | secret | `ACCOUNT_EMAIL_BASE` in `management` | apply job, as `TF_VAR_account_email_base` |
 | Role ARNs, state bucket | secret | `AWS_ROLE_ARN`, `AWS_ROLE_ID`, `STATE_BUCKET` | workflow (see `BOOTSTRAP.md`) |
