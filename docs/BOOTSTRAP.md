@@ -22,7 +22,7 @@ No Homebrew is required. Download each release binary and put it on your `PATH` 
 | aws-cli | 2.37.5 | Apple notarization and Developer ID signature |
 | ruby | any (macOS and the CI runners ship it) | used by `scripts/check-workflow.sh` to parse the workflow |
 | actionlint | 1.7.12 | SHA256 against the release `checksums.txt` (CI pins the linux checksum) |
-| node | 24.21.0 (same as the `workforce-images` base image) | darwin-x64 tarball SHA256 against nodejs.org `SHASUMS256.txt` |
+| node | 24.21.0 (same as the `workforce-images` base image) | darwin-x64 tarball SHA256 against nodejs.org `SHASUMS256.txt`. Its GPG signature was **not** checked |
 | uv | 0.12.20 | SHA256 against the `.sha256` file of the astral-sh release |
 | pre-commit | 4.6.2 | wheels installed with `--require-hashes --no-deps --only-binary :all:`, then `uv pip check` clean (see below) |
 | lima | 2.2.0 | SHA256 against the release `SHA256SUMS`. The GPG signature (`SHA256SUMS.asc`) was **not** checked |
@@ -39,7 +39,7 @@ A checksum downloaded from the same place as the binary proves integrity, not wh
 
 **Prerequisites** for the tools above: an Intel Mac (x86_64) on macOS 13, and `sudo` in a real terminal to unpack Node and Lima into `/usr/local` (Node is symlinked into `/usr/local/bin`; the Lima extraction prints `Can't restore time` for `/usr/local`, which is harmless). Everything else goes to `~/.local/bin`.
 
-**pre-commit** lives in a venv at `~/.local/pre-commit` (CPython 3.14.7, managed by uv) and is symlinked into `~/.local/bin`. The requirements file is `images/base/requirements/pre-commit.txt` from `workforce-images`, with one change: the `pyyaml` hash is the one of the macOS cp314 x86_64 wheel from PyPI, because the pinned hash is for the Linux wheel.
+**pre-commit** lives in a venv at `~/.local/pre-commit` (CPython 3.14.7, managed by uv) and is symlinked into `~/.local/bin`. The requirements file is `images/base/requirements/pre-commit.txt` from `workforce-images`, with one change: the `pyyaml` hash is the SHA256 of `pyyaml-6.0.3-cp314-cp314-macosx_10_13_x86_64.whl`, taken from the PyPI JSON API (`urls[].digests.sha256` of the 6.0.3 release), because the pinned hashes are for the Linux wheels. That digest comes from PyPI itself, so it proves the wheel matches PyPI, not who published it. The CPython 3.14.7 interpreter is downloaded by uv, and its integrity was not verified separately.
 
 **Docker** runs through Colima, which starts a Lima VM (`colima start`). Verify with `docker run --rm hello-world`.
 
@@ -88,7 +88,7 @@ region = <region>
 
 Log in with `aws sso login --sso-session workforce` (the token expires, so repeat it when the CLI reports `Token has expired`). The callback is on `127.0.0.1`, so the browser must run on the same machine. On a headless or remote machine use `aws sso login --sso-session workforce --use-device-code` instead and open the printed URL on any device.
 
-Confirm the login: `AWS_PROFILE=workforce-management aws sts get-caller-identity` prints an assumed `AWSReservedSSO_AdministratorAccess` role ARN.
+Confirm the login with `AWS_PROFILE=workforce-management aws sts get-caller-identity --query Arn --output text` (the full output includes the account ID, so do not paste it into issues or PRs). It prints an assumed `AWSReservedSSO_AdministratorAccess` role ARN.
 
 ## 4. Verify
 
