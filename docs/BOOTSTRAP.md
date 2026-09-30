@@ -24,7 +24,7 @@ No Homebrew is required. Download each release binary and put it on your `PATH` 
 | actionlint | 1.7.12 | SHA256 against the release `checksums.txt` (CI pins the linux checksum) |
 | node | 24.21.0 (same as the `workforce-images` base image) | darwin-x64 tarball SHA256 against nodejs.org `SHASUMS256.txt`. Its GPG signature was **not** checked |
 | uv | 0.12.20 | SHA256 against the `.sha256` file of the astral-sh release |
-| pre-commit | 4.6.2 | wheels installed with `--require-hashes --no-deps --only-binary :all:`, then `uv pip check` clean (see below) |
+| pre-commit | 4.6.2 | installed with `--require-hashes --no-deps --only-binary :all:`, then `uv pip check` clean |
 | lima | 2.2.0 | SHA256 against the release `SHA256SUMS`. The GPG signature (`SHA256SUMS.asc`) was **not** checked |
 | colima | 0.10.3 | SHA256 against the release `.sha256sum` |
 | docker CLI | 29.8.1 (static build) | **None**: download.docker.com publishes no checksum, so it was fetched over HTTPS only |
@@ -37,11 +37,18 @@ shasum -a 256 -c --ignore-missing <checksums-file>
 
 A checksum downloaded from the same place as the binary proves integrity, not who published it. Where the vendor signs its checksums (for example Terraform's GPG-signed `SHA256SUMS`), verify the signature too. This bootstrap was done with checksums only.
 
-**Prerequisites** for the tools above: an Intel Mac (x86_64) on macOS 13, and `sudo` in a real terminal to unpack Node and Lima into `/usr/local` (Node is symlinked into `/usr/local/bin`; the Lima extraction prints `Can't restore time` for `/usr/local`, which is harmless). Everything else goes to `~/.local/bin`.
+**Prerequisites** (install them however suits your machine):
 
-**pre-commit** lives in a venv at `~/.local/pre-commit` (CPython 3.14.7, managed by uv) and is symlinked into `~/.local/bin`. The requirements file is `images/base/requirements/pre-commit.txt` from `workforce-images`, with one change: the `pyyaml` hash is the SHA256 of `pyyaml-6.0.3-cp314-cp314-macosx_10_13_x86_64.whl`, taken from the PyPI JSON API (`urls[].digests.sha256` of the 6.0.3 release), because the pinned hashes are for the Linux wheels. That digest comes from PyPI itself, so it proves the wheel matches PyPI, not who published it. The CPython 3.14.7 interpreter is downloaded by uv, and its integrity was not verified separately.
+- `git`, `gh` and the AWS CLI, with a `gh` login and an SSO session (section 3)
+- `terraform`, `tflint`, `trivy` and `actionlint`, which `make check` runs
+- `ruby`, which `scripts/check-workflow.sh` uses
+- `node` and `uv` for the testbed and the Python tooling
+- `pre-commit`, installed from the hash-pinned `images/base/requirements/pre-commit.txt` in `workforce-images` where you can (`--require-hashes`). That file pins Linux wheels, so on macOS the `pyyaml` hash has to be replaced by the one of the matching macOS wheel from PyPI
+- a container runtime with the `docker` CLI, for image builds and devcontainers (on macOS, for example Colima with Lima)
 
-**Docker** runs through Colima, which starts a Lima VM (`colima start`). Verify with `docker run --rm hello-world`.
+Hints for macOS: a package manager such as Homebrew or plain release binaries both work. Put binaries somewhere on your `PATH`, prefer a user-owned directory over `/usr/local`, and check each download against the vendor checksum as above. Verify the container runtime with `docker run --rm hello-world`.
+
+**Tested on:** an Intel Mac (x86_64), macOS 13, with the versions in the table. This is what was verified, not a required setup.
 
 **AWS CLI v2 (macOS)** has no published checksum and no usable detached signature. Verify the installer instead:
 
