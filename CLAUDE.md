@@ -15,6 +15,7 @@ Terraform monorepo for the AWS side of the AI Workforce: Organization, the workf
 - `.github/workflows/terraform.yml`: read-only plan on pull requests (`management-plan` environment, redacted PR comment) and, after a merge to `main`, one approval-gated job per stack. The repo is public: `AWS_ROLE_ARN`, `AWS_ROLE_ID` and `STATE_BUCKET` are environment secrets and Terraform output goes through `scripts/redact.sh`. `scripts/ci-stacks.sh` maps paths to environments, `scripts/check-workflow.sh` checks the workflow against an allowlist. `bootstrap/` is plan only.
 - `docs/BOOTSTRAP.md`: manual bootstrap of the management account, SSO and the Terraform tooling.
 - `docs/ENVIRONMENTS.md`: environments, branch model and promotion.
+- `docs/ORGANIZATION_INPUTS.md`: decision record for the region, the region-deny SCP exceptions and the account email scheme.
 - `Makefile`, `scripts/`: `make check` runs fmt, validate, tflint, version and Dependabot conventions, trivy, `terraform test` and `make selftest` (the gates' own test). CI runs the same targets. Loops live in `scripts/each.sh`, not in recipes (macOS Make 3.81). Terraform version: `.terraform-version`.
 - Each stack or module declares `required_version` (>= 1.9) and pins AWS to `~> 6`; `make versions` enforces the values, tflint that constraints exist. A stack that declares providers must be in the terraform block of `.github/dependabot.yml` (`make dependabot`).
 
