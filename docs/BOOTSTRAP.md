@@ -27,7 +27,7 @@ No Homebrew is required. Download each release binary and put it on your `PATH` 
 | pre-commit | 4.6.2 | installed with `--require-hashes --no-deps --only-binary :all:`, then `uv pip check` clean |
 | lima | 2.2.0 | SHA256 against the release `SHA256SUMS`. The GPG signature (`SHA256SUMS.asc`) was **not** checked |
 | colima | 0.10.3 | SHA256 against the release `.sha256sum` |
-| devcontainer CLI | 0.89.0 (`@devcontainers/cli`) | npm's registry integrity check only, no separate checksum or signature was verified. Installed with `npm install -g --prefix ~/.local @devcontainers/cli@0.89.0`, since the default global prefix is not user-writable |
+| devcontainer CLI | 0.89.0 (`@devcontainers/cli`) | npm's registry integrity check only: no separate checksum or signature was verified, and the transitive dependencies are not hash-pinned. Installed with `npm install -g --prefix ~/.local @devcontainers/cli@0.89.0`, since the default global prefix is not user-writable |
 | docker CLI | 29.8.1 (static build) | **None**: download.docker.com publishes no checksum, so it was fetched over HTTPS only |
 
 Check the checksum, ignoring the other platforms listed in the file:
