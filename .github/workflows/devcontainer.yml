@@ -33,7 +33,7 @@ jobs:
         run: |
           sed -i '/"mounts"/d' .devcontainer/devcontainer.json
           ! grep -q '"mounts"' .devcontainer/devcontainer.json
-      - uses: devcontainers/ci@8bf61b26e9c3a98f69cb6ce2f88d24ff59b785c6 # v0.3.1900000417
+      - uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3.1900000450
         with:
           push: never
           runCmd: |
