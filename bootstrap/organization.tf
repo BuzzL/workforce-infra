@@ -6,6 +6,10 @@ locals {
   organization_root_arn_pattern = "arn:aws:organizations::${data.aws_caller_identity.current.account_id}:root/o-*/r-*"
   organization_ou_arn_pattern   = "arn:aws:organizations::${data.aws_caller_identity.current.account_id}:ou/o-*/ou-*"
 
+  # Deleting and updating OUs is allowed on purpose: the stack owns the OUs and must be able
+  # to remove one it no longer declares. The OU units are not protected from a bad apply by
+  # IAM; the approval of the `management` environment is the guard.
+  #
   # What a plan of live/management reads: the OUs of this Organization, nothing about
   # accounts. The root ID comes to the stack as a variable, so no Organization-wide read
   # (which has no resource-level permissions) is needed and no Allow uses Resource "*".

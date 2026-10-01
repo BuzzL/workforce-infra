@@ -47,7 +47,11 @@ resource "aws_iam_role_policy_attachments_exclusive" "github_infra_management_pl
 
 # Read the state of the bootstrap and live/management stacks only, not every stack: this role
 # is open to any branch, and the state of a stack can hold secret values (the account emails
-# of a later stack must stay out of this list). Read only: there is no lock write, so plans on
+# of a later stack must stay out of this list). Its Organizations reads let branch code list
+# the member accounts of an OU (ListAccountsForParent), which is accepted: a branch needs
+# write access to this repository, and fork pull requests get no token. The Organizations reads below also list the
+# member accounts of an OU (ListAccountsForParent), so code on any branch can enumerate
+# account IDs: accepted for this PoC, since pushing a branch needs write access. Read only: there is no lock write, so plans on
 # pull requests must use -lock=false.
 resource "aws_iam_role_policy" "plan_state_read" {
   name = "terraform-state-read"

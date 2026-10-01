@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Sets AWS_ROLE_ARN, AWS_ROLE_ID, STATE_BUCKET and ORGANIZATION_ROOT_ID as SECRETS of the `management` and
-# `management-plan` GitHub Environments and deletes the variables of the same names.
+# Sets AWS_ROLE_ARN, AWS_ROLE_ID, STATE_BUCKET and ORGANIZATION_ROOT_ID as SECRETS of the
+# `management` and `management-plan` GitHub Environments and deletes the variables of the
+# same names.
 #   AWS_ROLE_ARN   the ARN of the environment's role (from the outputs of bootstrap/)
 #   AWS_ROLE_ID    the role's unique ID (from `aws iam get-role`): the credentials action
 #                  prints it, and it decodes to the account ID, so it must be masked
@@ -18,7 +19,8 @@
 #   scripts/set-environment-secrets.sh          set the secrets, delete the old variables
 #   scripts/set-environment-secrets.sh --check  list names only, change nothing
 #
-# Needs an AWS session that can read the state bucket and IAM roles (AWS_PROFILE) and a gh
+# Needs an AWS session that can read the state bucket, IAM roles and the Organization
+# (`organizations:ListRoots`: the admin SSO profile, not the CI role) (AWS_PROFILE) and a gh
 # login that can administer the repository. AWS_REGION stays a variable: it is not sensitive.
 set -euo pipefail
 cd "$(dirname "$0")/../bootstrap"
@@ -90,7 +92,7 @@ for e in $environments; do
   list "$e"
   [ "$(names secret "$e")" = "AWS_ROLE_ARN AWS_ROLE_ID ORGANIZATION_ROOT_ID STATE_BUCKET" ] || { echo "unexpected secrets in $e" >&2; status=1; }
   case " $(names variable "$e") " in
-    *" AWS_ROLE_ARN "* | *" AWS_ROLE_ID "* | *" STATE_BUCKET "*) echo "a variable of the same name is left in $e" >&2; status=1 ;;
+    *" AWS_ROLE_ARN "* | *" AWS_ROLE_ID "* | *" ORGANIZATION_ROOT_ID "* | *" STATE_BUCKET "*) echo "a variable of the same name is left in $e" >&2; status=1 ;;
   esac
 done
 exit "$status"

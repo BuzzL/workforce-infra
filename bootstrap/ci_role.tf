@@ -102,7 +102,7 @@ resource "aws_iam_role_policy" "plan_bootstrap" {
 }
 
 # Manages organizational units, and nothing else in Organizations: no accounts, no policies,
-# no service access. Writes are limited to OUs of this management account's Organization;
+# no service access. Deleting OUs is allowed on purpose: the stack owns them. Writes are limited to OUs of this management account's Organization;
 # the new OU's ARN is not known before the call, hence the ou-* pattern.
 resource "aws_iam_role_policy" "organization_units" {
   name = "organization-units"
