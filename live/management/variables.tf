@@ -40,3 +40,26 @@ variable "account_email_base" {
     error_message = "local+workforce@domain must not exceed 64 characters."
   }
 }
+
+variable "budget_name" {
+  description = "Name of the existing monthly budget that this stack imports and manages."
+  type        = string
+  default     = "Workforce Budget"
+}
+
+variable "budget_limit_usd" {
+  description = "Monthly cost limit of the budget, in USD. Everything the Organization bills is counted; see docs/BUDGET.md."
+  type        = number
+  default     = 20
+}
+
+variable "budget_alert_email" {
+  description = "Address notified at every budget threshold. Set by CI from the secret BUDGET_ALERT_EMAIL (TF_VAR_budget_alert_email)."
+  type        = string
+  sensitive   = true
+
+  validation {
+    condition     = can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.budget_alert_email))
+    error_message = "The budget alert address must look like local@domain."
+  }
+}
