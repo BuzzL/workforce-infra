@@ -19,7 +19,7 @@ Attach the SCP in stages and run a Bedrock call from the workforce account after
 
 ## 2. Global-service exceptions for the region-deny SCP
 
-The SCP denies every action outside the allowed region, except the actions of services that are global or served from `us-east-1` only. The exceptions are an explicit list of service prefixes, asserted literally in a test. Whether the SCP expresses them with `NotAction` in a `Deny` is decided in the SCP definition PR and needs the maintainer's approval like any SCP.
+The SCP denies every action outside the allowed region, except the actions of services that are global or served from `us-east-1` only. The exceptions are an explicit list of service prefixes, asserted literally in a test. The SCP expresses them with `NotAction` in a `Deny`, narrowed by `StringNotEquals` on `aws:RequestedRegion` (module `modules/scp-baseline`, IAT-35). A `NotAction` is only used in a Deny, never in an Allow, and the PR that defines it needs the maintainer's approval like any SCP. The module defines the four baseline SCPs and attaches none: attaching is staged in IAT-36.
 
 | Area | Service prefixes |
 |---|---|
