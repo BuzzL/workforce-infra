@@ -40,6 +40,7 @@ resource "aws_iam_role_policies_exclusive" "github_infra_management" {
     aws_iam_role_policy.state_access.name,
     aws_iam_role_policy.plan_bootstrap.name,
     aws_iam_role_policy.organization_units.name,
+    aws_iam_role_policy.budget.name,
   ]
 }
 

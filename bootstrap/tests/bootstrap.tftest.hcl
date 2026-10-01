@@ -141,8 +141,8 @@ run "role_has_no_other_permissions" {
 
   # The exclusive resources make Terraform remove anything else attached to the role.
   assert {
-    condition     = aws_iam_role_policies_exclusive.github_infra_management.policy_names == toset(["terraform-state", "plan-bootstrap-stack", "organization-units"])
-    error_message = "Only the three documented inline policies may exist on the role."
+    condition     = aws_iam_role_policies_exclusive.github_infra_management.policy_names == toset(["terraform-state", "plan-bootstrap-stack", "organization-units", "budget"])
+    error_message = "Only the four documented inline policies may exist on the role."
   }
 
   assert {
@@ -217,11 +217,12 @@ run "plan_role_is_read_only" {
         jsondecode(aws_iam_role_policy.plan_state_read.policy).Statement,
         jsondecode(aws_iam_role_policy.plan_bootstrap_read.policy).Statement,
         jsondecode(aws_iam_role_policy.plan_organization_units.policy).Statement,
+        jsondecode(aws_iam_role_policy.plan_budget.policy).Statement,
         ) : alltrue([
-          for a in flatten([s.Action]) : can(regex("^(s3|iam|organizations):(Get|List|Describe)[A-Za-z]*$", a))
+          for a in flatten([s.Action]) : can(regex("^((s3|iam|organizations):(Get|List|Describe)[A-Za-z]*|budgets:(ViewBudget|ListTagsForResource))$", a))
       ])
     ])
-    error_message = "The plan role may only have S3, IAM and Organizations Get, List and Describe actions, and exactly the documented ones (see the literals above and below)."
+    error_message = "The plan role may only have S3, IAM and Organizations Get, List and Describe actions and the two read actions on its budget, and exactly the documented ones (see the literals above and below)."
   }
 
   assert {
@@ -237,7 +238,9 @@ run "plan_role_is_read_only" {
       aws_iam_role_policy.state_access.role == aws_iam_role.github_infra_management.id &&
       aws_iam_role_policy.plan_bootstrap.role == aws_iam_role.github_infra_management.id &&
       aws_iam_role_policy.organization_units.role == aws_iam_role.github_infra_management.id &&
-      aws_iam_role_policy.plan_organization_units.role == aws_iam_role.github_infra_management_plan.id
+      aws_iam_role_policy.plan_organization_units.role == aws_iam_role.github_infra_management_plan.id &&
+      aws_iam_role_policy.budget.role == aws_iam_role.github_infra_management.id &&
+      aws_iam_role_policy.plan_budget.role == aws_iam_role.github_infra_management_plan.id
     )
     error_message = "Every inline policy must be attached to its own role."
   }
@@ -263,8 +266,8 @@ run "plan_role_is_read_only" {
   }
 
   assert {
-    condition     = aws_iam_role_policies_exclusive.github_infra_management_plan.policy_names == toset(["terraform-state-read", "plan-bootstrap-stack", "plan-organization-units"])
-    error_message = "Only the three documented inline policies may exist on the plan role."
+    condition     = aws_iam_role_policies_exclusive.github_infra_management_plan.policy_names == toset(["terraform-state-read", "plan-bootstrap-stack", "plan-organization-units", "plan-budget"])
+    error_message = "Only the four documented inline policies may exist on the plan role."
   }
 
   assert {
@@ -322,6 +325,36 @@ run "organization_permissions_are_exactly_the_documented_ones" {
   assert {
     condition     = jsondecode(aws_iam_role_policy.plan_organization_units.policy).Statement == slice(jsondecode(aws_iam_role_policy.organization_units.policy).Statement, 0, 1)
     error_message = "The plan role must have exactly the read statements of the management role, without the write statement."
+  }
+}
+
+run "budget_permissions_are_exactly_the_documented_ones" {
+  command = apply
+
+  assert {
+    condition = jsondecode(aws_iam_role_policy.budget.policy) == {
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Sid      = "ReadBudget"
+          Effect   = "Allow"
+          Action   = ["budgets:ViewBudget", "budgets:ListTagsForResource"]
+          Resource = ["arn:aws:budgets::111122223333:budget/Workforce Budget"]
+        },
+        {
+          Sid      = "ManageBudget"
+          Effect   = "Allow"
+          Action   = ["budgets:ModifyBudget", "budgets:TagResource", "budgets:UntagResource"]
+          Resource = ["arn:aws:budgets::111122223333:budget/Workforce Budget"]
+        }
+      ]
+    }
+    error_message = "The management role may read and manage the one budget of the stack, and nothing else in Budgets."
+  }
+
+  assert {
+    condition     = jsondecode(aws_iam_role_policy.plan_budget.policy).Statement == slice(jsondecode(aws_iam_role_policy.budget.policy).Statement, 0, 1)
+    error_message = "The plan role must have exactly the read statement of the management role, without the write statement."
   }
 }
 
@@ -422,6 +455,8 @@ run "no_wildcards_in_any_allow" {
         jsondecode(aws_iam_role_policy.plan_bootstrap_read.policy).Statement,
         jsondecode(aws_iam_role_policy.organization_units.policy).Statement,
         jsondecode(aws_iam_role_policy.plan_organization_units.policy).Statement,
+        jsondecode(aws_iam_role_policy.budget.policy).Statement,
+        jsondecode(aws_iam_role_policy.plan_budget.policy).Statement,
         ) : (
         s.Effect == "Allow" &&
         !anytrue([for a in flatten([s.Action]) : a == "*" || endswith(a, ":*")]) &&
