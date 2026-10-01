@@ -129,6 +129,12 @@ run "role_permissions_are_exactly_the_documented_ones" {
             aws_iam_role.github_infra_management.arn,
             aws_iam_role.github_infra_management_plan.arn,
           ]
+        },
+        {
+          Sid      = "ReadDelegatedAdministrators"
+          Effect   = "Allow"
+          Action   = ["organizations:ListDelegatedAdministrators"]
+          Resource = "*"
         }
       ]
     }
@@ -460,11 +466,11 @@ run "no_wildcards_in_any_allow" {
         ) : (
         s.Effect == "Allow" &&
         !anytrue([for a in flatten([s.Action]) : a == "*" || endswith(a, ":*")]) &&
-        !anytrue([for r in flatten([try(s.Resource, [])]) : r == "*"]) &&
+        (s.Sid == "ReadDelegatedAdministrators" || !anytrue([for r in flatten([try(s.Resource, [])]) : r == "*"])) &&
         !contains(flatten([for p in values(try(s.Principal, {})) : p]), "*")
       )
     ])
-    error_message = "Allow statements must not use * as principal, action or resource."
+    error_message = "Allow statements must not use * as principal, action or resource (the one resourceless read ReadDelegatedAdministrators is asserted literally above)."
   }
 }
 
@@ -620,4 +626,49 @@ run "member_account_ids_are_validated" {
   }
 
   expect_failures = [var.member_account_ids]
+}
+
+# Identity Center is administered from the security account (IAT-33). The registration is
+# applied locally with SSO admin, never by CI, so no CI role can change who administers access.
+run "identity_center_is_delegated_to_security_only_once_it_is_listed" {
+  command = apply
+
+  variables {
+    member_account_ids = { security = "111122223333", workforce = "444455556666" }
+  }
+
+  assert {
+    condition     = aws_organizations_delegated_administrator.identity_center[0].service_principal == "sso.amazonaws.com" && aws_organizations_delegated_administrator.identity_center[0].account_id == "111122223333"
+    error_message = "Identity Center must be delegated to the security account, and to no other account."
+  }
+
+  assert {
+    condition     = length(aws_organizations_delegated_administrator.identity_center) == 1
+    error_message = "Exactly one delegated administrator."
+  }
+}
+
+run "no_security_account_means_no_delegation" {
+  command = apply
+
+  variables {
+    member_account_ids = { workforce = "444455556666" }
+  }
+
+  assert {
+    condition     = length(aws_organizations_delegated_administrator.identity_center) == 0
+    error_message = "Nothing is delegated until the security account is listed."
+  }
+}
+
+run "ci_roles_cannot_register_delegated_administrators" {
+  command = apply
+
+  assert {
+    condition = !anytrue([
+      for p in [aws_iam_role_policy.organization_units.policy, aws_iam_role_policy.plan_organization_units.policy, aws_iam_role_policy.plan_bootstrap.policy, aws_iam_role_policy.plan_bootstrap_read.policy] :
+      anytrue([for s in jsondecode(p).Statement : anytrue([for a in flatten([s.Action]) : contains(["organizations:RegisterDelegatedAdministrator", "organizations:DeregisterDelegatedAdministrator", "organizations:EnableAWSServiceAccess", "organizations:DisableAWSServiceAccess"], a)])])
+    ])
+    error_message = "A CI role must not be able to change who administers Identity Center."
+  }
 }
