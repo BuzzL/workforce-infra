@@ -17,3 +17,8 @@ output "github_infra_management_plan_role_arn" {
   description = "ARN of the github-infra-management-plan role."
   value       = aws_iam_role.github_infra_management_plan.arn
 }
+
+output "github_ci_role_arns" {
+  description = "ARNs of the CI roles of workforce-github, by kind (apply, plan): the AWS_ROLE_ARN of its github and github-plan environments."
+  value       = { for k, r in aws_iam_role.github_ci : k => r.arn }
+}

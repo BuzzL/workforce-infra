@@ -191,11 +191,11 @@ locals {
         "iam:ListRolePolicies",
         "iam:ListRoleTags",
       ]
-      Resource = [
+      Resource = concat([
         aws_iam_openid_connect_provider.github.arn,
         aws_iam_role.github_infra_management.arn,
         aws_iam_role.github_infra_management_plan.arn,
-      ]
+      ], local.github_ci_role_arns)
     },
     # The one Organizations read that has no resource: the Identity Center delegation
     # (identity.tf). It lists delegated administrators; the registration itself is applied
