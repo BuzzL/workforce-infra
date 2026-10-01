@@ -142,6 +142,8 @@ write_valid
 rm -rf bootstrap live modules
 write_stack bootstrap
 write_stack live/management
+write_stack live/accounts/security
+write_stack live/accounts/workforce
 write_stack live/environments/test
 write_stack live/environments/qa
 write_stack live/environments/demo
@@ -151,6 +153,16 @@ if [ "$got" = "$want" ]; then echo "ok   ci-stacks apply maps paths to environme
 got=$(scripts/ci-stacks.sh plan)
 want='[{"stack":"bootstrap","environment":"management-plan"},{"stack":"live/management","environment":"management-plan"}]'
 if [ "$got" = "$want" ]; then echo "ok   ci-stacks plan lists only stacks with a plan environment"; else echo "FAIL ci-stacks plan mapping"; echo "$got"; failed=1; fi
+# Account baselines stay out of CI until their .ci-enabled marker exists (checked above: absent), and
+# then are only planned (apply false), under their own <account>-plan environment.
+touch live/accounts/security/.ci-enabled
+got=$(scripts/ci-stacks.sh apply)
+want='[{"stack":"bootstrap","environment":"management","apply":false},{"stack":"live/accounts/security","environment":"security","apply":false},{"stack":"live/environments/demo","environment":"demo","apply":true},{"stack":"live/environments/qa","environment":"qa","apply":true},{"stack":"live/environments/test","environment":"test","apply":true},{"stack":"live/management","environment":"management","apply":true}]'
+if [ "$got" = "$want" ]; then echo "ok   ci-stacks enables an account baseline with its marker, without apply"; else echo "FAIL ci-stacks account apply mapping"; echo "$got"; failed=1; fi
+got=$(scripts/ci-stacks.sh plan)
+want='[{"stack":"bootstrap","environment":"management-plan"},{"stack":"live/accounts/security","environment":"security-plan"},{"stack":"live/management","environment":"management-plan"}]'
+if [ "$got" = "$want" ]; then echo "ok   ci-stacks plans an enabled account baseline in <account>-plan"; else echo "FAIL ci-stacks account plan mapping"; echo "$got"; failed=1; fi
+rm live/accounts/security/.ci-enabled
 expect fail:usage "ci-stacks rejects an unknown mode" scripts/ci-stacks.sh nonsense
 write_stack live/other
 expect fail:"unmapped stack: live/other" "ci-stacks rejects an unmapped stack" scripts/ci-stacks.sh

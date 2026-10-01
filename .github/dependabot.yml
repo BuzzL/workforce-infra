@@ -18,6 +18,8 @@ updates:
     directories:
       - /bootstrap
       - /live/management
+      - /live/accounts/security
+      - /live/accounts/workforce
     schedule:
       interval: weekly
     commit-message:

@@ -1,0 +1,6 @@
+# Copy to terraform.tfvars (gitignored) for a local run. CI sets region and state_bucket_name from its environment.
+region            = "<region>"
+state_bucket_name = "<state-bucket-name>"
+
+# Only for the one-time bootstrap, never in CI: the security account ID.
+# break_glass_account_id = "<12 digits>"

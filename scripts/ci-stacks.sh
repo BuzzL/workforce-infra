@@ -8,6 +8,7 @@
 #   stack                 apply environment   applied by CI   plan environment
 #   bootstrap             management          no (local)      management-plan
 #   live/management       management          yes             management-plan
+#   live/accounts/security|workforce  same name  no (local)  <acct>-plan, once <stack>/.ci-enabled exists
 #   live/environments/test|qa|demo  same name  yes  none
 #
 # A stack name is used in JSON and in job names, so it is limited to [a-z0-9/_-], and only
@@ -28,6 +29,12 @@ while IFS= read -r stack; do
   case "$stack" in
     bootstrap)             env=management apply=false plan_env=management-plan ;;
     live/management)       env=management apply=true plan_env=management-plan ;;
+    # Baselines are applied locally through break-glass (the CI role cannot change IAM), so
+    # CI only plans them. They join CI when .ci-enabled is committed, after the roles and
+    # GitHub Environments exist: until then a plan could only fail.
+    live/accounts/security | live/accounts/workforce)
+      [ -f "$stack/.ci-enabled" ] || continue
+      env=${stack#live/accounts/} apply=false plan_env=${stack#live/accounts/}-plan ;;
     live/environments/test | live/environments/qa | live/environments/demo)
       env=${stack#live/environments/} apply=true ;;
     *)                     echo "unmapped stack: $stack" >&2; exit 1 ;;
