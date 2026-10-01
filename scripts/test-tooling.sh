@@ -164,6 +164,9 @@ want='[{"stack":"bootstrap","environment":"management-plan"},{"stack":"live/acco
 if [ "$got" = "$want" ]; then echo "ok   ci-stacks plans an enabled account baseline in <account>-plan"; else echo "FAIL ci-stacks account plan mapping"; echo "$got"; failed=1; fi
 rm live/accounts/security/.ci-enabled
 expect fail:usage "ci-stacks rejects an unknown mode" scripts/ci-stacks.sh nonsense
+expect fail:usage "account secrets script rejects a missing account" scripts/set-account-environment-secrets.sh
+expect fail:usage "account secrets script rejects an unknown account" scripts/set-account-environment-secrets.sh management
+expect fail:usage "account secrets script rejects an unknown option" scripts/set-account-environment-secrets.sh security --nonsense
 write_stack live/other
 expect fail:"unmapped stack: live/other" "ci-stacks rejects an unmapped stack" scripts/ci-stacks.sh
 rm -rf live/other
