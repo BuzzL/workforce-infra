@@ -7,12 +7,14 @@ on:
     paths:
       - .devcontainer/**
       - .terraform-version
+      - .github/workflows/ci.yml
       - .github/workflows/devcontainer.yml
   push:
     branches: [main]
     paths:
       - .devcontainer/**
       - .terraform-version
+      - .github/workflows/ci.yml
       - .github/workflows/devcontainer.yml
 
 permissions:
@@ -36,4 +38,7 @@ jobs:
           push: never
           runCmd: |
             test "$(terraform version -json | python3 -c 'import json,sys; print(json.load(sys.stdin)["terraform_version"])')" = "$(cat .terraform-version)"
+            test "v$(tflint --version | sed -n 's/^TFLint version //p')" = "$(sed -n 's/^  TFLINT_VERSION: //p' .github/workflows/ci.yml)"
+            test "v$(trivy --version | sed -n 's/^Version: //p')" = "$(sed -n 's/^  TRIVY_VERSION: //p' .github/workflows/ci.yml)"
+            test "$(actionlint -version | head -n 1)" = "$(sed -n 's/^ *v=//p' .github/workflows/ci.yml)"
             make check

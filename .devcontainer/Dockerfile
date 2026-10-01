@@ -1,13 +1,15 @@
 # The workforce-images base image (git, gh, AWS CLI, Terraform, Node, Claude Code: the
 # environment the agents run in), plus what `make check` needs beyond it: tflint, trivy,
 # actionlint and ruby (scripts/check-workflow.sh). Every download is pinned by version and
-# by per-arch SHA256, so this reviewed file is the trust anchor, as in the base image.
-# base 0.1.1, pinned by digest; bump it by hand when a new image is published (Dependabot
-# proposes it too). The Terraform version must match .terraform-version: the devcontainer
+# by per-arch SHA256, so this reviewed file is the trust anchor, as in the base image. The
+# one exception is ruby from the distribution's apt repository (unpinned: the build is not
+# reproducible for it; check-workflow.sh needs Ruby >= 3.1).
+# The base is pinned by digest; the tag next to it is what Dependabot tracks, so it
+# proposes the bump when a new image is published. The Terraform version must match .terraform-version: the devcontainer
 # workflow checks it.
-FROM ghcr.io/buzzl/workforce-images/base@sha256:911a2b9afaf8e76818991ca2c1ad918d7a0d01038e707931854c17532fce520d
+FROM ghcr.io/buzzl/workforce-images/base:0.1.1@sha256:911a2b9afaf8e76818991ca2c1ad918d7a0d01038e707931854c17532fce520d
 
-# Same versions as .github/workflows/ci.yml and make check.
+# Same versions as .github/workflows/ci.yml; the Devcontainer workflow fails when they differ.
 ARG TFLINT_VERSION=0.64.0
 ARG TFLINT_SHA256_AMD64=cca9d13e2e1d7a2c627af60ff899a3c9b74212899416aeb96ec764d2ef954537
 ARG TFLINT_SHA256_ARM64=560da89aacf59389d4eb029730dd5b109b7288096c32f2726a0d9e783a5ea8eb
@@ -36,10 +38,10 @@ RUN arch=$(dpkg --print-architecture) \
     && unzip -q "tflint_linux_${arch}.zip" tflint -d /usr/local/bin \
     && curl -fsSLO "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-${trivy_arch}.tar.gz" \
     && echo "${trivy_sha}  trivy_${TRIVY_VERSION}_Linux-${trivy_arch}.tar.gz" | sha256sum -c - \
-    && tar -xzf "trivy_${TRIVY_VERSION}_Linux-${trivy_arch}.tar.gz" -C /usr/local/bin trivy \
+    && tar --no-same-owner -xzf "trivy_${TRIVY_VERSION}_Linux-${trivy_arch}.tar.gz" -C /usr/local/bin trivy \
     && curl -fsSLO "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_${arch}.tar.gz" \
     && echo "${actionlint_sha}  actionlint_${ACTIONLINT_VERSION}_linux_${arch}.tar.gz" | sha256sum -c - \
-    && tar -xzf "actionlint_${ACTIONLINT_VERSION}_linux_${arch}.tar.gz" -C /usr/local/bin actionlint \
+    && tar --no-same-owner -xzf "actionlint_${ACTIONLINT_VERSION}_linux_${arch}.tar.gz" -C /usr/local/bin actionlint \
     && rm -rf /tmp/install
 
 WORKDIR /home/dev
