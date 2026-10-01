@@ -38,7 +38,9 @@ shasum -a 256 -c --ignore-missing <checksums-file>
 
 A checksum downloaded from the same place as the binary proves integrity, not who published it. Where the vendor signs its checksums (for example Terraform's GPG-signed `SHA256SUMS`), verify the signature too. This bootstrap was done with checksums only.
 
-**Prerequisites** (install them however suits your machine):
+**Preferred: the devcontainer.** `.devcontainer/` builds the `base` image of `workforce-images` (the environment the agents run in) plus `tflint`, `trivy`, `actionlint` and `ruby`, all pinned by checksum. Open the repo in it from VS Code, or from a terminal with `devcontainer up --workspace-folder .` and `devcontainer exec --workspace-folder . make check`. It needs only a container runtime and the `devcontainer` CLI (below). It bind-mounts the host's whole `~/.aws` directory, **read-write**, so the SSO profiles and token of section 3 work inside it: do the one-time `aws configure sso` on the host first (the directory must exist, and the mount does not work on Windows or in Codespaces). Everything in that directory is therefore visible to, and changeable by, anything running in the container, including Claude Code, extensions and the lifecycle commands of the devcontainer: every profile, any static keys in `credentials` and the token caches. Use it only with SSO profiles (no static keys) and open only this repository in it. The `Devcontainer` workflow builds it and runs `make check` inside it when `.devcontainer/` changes.
+
+**Without it**, install the prerequisites yourself, however suits your machine:
 
 - `git`, `gh` and the AWS CLI, with a `gh` login and an SSO session (section 3)
 - `terraform`, `tflint`, `trivy` and `actionlint`, which `make check` runs
