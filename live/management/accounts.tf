@@ -25,7 +25,8 @@ resource "aws_organizations_account" "this" {
 
   lifecycle {
     prevent_destroy = true
-    # The Organizations API cannot change the email of a member account.
+    # The Organizations API cannot change the email of a member account, and billing access
+    # is changed only by the root user: drift in these is hidden, check billing access by hand.
     ignore_changes = [email, iam_user_access_to_billing, role_name]
   }
 }

@@ -80,8 +80,31 @@ run "account_ids_are_sensitive" {
   command = apply
 
   assert {
+    condition     = issensitive(output.account_ids)
+    error_message = "The account_ids output must stay sensitive: the repository is public."
+  }
+
+  assert {
     condition     = toset(keys(nonsensitive(output.account_ids))) == toset(["security", "workforce"])
     error_message = "The output must list both accounts by name."
+  }
+}
+
+# The Organizations API cannot change a member account's email, so a new base must not
+# produce a diff on an account that exists (lifecycle ignore_changes).
+run "a_new_base_does_not_change_existing_emails" {
+  command = apply
+
+  variables {
+    account_email_base = "other@example.org"
+  }
+
+  assert {
+    condition = (
+      nonsensitive(aws_organizations_account.this["security"].email) == "owner+security@example.com" &&
+      nonsensitive(aws_organizations_account.this["workforce"].email) == "owner+workforce@example.com"
+    )
+    error_message = "The email of an existing account must be kept when the base changes."
   }
 }
 
@@ -90,6 +113,16 @@ run "base_with_plus_is_rejected" {
 
   variables {
     account_email_base = "owner+x@example.com"
+  }
+
+  expect_failures = [var.account_email_base]
+}
+
+run "base_making_an_address_over_64_characters_is_rejected" {
+  command = plan
+
+  variables {
+    account_email_base = "a-very-long-mailbox-name-that-leaves-no-room@a-rather-long-domain.example.com"
   }
 
   expect_failures = [var.account_email_base]

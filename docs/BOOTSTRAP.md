@@ -279,3 +279,12 @@ The `management` role can manage the state of `live/management`, read the bootst
 - **Concurrency:** one apply per stack at a time, stacks apply one after the other, a newer push cancels the older plan of a pull request.
 - **Checks of the workflow:** `actionlint` and `scripts/check-workflow.sh` (`make workflows`, needs Ruby) parse the workflow and compare each job with an exact allowlist: permissions, conditions, environments, actions and pins, contexts (the only variable is `AWS_REGION`), secrets, masking, and that every Terraform call goes through the redaction. `make selftest` proves each check rejects the matching bad change and that the redaction hides what it must.
 - An `AccessDenied` in a plan means the role lacks a read permission for a resource of the stack: add it in `bootstrap/` and apply locally.
+
+## Creating the member accounts (IAT-31)
+
+Account creation is irreversible (closing takes 90 days, the email stays tied), so it is a local apply with SSO admin and the maintainer's explicit yes, **before** the PR is merged. The CI roles cannot create, move or close accounts, so a post-merge CI apply of a create fails with AccessDenied.
+
+1. Apply `bootstrap/` locally (read access to accounts for the CI roles).
+2. `ACCOUNT_EMAIL_BASE=local@domain scripts/set-environment-secrets.sh` (the PR plan needs the secret on `management-plan`).
+3. In `live/management`, with `backend.hcl` and a gitignored `terraform.tfvars` (`region`, `root_id`, `account_email_base`), run `terraform plan`, review it (two accounts, right parent OUs), then `terraform apply` after the explicit yes. The base cannot be corrected afterwards (`ignore_changes = [email]`), so check it in the plan first.
+4. Re-run the PR checks: the `management-plan` plan must refresh the accounts without AccessDenied (`DescribeAccount`, `ListParents`, `ListTagsForResource`) and show no changes. `aws organizations list-accounts` shows both ACTIVE.
