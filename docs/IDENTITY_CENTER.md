@@ -43,7 +43,7 @@ The plan role can run from any branch and `identitystore:DescribeUser` has no re
 
 ## Apply, once
 
-Run by the maintainer, locally, in this order. Nothing here is applied by CI.
+Run by the maintainer, locally, in this order. Before step 1, the Identity Center home region must be enabled in `security` and in every assigned account, if it is not enabled by default (`docs/ACCOUNT_CI_BASELINES.md`, step 0). Nothing here is applied by CI.
 
 **Why locally.** These steps change who can reach every account, and CI is deliberately unable to: its roles have no IAM or Identity Center write, so a compromised workflow cannot widen its own access or grant itself a login. Only a person with SSO admin can do it, after reading the plan.
 
