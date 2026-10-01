@@ -71,7 +71,9 @@ resource "aws_iam_role_policy_attachments_exclusive" "github_ci" {
 }
 
 # State of live/github only. The apply role also takes the lockfile; the plan role is read-only
-# (plans run with -lock=false). `env:/` is what `terraform init` lists to find workspaces.
+# (plans run with -lock=false). ListBucket is not narrowed by prefix, like the management roles:
+# without it S3 answers 403 instead of "not found" for a state object that does not exist yet, and
+# `terraform init` lists the `env:/` prefix. It shows key names only, never contents.
 resource "aws_iam_role_policy" "github_ci_state" {
   for_each = local.github_ci_roles
 
@@ -83,11 +85,10 @@ resource "aws_iam_role_policy" "github_ci_state" {
     Statement = concat(
       [
         {
-          Sid       = "ListStateBucket"
-          Effect    = "Allow"
-          Action    = ["s3:ListBucket"]
-          Resource  = [local.state_bucket_arn]
-          Condition = { StringEquals = { "s3:prefix" = each.key == "apply" ? ["env:/", local.github_ci_state_key, "${local.github_ci_state_key}.tflock"] : ["env:/", local.github_ci_state_key] } }
+          Sid      = "ListStateBucket"
+          Effect   = "Allow"
+          Action   = ["s3:ListBucket"]
+          Resource = [local.state_bucket_arn]
         },
         {
           Sid      = each.key == "apply" ? "ReadAndWriteState" : "ReadState"

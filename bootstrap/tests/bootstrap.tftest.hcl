@@ -681,11 +681,10 @@ run "github_ci_apply_role_permissions" {
   assert {
     condition = jsondecode(aws_iam_role_policy.github_ci_state["apply"].policy).Statement == [
       {
-        Sid       = "ListStateBucket"
-        Effect    = "Allow"
-        Action    = ["s3:ListBucket"]
-        Resource  = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4"]
-        Condition = { StringEquals = { "s3:prefix" = ["env:/", "live/github/terraform.tfstate", "live/github/terraform.tfstate.tflock"] } }
+        Sid      = "ListStateBucket"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4"]
       },
       {
         Sid      = "ReadAndWriteState"
@@ -734,11 +733,10 @@ run "github_ci_plan_role_is_read_only" {
   assert {
     condition = jsondecode(aws_iam_role_policy.github_ci_state["plan"].policy).Statement == [
       {
-        Sid       = "ListStateBucket"
-        Effect    = "Allow"
-        Action    = ["s3:ListBucket"]
-        Resource  = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4"]
-        Condition = { StringEquals = { "s3:prefix" = ["env:/", "live/github/terraform.tfstate"] } }
+        Sid      = "ListStateBucket"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4"]
       },
       {
         Sid      = "ReadState"
@@ -752,11 +750,27 @@ run "github_ci_plan_role_is_read_only" {
 
   # It reads the read-only App's key and never the write App's.
   assert {
-    condition = (
-      strcontains(aws_iam_role_policy.github_ci_app_key["plan"].policy, "/workforce/github/app-read-key") &&
-      !strcontains(aws_iam_role_policy.github_ci_app_key["plan"].policy, "app-write-key")
-    )
-    error_message = "The plan role must only be able to read the read-only App key."
+    condition = jsondecode(aws_iam_role_policy.github_ci_app_key["plan"].policy).Statement == [
+      {
+        Sid      = "ReadAppKeyParameter"
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter"]
+        Resource = ["arn:aws:ssm:eu-west-1:111122223333:parameter/workforce/github/app-read-key"]
+      },
+      {
+        Sid      = "DecryptAppKeyThroughSsm"
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt"]
+        Resource = ["arn:aws:kms:eu-west-1:111122223333:key/*"]
+        Condition = {
+          StringEquals = {
+            "kms:ViaService"                      = "ssm.eu-west-1.amazonaws.com"
+            "kms:EncryptionContext:PARAMETER_ARN" = "arn:aws:ssm:eu-west-1:111122223333:parameter/workforce/github/app-read-key"
+          }
+        }
+      },
+    ]
+    error_message = "The plan role must only be able to read and decrypt the read-only App key, through SSM."
   }
 }
 
