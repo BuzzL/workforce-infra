@@ -15,7 +15,7 @@ This repo is the **AWS provider** side of the workforce. GitHub resources (repos
 
 ## Layout
 
-- `bootstrap/`: state bucket, GitHub OIDC provider and the roles `github-infra-management` (apply, `management` environment) and `github-infra-management-plan` (read only, `management-plan` environment). Applied once locally (runbook in `docs/BOOTSTRAP.md`). Requires Terraform >= 1.10 for the S3 lockfile.
+- `bootstrap/`: state bucket, GitHub OIDC provider and the roles `github-infra-management` (apply, `management` environment) and `github-infra-management-plan` (read only, `management-plan` environment). Also the roles `github-infra-github` and `github-infra-github-plan` for the CI of `workforce-github` (state of `live/github` and its GitHub App key, `docs/GITHUB_CI.md`). Applied once locally (runbook in `docs/BOOTSTRAP.md`). Requires Terraform >= 1.10 for the S3 lockfile.
 - `live/management/`: Organization stack, applied by CI in the `management` environment. Currently the four top-level OUs (`Management`, `Environments`, `Development`, `Operations`) under the root, and the monthly budget (`docs/BUDGET.md`).
 - `modules/`: reusable modules, each with mocked `terraform test`s: `scp-baseline` (SCP definitions, nothing attached) and `budget`.
 - `.devcontainer/`: the `base` image from `workforce-images` (pinned by digest) plus tflint, trivy, actionlint and ruby, checksum-pinned. Binds the host's whole `~/.aws` read-write for SSO (SSO-only profiles, see `docs/BOOTSTRAP.md`). The `Devcontainer` workflow runs `make check` in it when it changes.

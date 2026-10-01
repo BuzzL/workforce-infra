@@ -128,6 +128,8 @@ run "role_permissions_are_exactly_the_documented_ones" {
             aws_iam_openid_connect_provider.github.arn,
             aws_iam_role.github_infra_management.arn,
             aws_iam_role.github_infra_management_plan.arn,
+            aws_iam_role.github_ci["apply"].arn,
+            aws_iam_role.github_ci["plan"].arn,
           ]
         }
       ]
@@ -620,4 +622,163 @@ run "member_account_ids_are_validated" {
   }
 
   expect_failures = [var.member_account_ids]
+}
+
+# CI roles of workforce-github (the GitHub provider side). The repository ID is public.
+run "github_ci_roles_trust_one_environment_each" {
+  command = apply
+
+  assert {
+    condition = jsondecode(aws_iam_role.github_ci["apply"].assume_role_policy) == {
+      Version = "2012-10-17"
+      Statement = [{
+        Effect    = "Allow"
+        Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
+        Action    = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringEquals = {
+            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+            "token.actions.githubusercontent.com:sub" = "repo:BuzzL@6116516/workforce-github@1398476489:environment:github"
+          }
+        }
+      }]
+    }
+    error_message = "github-infra-github must trust exactly workforce-github in the github environment."
+  }
+
+  assert {
+    condition = jsondecode(aws_iam_role.github_ci["plan"].assume_role_policy) == {
+      Version = "2012-10-17"
+      Statement = [{
+        Effect    = "Allow"
+        Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
+        Action    = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringEquals = {
+            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+            "token.actions.githubusercontent.com:sub" = "repo:BuzzL@6116516/workforce-github@1398476489:environment:github-plan"
+          }
+        }
+      }]
+    }
+    error_message = "github-infra-github-plan must trust exactly workforce-github in the github-plan environment."
+  }
+
+  assert {
+    condition     = aws_iam_role.github_ci["apply"].name == "github-infra-github" && aws_iam_role.github_ci["plan"].name == "github-infra-github-plan"
+    error_message = "Unexpected role names."
+  }
+
+  assert {
+    condition     = alltrue([for k in ["apply", "plan"] : aws_iam_role_policies_exclusive.github_ci[k].policy_names == toset(["terraform-state", "github-app-key"])])
+    error_message = "Each role has exactly the state and the App key policies."
+  }
+}
+
+run "github_ci_apply_role_permissions" {
+  command = apply
+
+  assert {
+    condition = jsondecode(aws_iam_role_policy.github_ci_state["apply"].policy).Statement == [
+      {
+        Sid       = "ListStateBucket"
+        Effect    = "Allow"
+        Action    = ["s3:ListBucket"]
+        Resource  = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4"]
+        Condition = { StringEquals = { "s3:prefix" = ["env:/", "live/github/terraform.tfstate", "live/github/terraform.tfstate.tflock"] } }
+      },
+      {
+        Sid      = "ReadAndWriteState"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject"]
+        Resource = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4/live/github/terraform.tfstate"]
+      },
+      {
+        Sid      = "LockState"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Resource = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4/live/github/terraform.tfstate.tflock"]
+      },
+    ]
+    error_message = "The apply role reaches the state and lockfile of live/github only."
+  }
+
+  assert {
+    condition = jsondecode(aws_iam_role_policy.github_ci_app_key["apply"].policy).Statement == [
+      {
+        Sid      = "ReadAppKeyParameter"
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter"]
+        Resource = ["arn:aws:ssm:eu-west-1:111122223333:parameter/workforce/github/app-write-key"]
+      },
+      {
+        Sid      = "DecryptAppKeyThroughSsm"
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt"]
+        Resource = ["arn:aws:kms:eu-west-1:111122223333:key/*"]
+        Condition = {
+          StringEquals = {
+            "kms:ViaService"                      = "ssm.eu-west-1.amazonaws.com"
+            "kms:EncryptionContext:PARAMETER_ARN" = "arn:aws:ssm:eu-west-1:111122223333:parameter/workforce/github/app-write-key"
+          }
+        }
+      },
+    ]
+    error_message = "The apply role reads only the write App key, and decrypts only through SSM for that parameter."
+  }
+}
+
+run "github_ci_plan_role_is_read_only" {
+  command = apply
+
+  assert {
+    condition = jsondecode(aws_iam_role_policy.github_ci_state["plan"].policy).Statement == [
+      {
+        Sid       = "ListStateBucket"
+        Effect    = "Allow"
+        Action    = ["s3:ListBucket"]
+        Resource  = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4"]
+        Condition = { StringEquals = { "s3:prefix" = ["env:/", "live/github/terraform.tfstate"] } }
+      },
+      {
+        Sid      = "ReadState"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4/live/github/terraform.tfstate"]
+      },
+    ]
+    error_message = "The plan role only reads the state object: no lockfile, no write."
+  }
+
+  # It reads the read-only App's key and never the write App's.
+  assert {
+    condition = (
+      strcontains(aws_iam_role_policy.github_ci_app_key["plan"].policy, "/workforce/github/app-read-key") &&
+      !strcontains(aws_iam_role_policy.github_ci_app_key["plan"].policy, "app-write-key")
+    )
+    error_message = "The plan role must only be able to read the read-only App key."
+  }
+}
+
+run "github_ci_roles_have_no_wildcard_beyond_the_kms_key" {
+  command = apply
+
+  # The one wildcard is the KMS key ID, narrowed by ViaService and the parameter's ARN (asserted above).
+  assert {
+    condition = alltrue(flatten([
+      for p in [
+        aws_iam_role_policy.github_ci_state["apply"].policy, aws_iam_role_policy.github_ci_state["plan"].policy,
+        aws_iam_role_policy.github_ci_app_key["apply"].policy, aws_iam_role_policy.github_ci_app_key["plan"].policy,
+        aws_iam_role.github_ci["apply"].assume_role_policy, aws_iam_role.github_ci["plan"].assume_role_policy,
+        ] : [
+        for s in jsondecode(p).Statement : (
+          s.Effect == "Allow"
+          && !contains(keys(s), "NotAction") && !contains(keys(s), "NotResource") && !contains(keys(s), "NotPrincipal")
+          && alltrue([for a in try(tolist(s.Action), [s.Action]) : !strcontains(a, "*")])
+          && alltrue([for r in try(tolist(s.Resource), []) : !strcontains(r, "*") || (s.Sid == "DecryptAppKeyThroughSsm" && contains(keys(s), "Condition"))])
+        )
+      ]
+    ]))
+    error_message = "A CI role policy uses a wildcard action or a wildcard resource other than the conditioned KMS key."
+  }
 }

@@ -54,6 +54,18 @@ variable "member_account_ids" {
   }
 }
 
+variable "github_ci_repository" {
+  description = "Name of the repository (without the owner) that manages GitHub as code and may assume the github-infra-github roles."
+  type        = string
+  default     = "workforce-github"
+}
+
+variable "github_ci_repository_id" {
+  description = "Numeric GitHub ID of that repository. Public, not an AWS ID. Needed for the immutable OIDC subject."
+  type        = number
+  default     = 1398476489
+}
+
 variable "noncurrent_version_days" {
   description = "Days before old state versions are deleted."
   type        = number
