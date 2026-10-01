@@ -35,6 +35,14 @@ Rejected: a bucket per account, which needs a second bootstrap for every account
 
 ## Bootstrap, once per account
 
+0. **Enable the region in the account first** (only when it is an opt-in region such as `eu-south-1`, which this repository uses). Until then the provider's regional STS call is refused, and `terraform plan` fails with `AccessDenied` on `sts:AssumeRole` into `OrganizationAccountAccessRole`, although switching role in the console works (the console uses the global endpoint). From the management SSO admin session, switch role into the account (`OrganizationAccountAccessRole`), open Account → AWS Regions and enable the region; it can take a few minutes. It cannot be done from the CLI of the management account without enabling trusted access for AWS Account Management in the Organization, which this repository does not do. Check it with:
+
+   ```sh
+   aws sts assume-role --region <region> --role-arn arn:aws:iam::<account-id>:role/OrganizationAccountAccessRole \
+     --role-session-name check --query 'Credentials.Expiration' --output text   # prints a timestamp
+   ```
+
+
 Run by the maintainer, locally, with the management admin session. The account ID is read from the management stack outputs and never committed.
 
 1. Fill `live/accounts/<account>/backend.hcl` and `terraform.tfvars` from the `.example` files, with `break_glass_account_id` set.

@@ -69,7 +69,7 @@ Sign in as root, then:
 
 1. **Enable MFA** on root (Security credentials). Register a **second** MFA device as the recovery path, and secure the root email mailbox with MFA too, since it is the password-reset channel.
 2. **Account → IAM user and role access to Billing information → Activate IAM Access.**
-3. **Account → AWS Regions:** enable `<region>` if it is an opt-in region. Do not disable it later: it would break SSO. Set the alternate contacts (security, billing) on the same page.
+3. **Account → AWS Regions:** enable `<region>` if it is an opt-in region. Do not disable it later: it would break SSO. Set the alternate contacts (security, billing) on the same page. An opt-in region is enabled **per account**: do the same in every member account (`security`, `workforce`, later `test`, `qa`, `demo`) right after it is created, see `docs/ACCOUNT_CI_BASELINES.md`.
 4. **Budgets:** create a monthly **test** cost budget named `Workforce Budget`: 20 USD, recurring, fixed, alerts at 50, 80 and 100 % of actual cost by email.
 5. **AWS Organizations → Create an organization** with **All features** (cannot be downgraded). Click the verification link AWS emails to the root address.
 6. **IAM Identity Center:** first switch the console region to `<region>`, then click Enable. The home region cannot be moved without deleting the instance, which loses every user, permission set and assignment. Enable it with AWS Organizations, then
