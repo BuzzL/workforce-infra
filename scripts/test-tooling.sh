@@ -142,6 +142,8 @@ write_valid
 rm -rf bootstrap live modules
 write_stack bootstrap
 write_stack live/management
+write_stack live/accounts/security
+write_stack live/accounts/workforce
 write_stack live/environments/test
 write_stack live/environments/qa
 write_stack live/environments/demo
@@ -151,7 +153,20 @@ if [ "$got" = "$want" ]; then echo "ok   ci-stacks apply maps paths to environme
 got=$(scripts/ci-stacks.sh plan)
 want='[{"stack":"bootstrap","environment":"management-plan"},{"stack":"live/management","environment":"management-plan"}]'
 if [ "$got" = "$want" ]; then echo "ok   ci-stacks plan lists only stacks with a plan environment"; else echo "FAIL ci-stacks plan mapping"; echo "$got"; failed=1; fi
+# Account baselines stay out of CI until their .ci-enabled marker exists (checked above: absent), and
+# then are only planned (apply false), under their own <account>-plan environment.
+touch live/accounts/security/.ci-enabled
+got=$(scripts/ci-stacks.sh apply)
+want='[{"stack":"bootstrap","environment":"management","apply":false},{"stack":"live/accounts/security","environment":"security","apply":false},{"stack":"live/environments/demo","environment":"demo","apply":true},{"stack":"live/environments/qa","environment":"qa","apply":true},{"stack":"live/environments/test","environment":"test","apply":true},{"stack":"live/management","environment":"management","apply":true}]'
+if [ "$got" = "$want" ]; then echo "ok   ci-stacks enables an account baseline with its marker, without apply"; else echo "FAIL ci-stacks account apply mapping"; echo "$got"; failed=1; fi
+got=$(scripts/ci-stacks.sh plan)
+want='[{"stack":"bootstrap","environment":"management-plan"},{"stack":"live/accounts/security","environment":"security-plan"},{"stack":"live/management","environment":"management-plan"}]'
+if [ "$got" = "$want" ]; then echo "ok   ci-stacks plans an enabled account baseline in <account>-plan"; else echo "FAIL ci-stacks account plan mapping"; echo "$got"; failed=1; fi
+rm live/accounts/security/.ci-enabled
 expect fail:usage "ci-stacks rejects an unknown mode" scripts/ci-stacks.sh nonsense
+expect fail:usage "account secrets script rejects a missing account" scripts/set-account-environment-secrets.sh
+expect fail:usage "account secrets script rejects an unknown account" scripts/set-account-environment-secrets.sh management
+expect fail:usage "account secrets script rejects an unknown option" scripts/set-account-environment-secrets.sh security --nonsense
 write_stack live/other
 expect fail:"unmapped stack: live/other" "ci-stacks rejects an unmapped stack" scripts/ci-stacks.sh
 rm -rf live/other
@@ -221,6 +236,7 @@ CASES = [
     ("terraform output goes through the redaction", '2>&1 | "$GITHUB_WORKSPACE/scripts/redact.sh" | tee', "2>&1 | tee", "must go through scripts/redact.sh"),
     ("the Organization root ID stays a secret", "TF_VAR_root_id: ${{ secrets.ORGANIZATION_ROOT_ID }}", 'TF_VAR_root_id: "r-ab12"', "the Organization root ID must be a secret"),
     ("the account email base stays a secret", "TF_VAR_account_email_base: ${{ secrets.ACCOUNT_EMAIL_BASE }}", 'TF_VAR_account_email_base: "a@b.c"', "the account email base must be a secret"),
+    ("the member account IDs stay a secret", "TF_VAR_member_account_ids: ${{ secrets.MEMBER_ACCOUNT_IDS || '{}' }}", 'TF_VAR_member_account_ids: "{}"', "the member account IDs must be a secret"),
     ("the budget alert address stays a secret", "TF_VAR_budget_alert_email: ${{ secrets.BUDGET_ALERT_EMAIL }}", 'TF_VAR_budget_alert_email: "a@b.co"', "the budget alert address must be a secret"),
     ("the role ID stays referenced so that it is masked", "AWS_ROLE_ID: ${{ secrets.AWS_ROLE_ID }}", 'AWS_ROLE_ID: ""', "AWS_ROLE_ID must be referenced"),
     ("checkout does not persist credentials", "        with:\n          persist-credentials: false\n", "        with: {}\n", "must not persist credentials"),

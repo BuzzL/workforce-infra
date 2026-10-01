@@ -81,6 +81,7 @@ jobs:
       TF_VAR_state_bucket_name: ${{ secrets.STATE_BUCKET }}
       TF_VAR_root_id: ${{ secrets.ORGANIZATION_ROOT_ID }}
       TF_VAR_account_email_base: ${{ secrets.ACCOUNT_EMAIL_BASE }}
+      TF_VAR_member_account_ids: ${{ secrets.MEMBER_ACCOUNT_IDS || '{}' }}
       TF_VAR_budget_alert_email: ${{ secrets.BUDGET_ALERT_EMAIL }}
       AWS_REGION_NAME: ${{ vars.AWS_REGION }}
       STATE_BUCKET: ${{ secrets.STATE_BUCKET }}
@@ -225,6 +226,7 @@ jobs:
       TF_VAR_state_bucket_name: ${{ secrets.STATE_BUCKET }}
       TF_VAR_root_id: ${{ secrets.ORGANIZATION_ROOT_ID }}
       TF_VAR_account_email_base: ${{ secrets.ACCOUNT_EMAIL_BASE }}
+      TF_VAR_member_account_ids: ${{ secrets.MEMBER_ACCOUNT_IDS || '{}' }}
       TF_VAR_budget_alert_email: ${{ secrets.BUDGET_ALERT_EMAIL }}
       AWS_REGION_NAME: ${{ vars.AWS_REGION }}
       STATE_BUCKET: ${{ secrets.STATE_BUCKET }}

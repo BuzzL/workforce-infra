@@ -18,6 +18,8 @@ updates:
     directories:
       - /bootstrap
       - /live/management
+      - /live/accounts/security
+      - /live/accounts/workforce
     schedule:
       interval: weekly
     commit-message:
@@ -25,6 +27,7 @@ updates:
   - package-ecosystem: terraform
     directories:
       - /modules/scp-baseline
+      - /modules/account-ci-baseline
       - /modules/budget
     schedule:
       interval: weekly

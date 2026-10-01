@@ -3,6 +3,46 @@ locals {
   state_bucket_arn = "arn:aws:s3:::${var.state_bucket_name}"
 }
 
+locals {
+  # The CI roles of the member accounts (modules/account-ci-baseline) reach the state of their
+  # own stack and nothing else in the bucket. Each Allow names one exact role ARN as the
+  # principal and one key: no wildcard anywhere. The identity policies of the roles say the
+  # same from their side; both are needed for a cross-account request.
+  member_state_statements = flatten([
+    for name, id in var.member_account_ids : [
+      {
+        Sid       = "List${title(name)}State"
+        Effect    = "Allow"
+        Principal = { AWS = ["arn:aws:iam::${id}:role/github-infra-${name}", "arn:aws:iam::${id}:role/github-infra-${name}-plan"] }
+        Action    = "s3:ListBucket"
+        Resource  = local.state_bucket_arn
+        Condition = { StringEquals = { "s3:prefix" = ["env:/", "live/accounts/${name}/terraform.tfstate", "live/accounts/${name}/terraform.tfstate.tflock"] } }
+      },
+      {
+        Sid       = "ReadAndWrite${title(name)}State"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::${id}:role/github-infra-${name}" }
+        Action    = ["s3:GetObject", "s3:PutObject"]
+        Resource  = "${local.state_bucket_arn}/live/accounts/${name}/terraform.tfstate"
+      },
+      {
+        Sid       = "Lock${title(name)}State"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::${id}:role/github-infra-${name}" }
+        Action    = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Resource  = "${local.state_bucket_arn}/live/accounts/${name}/terraform.tfstate.tflock"
+      },
+      {
+        Sid       = "Read${title(name)}StateForPlans"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::${id}:role/github-infra-${name}-plan" }
+        Action    = "s3:GetObject"
+        Resource  = "${local.state_bucket_arn}/live/accounts/${name}/terraform.tfstate"
+      },
+    ]
+  ])
+}
+
 resource "aws_s3_bucket" "state" {
   bucket        = var.state_bucket_name
   force_destroy = false
@@ -79,7 +119,7 @@ resource "aws_s3_bucket_policy" "state" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Sid       = "DenyInsecureTransport"
         Effect    = "Deny"
@@ -88,7 +128,9 @@ resource "aws_s3_bucket_policy" "state" {
         Resource  = [local.state_bucket_arn, "${local.state_bucket_arn}/*"]
         Condition = { Bool = { "aws:SecureTransport" = "false" } }
       }
-    ]
+      ],
+      local.member_state_statements
+    )
   })
 
   depends_on = [aws_s3_bucket_public_access_block.state]

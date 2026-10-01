@@ -511,3 +511,113 @@ run "bucket_name_longer_than_63_characters_is_rejected" {
 
   expect_failures = [var.state_bucket_name]
 }
+
+# Member accounts with a CI baseline. The IDs are fake; the real ones are never committed.
+run "member_roles_reach_only_their_own_state" {
+  command = apply
+
+  variables {
+    member_account_ids = { security = "111122223333" }
+  }
+
+  assert {
+    condition = jsondecode(aws_s3_bucket_policy.state.policy).Statement == [
+      {
+        Sid       = "DenyInsecureTransport"
+        Effect    = "Deny"
+        Principal = { AWS = "*" }
+        Action    = "s3:*"
+        Resource  = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4", "arn:aws:s3:::workforce-tfstate-a1b2c3d4/*"]
+        Condition = { Bool = { "aws:SecureTransport" = "false" } }
+      },
+      {
+        Sid       = "ListSecurityState"
+        Effect    = "Allow"
+        Principal = { AWS = ["arn:aws:iam::111122223333:role/github-infra-security", "arn:aws:iam::111122223333:role/github-infra-security-plan"] }
+        Action    = "s3:ListBucket"
+        Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4"
+        Condition = { StringEquals = { "s3:prefix" = ["env:/", "live/accounts/security/terraform.tfstate", "live/accounts/security/terraform.tfstate.tflock"] } }
+      },
+      {
+        Sid       = "ReadAndWriteSecurityState"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::111122223333:role/github-infra-security" }
+        Action    = ["s3:GetObject", "s3:PutObject"]
+        Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4/live/accounts/security/terraform.tfstate"
+      },
+      {
+        Sid       = "LockSecurityState"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::111122223333:role/github-infra-security" }
+        Action    = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4/live/accounts/security/terraform.tfstate.tflock"
+      },
+      {
+        Sid       = "ReadSecurityStateForPlans"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::111122223333:role/github-infra-security-plan" }
+        Action    = "s3:GetObject"
+        Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4/live/accounts/security/terraform.tfstate"
+      },
+    ]
+    error_message = "A member's roles must be named exactly and reach only their own state key, the plan role without write or lock."
+  }
+
+  # No wildcard in any Allow of the bucket policy: the only * is in the TLS Deny.
+  assert {
+    condition = alltrue([
+      for s in jsondecode(aws_s3_bucket_policy.state.policy).Statement : (
+        s.Effect == "Deny" || (
+          !strcontains(jsonencode(s.Principal), "*") && !strcontains(jsonencode(s.Resource), "*") && !strcontains(jsonencode(s.Action), "*")
+        )
+      )
+    ])
+    error_message = "An Allow in the bucket policy uses a wildcard principal, action or resource."
+  }
+}
+
+run "management_role_may_bootstrap_listed_accounts_only" {
+  command = apply
+
+  variables {
+    member_account_ids = { workforce = "444455556666", security = "111122223333" }
+  }
+
+  assert {
+    condition = jsondecode(aws_iam_role_policy.break_glass_bootstrap[0].policy) == {
+      Version = "2012-10-17"
+      Statement = [{
+        Sid       = "BootstrapMemberAccounts"
+        Effect    = "Allow"
+        Action    = "sts:AssumeRole"
+        Resource  = ["arn:aws:iam::111122223333:role/OrganizationAccountAccessRole", "arn:aws:iam::444455556666:role/OrganizationAccountAccessRole"]
+        Condition = { StringEquals = { "sts:RoleSessionName" = "baseline-bootstrap" } }
+      }]
+    }
+    error_message = "The CI role may assume OrganizationAccountAccessRole only in the listed accounts and only as baseline-bootstrap."
+  }
+
+  assert {
+    condition     = aws_iam_role_policies_exclusive.github_infra_management.policy_names == toset(["terraform-state", "plan-bootstrap-stack", "organization-units", "budget", "break-glass-bootstrap"])
+    error_message = "The break-glass policy must be the last inline policy."
+  }
+}
+
+run "no_member_accounts_means_no_break_glass_permission" {
+  command = apply
+
+  assert {
+    condition     = length(aws_iam_role_policy.break_glass_bootstrap) == 0
+    error_message = "Without member accounts the CI role must not be able to assume anything in them."
+  }
+}
+
+run "member_account_ids_are_validated" {
+  command = plan
+
+  variables {
+    member_account_ids = { management = "111122223333" }
+  }
+
+  expect_failures = [var.member_account_ids]
+}
