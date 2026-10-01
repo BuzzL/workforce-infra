@@ -45,6 +45,10 @@ The plan role can run from any branch and `identitystore:DescribeUser` has no re
 
 Run by the maintainer, locally, in this order. Nothing here is applied by CI.
 
+**Why locally.** These steps change who can reach every account, and CI is deliberately unable to: its roles have no IAM or Identity Center write, so a compromised workflow cannot widen its own access or grant itself a login. Only a person with SSO admin can do it, after reading the plan.
+
+**Why once.** After this the stack is stable: one user, two permission sets. A change (a new account in `ASSIGNMENT_ACCOUNT_IDS`, a new permission set) is the same local apply, done only when it is needed and reviewed in a PR first. The delegation in step 1 is registered once and never changes. Nothing here runs on a schedule or on merge; CI only plans it to detect drift.
+
 1. `bootstrap/`: with `security` in `member_account_ids`, `terraform plan` must show exactly one `aws_organizations_delegated_administrator`. Apply it with the management SSO admin session.
 2. `live/accounts/security`: add `maintainer_username` and `assignment_account_ids` to `terraform.tfvars` (see the `.example`; not the management account). The first run has no SSO access to `security` yet, so set `break_glass_account_id` as in `docs/ACCOUNT_CI_BASELINES.md` and remove it afterwards. There is nothing to import. `terraform plan` must show only creations: two permission sets, their two managed policy attachments and the assignments, and no change to the manual `AdministratorAccess` set. Review, then apply. A later apply is done from the maintainer's own `WorkforceAdministrator` session in `security`.
 3. `scripts/set-account-environment-secrets.sh security` with `MAINTAINER_USERNAME` and `ASSIGNMENT_ACCOUNT_IDS` in the environment, so the `security` plans can read the stack.
