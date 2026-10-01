@@ -1,7 +1,7 @@
 data "aws_caller_identity" "current" {}
 
 # The budget was created by hand before this stack existed. The import block brings it under
-# Terraform without recreating it; once applied, the block is a no-op and can stay or go.
+# Terraform without recreating it; once applied, the block is a no-op and is removed in a later PR.
 import {
   to = module.budget.aws_budgets_budget.this
   id = "${data.aws_caller_identity.current.account_id}:${var.budget_name}"

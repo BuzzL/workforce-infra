@@ -12,6 +12,8 @@ variables {
   budget_alert_email = "alerts@example.com"
 }
 
+# The import itself is only proven by a real plan against the account (the resource is
+# overridden here, a mock provider cannot import); these runs prove the wiring.
 # The budget is imported, not recreated: the name and limit below are those of the
 # budget that exists in the account, asserted literally so that changing either is a
 # visible, reviewed change to this file.
