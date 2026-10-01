@@ -281,16 +281,17 @@ run "organization_permissions_are_exactly_the_documented_ones" {
       Version = "2012-10-17"
       Statement = [
         {
-          Sid    = "ReadOrganizationalUnits"
+          Sid    = "ReadOrganizationalUnitsAndAccounts"
           Effect = "Allow"
           Action = [
+            "organizations:DescribeAccount",
             "organizations:DescribeOrganizationalUnit",
             "organizations:ListAccountsForParent",
             "organizations:ListOrganizationalUnitsForParent",
             "organizations:ListParents",
             "organizations:ListTagsForResource",
           ]
-          Resource = ["arn:aws:organizations::111122223333:root/o-*/r-*", "arn:aws:organizations::111122223333:ou/o-*/ou-*"]
+          Resource = ["arn:aws:organizations::111122223333:root/o-*/r-*", "arn:aws:organizations::111122223333:ou/o-*/ou-*", "arn:aws:organizations::111122223333:account/o-*/*"]
         },
         {
           Sid    = "ManageOrganizationalUnits"
@@ -306,7 +307,16 @@ run "organization_permissions_are_exactly_the_documented_ones" {
         }
       ]
     }
-    error_message = "The management role may read the Organization and manage organizational units of this account's Organization, and nothing else in Organizations."
+    error_message = "The management role may read the Organization and its accounts and manage organizational units of this account's Organization, and nothing else in Organizations."
+  }
+
+  # Account creation is irreversible and applied locally (IAT-31): CI can only read accounts.
+  assert {
+    condition = !anytrue([
+      for s in jsondecode(aws_iam_role_policy.organization_units.policy).Statement :
+      anytrue([for a in flatten([s.Action]) : contains(["organizations:CreateAccount", "organizations:CreateGovCloudAccount", "organizations:MoveAccount", "organizations:CloseAccount", "organizations:RemoveAccountFromOrganization", "organizations:InviteAccountToOrganization"], a)])
+    ])
+    error_message = "The management role must not be able to create, move or close accounts."
   }
 
   assert {
