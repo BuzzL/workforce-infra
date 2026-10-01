@@ -179,15 +179,17 @@ redacted=$(printf '%s\n' \
   'id=arn:aws:iam::123456789012:role/x AROAABCDEFGHIJKLMNOP:GitHubActions' \
   "Assumed AS""IAABCDEFGHIJKLMNOP token" \
   'bucket workforce-tfstate-a1b2c3d4 and other-bucket-77' \
+  'parent_id = "r-ab12" ou-ab12-cdef5678 for-r-abcd' \
   'contact me@example.com sub repo:BuzzL@6116516/workforce-infra@1394667495:environment:m' \
   '  ~ resource "aws_iam_role" "x" {' | STATE_BUCKET=other-bucket-77 scripts/redact.sh)
 want_redacted=$(printf '%s\n' \
   'id=arn:aws:iam::<account-id>:role/x <aws-id>:GitHubActions' \
   'Assumed <aws-id> token' \
   'bucket <state-bucket> and <state-bucket>' \
+  'parent_id = "<org-id>" <org-id> for-r-abcd' \
   'contact <email> sub repo:BuzzL@6116516/workforce-infra@1394667495:environment:m' \
   '  ~ resource "aws_iam_role" "x" {')
-if [ "$redacted" = "$want_redacted" ]; then echo "ok   redact hides account IDs, unique IDs, bucket names and emails only"; else echo "FAIL redact"; echo "$redacted"; failed=1; fi
+if [ "$redacted" = "$want_redacted" ]; then echo "ok   redact hides account IDs, unique IDs, bucket names, Organization IDs and emails only"; else echo "FAIL redact"; echo "$redacted"; failed=1; fi
 
 # Structure of the workflow: it passes as written and each mutation is rejected.
 expect pass "workflow structure holds" scripts/check-workflow.sh "$work/wf/terraform.yml"
