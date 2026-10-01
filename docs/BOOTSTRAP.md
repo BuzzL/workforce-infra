@@ -239,7 +239,7 @@ aws iam get-role --role-name github-infra-management-plan --query 'Role.AssumeRo
 aws s3 ls "s3://$BUCKET/bootstrap/"                                                          # terraform.tfstate
 ```
 
-Keep the role ARNs and the bucket name out of the repository. `scripts/set-environment-secrets.sh` (idempotent) reads them from the outputs of `bootstrap/` and from IAM, validates them, sets the secrets `AWS_ROLE_ARN`, `AWS_ROLE_ID`, `STATE_BUCKET` and `ORGANIZATION_ROOT_ID` of the `management` and `management-plan` environments without printing them, and deletes the variables of the same names (`--check` lists names only).
+Keep the role ARNs and the bucket name out of the repository. `scripts/set-environment-secrets.sh` (idempotent) reads them from the outputs of `bootstrap/` and from IAM, validates them, sets the secrets `AWS_ROLE_ARN`, `AWS_ROLE_ID`, `STATE_BUCKET`, `ORGANIZATION_ROOT_ID` and `ACCOUNT_EMAIL_BASE` (the base mailbox, read from the environment variable of the same name) of the `management` and `management-plan` environments without printing them, and deletes the variables of the same names (`--check` lists names only).
 
 ### Change an applied bootstrap
 
@@ -268,7 +268,7 @@ Keep the role ARN and the bucket name out of the repository.
 | `live/management` | yes | `management` | `management-plan` |
 | `live/environments/test`, `.../qa`, `.../demo` | yes | the same name | none |
 
-The `management` role can manage the state of `live/management`, read the bootstrap resources, and read and manage the organizational units of the Organization (`bootstrap/organization.tf`, `organization-units` policy, scoped to the OU and root ARN patterns of this account, no `Resource = "*"`). The `management-plan` role has the same reads and the state of `live/management` read only. The Organization root ID is a **secret** (`ORGANIZATION_ROOT_ID`, set by `scripts/set-environment-secrets.sh`) passed to the stack as `TF_VAR_root_id`, so that the roles need no Organization-wide read, and `scripts/redact.sh` redacts root and OU IDs. A stack that needs more permissions gets them in `bootstrap/`, applied locally. **Order for IAT-29:** apply `bootstrap/` locally, then run `scripts/set-environment-secrets.sh`, so that the `live/management` plan and apply can run. The GitHub Environments `test`, `qa` and `demo` do not exist. GitHub creates a referenced environment without any protection on its first use, so each one must be created with a required reviewer before its stack is added.
+The `management` role can manage the state of `live/management`, read the bootstrap resources, and read the member accounts, and read and manage the organizational units of the Organization (`bootstrap/organization.tf`, `organization-units` policy, scoped to the OU and root ARN patterns of this account, no `Resource = "*"`). The `management-plan` role has the same reads and the state of `live/management` read only. The Organization root ID is a **secret** (`ORGANIZATION_ROOT_ID`, set by `scripts/set-environment-secrets.sh`) passed to the stack as `TF_VAR_root_id`, so that the roles need no Organization-wide read, and `scripts/redact.sh` redacts root and OU IDs. The roles cannot create, move or close accounts: account creation is irreversible and is applied locally with SSO admin. A stack that needs more permissions gets them in `bootstrap/`, applied locally. **Order for IAT-29:** apply `bootstrap/` locally, then run `scripts/set-environment-secrets.sh`, so that the `live/management` plan and apply can run. The GitHub Environments `test`, `qa` and `demo` do not exist. GitHub creates a referenced environment without any protection on its first use, so each one must be created with a required reviewer before its stack is added.
 
 - **Pull requests:** a plan job per stack with a plan environment, through the read-only role of `management-plan`, with `-lock=false`. The job runs the code of the pull request, so it has no `pull-requests` permission. A separate `comment` job with no AWS credentials and no environment checks out `scripts/redact.sh` only and posts the plan as a PR comment for the commit, updated in place. Pull requests from forks are skipped: they get no OIDC token.
 - **After a merge to `main`:** one job per stack waits for the required reviewer of its environment, then plans and applies exactly that plan when it has changes. The approval is given before the plan exists, so the reviewer relies on the plan shown on the pull request. `bootstrap/` is plan only: a plan with changes fails the job, so approve its job after the local apply.
@@ -279,3 +279,14 @@ The `management` role can manage the state of `live/management`, read the bootst
 - **Concurrency:** one apply per stack at a time, stacks apply one after the other, a newer push cancels the older plan of a pull request.
 - **Checks of the workflow:** `actionlint` and `scripts/check-workflow.sh` (`make workflows`, needs Ruby) parse the workflow and compare each job with an exact allowlist: permissions, conditions, environments, actions and pins, contexts (the only variable is `AWS_REGION`), secrets, masking, and that every Terraform call goes through the redaction. `make selftest` proves each check rejects the matching bad change and that the redaction hides what it must.
 - An `AccessDenied` in a plan means the role lacks a read permission for a resource of the stack: add it in `bootstrap/` and apply locally.
+
+## 8. Organization
+
+| OU | Accounts |
+|---|---|
+| `Management` | `security` |
+| `Environments` | none yet |
+| `Development` | `workforce` |
+| `Operations` | none yet |
+
+The `management` account is the Organization's management account and sits at the root, outside every OU.

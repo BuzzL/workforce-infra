@@ -23,3 +23,20 @@ variable "tags" {
     Stack     = "live/management"
   }
 }
+
+variable "account_email_base" {
+  description = "Base mailbox of the member accounts (local@domain). Each account gets local+<account>@domain. Set by CI from the secret ACCOUNT_EMAIL_BASE (TF_VAR_account_email_base); never committed."
+  type        = string
+  sensitive   = true
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9._%-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)+$", var.account_email_base))
+    error_message = "The account email base must look like local@domain and must not contain a +."
+  }
+
+  # Organizations limits an email to 64 characters; the longest address is the one with the longest account name (workforce).
+  validation {
+    condition     = length(var.account_email_base) + length("+workforce") <= 64
+    error_message = "local+workforce@domain must not exceed 64 characters."
+  }
+}
