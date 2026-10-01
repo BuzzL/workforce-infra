@@ -23,6 +23,18 @@ variable "global_service_prefixes" {
     "support",
   ]
 
+  # Without these three the CI role cannot assume its role through the global STS
+  # endpoint (us-east-1) and the Organization cannot be managed outside the region.
+  validation {
+    condition     = length(setintersection(var.global_service_prefixes, ["iam", "organizations", "sts"])) == 3
+    error_message = "The exceptions must include at least iam, organizations and sts, or the SCP would lock out the CI role."
+  }
+
+  validation {
+    condition     = length(distinct(var.global_service_prefixes)) == length(var.global_service_prefixes)
+    error_message = "Service prefixes must be unique."
+  }
+
   validation {
     condition     = alltrue([for p in var.global_service_prefixes : can(regex("^[a-z0-9-]+$", p))])
     error_message = "A service prefix is lowercase letters, digits and hyphens, without a colon or a wildcard."

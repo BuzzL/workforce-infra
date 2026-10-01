@@ -39,7 +39,7 @@ run "region_and_exceptions_come_from_variables" {
 
   variables {
     allowed_region          = "eu-west-1"
-    global_service_prefixes = ["iam", "route53"]
+    global_service_prefixes = ["iam", "organizations", "route53", "sts"]
   }
 
   assert {
@@ -47,7 +47,7 @@ run "region_and_exceptions_come_from_variables" {
       {
         Sid       = "DenyOutsideAllowedRegion"
         Effect    = "Deny"
-        NotAction = ["iam:*", "route53:*"]
+        NotAction = ["iam:*", "organizations:*", "route53:*", "sts:*"]
         Resource  = "*"
         Condition = { StringNotEquals = { "aws:RequestedRegion" = ["eu-west-1"] } }
       }
@@ -71,6 +71,36 @@ run "a_wildcard_or_action_in_a_prefix_is_rejected" {
 
   variables {
     global_service_prefixes = ["iam:*"]
+  }
+
+  expect_failures = [var.global_service_prefixes]
+}
+
+run "an_empty_exception_list_is_rejected" {
+  command = plan
+
+  variables {
+    global_service_prefixes = []
+  }
+
+  expect_failures = [var.global_service_prefixes]
+}
+
+run "dropping_a_lockout_critical_prefix_is_rejected" {
+  command = plan
+
+  variables {
+    global_service_prefixes = ["iam", "organizations"]
+  }
+
+  expect_failures = [var.global_service_prefixes]
+}
+
+run "duplicate_prefixes_are_rejected" {
+  command = plan
+
+  variables {
+    global_service_prefixes = ["iam", "iam", "organizations", "sts"]
   }
 
   expect_failures = [var.global_service_prefixes]

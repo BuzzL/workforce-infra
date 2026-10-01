@@ -14,6 +14,9 @@ locals {
       }
     }
 
+    # Matches the root user of every account the SCP is attached to, with no break-glass
+    # exception; it does not match assumed-root sessions, so centralized root recovery
+    # through sts:AssumeRoot keeps working. SCPs never apply to the management account.
     deny-root-user = {
       description = "The root user of a member account cannot do anything."
       statement = {
@@ -27,6 +30,10 @@ locals {
       }
     }
 
+    # The core set of actions that stop, change or delete logging, not every CloudTrail
+    # write action; extend it in the PR that needs more, with its test. There is no
+    # principal exception, so the account that owns a trail cannot change it either: manage
+    # the Organization trail from the management account, which SCPs do not restrict.
     deny-disable-cloudtrail = {
       description = "CloudTrail trails and event data stores cannot be stopped, changed or deleted."
       statement = {

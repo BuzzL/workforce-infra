@@ -99,12 +99,25 @@ run "module_creates_these_policies_and_attaches_none" {
   }
 
   # The module is a library of definitions: attaching is the job of the stack that calls
-  # it, in stages. Any attachment resource in the module's own code fails this test.
+  # it, in stages. This scans every Terraform file under the module (*.tf and *.tf.json,
+  # nested directories included, tests and .terraform excluded) for an attachment
+  # resource. It is a text guard: it cannot see through a module call, so a module block
+  # is rejected as well.
   assert {
     condition = length([
-      for f in fileset(path.module, "*.tf") : f
-      if strcontains(file("${path.module}/${f}"), "aws_organizations_policy_attachment")
+      for f in fileset(path.module, "**") : f
+      if can(regex("\\.tf(\\.json)?$", f)) && !can(regex("^(tests|\\.terraform)/", f))
+      && strcontains(file("${path.module}/${f}"), "aws_organizations_policy_attachment")
     ]) == 0
     error_message = "The module must not attach any SCP."
+  }
+
+  assert {
+    condition = length([
+      for f in fileset(path.module, "**") : f
+      if can(regex("\\.tf(\\.json)?$", f)) && !can(regex("^(tests|\\.terraform)/", f))
+      && can(regex("(?m)^\\s*\"?module\"?\\s", file("${path.module}/${f}")))
+    ]) == 0
+    error_message = "The module must not call other modules: an attachment could hide there."
   }
 }
