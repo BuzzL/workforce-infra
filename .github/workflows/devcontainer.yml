@@ -1,0 +1,39 @@
+# Builds the devcontainer and runs `make check` inside it. Only runs when the devcontainer
+# changes, so it is not a required status check.
+name: Devcontainer
+
+on:
+  pull_request:
+    paths:
+      - .devcontainer/**
+      - .terraform-version
+      - .github/workflows/devcontainer.yml
+  push:
+    branches: [main]
+    paths:
+      - .devcontainer/**
+      - .terraform-version
+      - .github/workflows/devcontainer.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The mount of ~/.aws is for workstations; the runner has none, so build from a copy
+      # of the configuration without it.
+      - name: Drop the workstation-only mount
+        run: |
+          sed -i '/"mounts"/d' .devcontainer/devcontainer.json
+          ! grep -q '"mounts"' .devcontainer/devcontainer.json
+      - uses: devcontainers/ci@8bf61b26e9c3a98f69cb6ce2f88d24ff59b785c6 # v0.3.1900000417
+        with:
+          push: never
+          runCmd: |
+            test "$(terraform version -json | python3 -c 'import json,sys; print(json.load(sys.stdin)["terraform_version"])')" = "$(cat .terraform-version)"
+            make check

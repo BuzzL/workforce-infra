@@ -13,6 +13,7 @@ Terraform monorepo for the AWS side of the AI Workforce: Organization, the workf
 
 - `bootstrap/`: state bucket, GitHub OIDC provider and the roles `github-infra-management` (apply, `management` environment) and `github-infra-management-plan` (read only, `management-plan` environment). Applied once locally (runbook in `docs/BOOTSTRAP.md`). Requires Terraform >= 1.10 for the S3 lockfile.
 - `live/management/`: Organization stack, applied by CI in the `management` environment. Currently the four top-level OUs (`Management`, `Environments`, `Development`, `Operations`) under the root.
+- `.devcontainer/`: the `base` image from `workforce-images` (pinned by digest) plus tflint, trivy, actionlint and ruby, checksum-pinned. Binds the host's `~/.aws` for SSO. The `Devcontainer` workflow runs `make check` in it when it changes.
 - `.github/workflows/terraform.yml`: read-only plan on pull requests (`management-plan` environment, redacted PR comment) and, after a merge to `main`, one approval-gated job per stack. The repo is public: `AWS_ROLE_ARN`, `AWS_ROLE_ID`, `STATE_BUCKET` and `ORGANIZATION_ROOT_ID` are environment secrets and Terraform output goes through `scripts/redact.sh`. `scripts/ci-stacks.sh` maps paths to environments, `scripts/check-workflow.sh` checks the workflow against an allowlist. `bootstrap/` is plan only.
 - `docs/BOOTSTRAP.md`: manual bootstrap of the management account, SSO and the Terraform tooling.
 - `docs/ENVIRONMENTS.md`: environments, branch model and promotion.

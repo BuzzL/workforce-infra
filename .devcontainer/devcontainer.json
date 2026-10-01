@@ -1,0 +1,15 @@
+{
+  "name": "workforce-infra",
+  "build": { "dockerfile": "Dockerfile" },
+  // AWS SSO: log in on the host (docs/BOOTSTRAP.md) and the container uses the same
+  // profiles and token cache. It is a bind mount of the host's ~/.aws: create that
+  // directory first (aws configure sso does), or the container does not start. No keys
+  // live in this repository.
+  "mounts": ["source=${localEnv:HOME}/.aws,target=/home/dev/.aws,type=bind"],
+  "postCreateCommand": "tflint --init --config=.tflint.hcl",
+  "customizations": {
+    "vscode": {
+      "extensions": ["hashicorp.terraform", "redhat.vscode-yaml"]
+    }
+  }
+}
