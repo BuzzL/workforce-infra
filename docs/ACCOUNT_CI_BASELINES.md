@@ -25,7 +25,7 @@ Rejected: letting CI apply its own baseline. It needs `iam:PutRolePolicy` on its
 
 ### 3. State stays in the management bucket
 
-One bucket, one key per stack: `live/accounts/<account>/terraform.tfstate`, the key CI derives from the stack path. Each role reaches its own key (and `.tflock` for the apply role) only. The bucket policy in `bootstrap/` names those roles, one exact ARN per Allow and no wildcard (approved by the maintainer for IAT-32). It is driven by the local variable `member_account_ids`, empty until the account's stack exists: S3 rejects a policy that names a principal that is not there yet.
+One bucket, one key per stack: `live/accounts/<account>/terraform.tfstate`, the key CI derives from the stack path. Each role reaches its own key (and `.tflock` for the apply role) only. The bucket policy in `bootstrap/` names those roles, one exact ARN per Allow and no wildcard. It is driven by the local variable `member_account_ids`, empty until the account's stack exists: S3 rejects a policy that names a principal that is not there yet.
 
 Rejected: a bucket per account, which needs a second bootstrap for every account and splits the state.
 
@@ -50,7 +50,7 @@ Run by the maintainer, locally, with the management admin session. The account I
 - Allowed uses: the one-time bootstrap above, and recovery when the CI roles or the OIDC provider are broken or deleted.
 - Not allowed: routine changes, anything CI can do, or any use by an agent.
 - Who: the maintainer, from the management admin session, or the management CI role (the maintainer approved this for the bootstrap). The CI role may assume it only into the accounts in `member_account_ids` and only with the session name `baseline-bootstrap`, which the stacks use, so its use stands out in CloudTrail. The permission exists only once an account is listed.
-- Every use is recorded as an `AssumeRole` event in CloudTrail (IAT-34); after a use, write down why in the Linear issue.
+- Every use is recorded as an `AssumeRole` event in CloudTrail once the organization trail exists; after a use, write down why in the Linear issue.
 - If a use is not the maintainer's, treat it as an incident and rotate.
 
 - The session name is chosen by the caller, so `baseline-bootstrap` is a way to spot a use in CloudTrail, not a control. The control is the `management` environment protection. The permission stays for as long as an account is in `member_account_ids`; to take it away, remove the account there and re-apply (its state access goes too).

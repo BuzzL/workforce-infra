@@ -512,7 +512,7 @@ run "bucket_name_longer_than_63_characters_is_rejected" {
   expect_failures = [var.state_bucket_name]
 }
 
-# Member accounts with a CI baseline (IAT-32). The IDs are fake; the real ones are never committed.
+# Member accounts with a CI baseline. The IDs are fake; the real ones are never committed.
 run "member_roles_reach_only_their_own_state" {
   command = apply
 
