@@ -220,7 +220,7 @@ CASES = [
     ("-lock=false cannot hide in a comment", "-input=false -lock=false -no-color -detailed-exitcode 2>&1", "-input=false -no-color -detailed-exitcode # -lock=false\n          echo 2>&1", "-lock=false"),
     ("terraform output goes through the redaction", '2>&1 | "$GITHUB_WORKSPACE/scripts/redact.sh" | tee', "2>&1 | tee", "must go through scripts/redact.sh"),
     ("the Organization root ID stays a secret", "TF_VAR_root_id: ${{ secrets.ORGANIZATION_ROOT_ID }}", 'TF_VAR_root_id: "r-ab12"', "the Organization root ID must be a secret"),
-    ("the Organization root ID stays a secret", "TF_VAR_root_id: ${{ secrets.ORGANIZATION_ROOT_ID }}", 'TF_VAR_root_id: "r-ab12"', "the Organization root ID must be a secret"),
+    ("the account email base stays a secret", "TF_VAR_account_email_base: ${{ secrets.ACCOUNT_EMAIL_BASE }}", 'TF_VAR_account_email_base: "a@b.c"', "the account email base must be a secret"),
     ("the role ID stays referenced so that it is masked", "AWS_ROLE_ID: ${{ secrets.AWS_ROLE_ID }}", 'AWS_ROLE_ID: ""', "AWS_ROLE_ID must be referenced"),
     ("checkout does not persist credentials", "        with:\n          persist-credentials: false\n", "        with: {}\n", "must not persist credentials"),
     ("the comment job only posts a finished plan", "needs.plan.result == 'failure')", "needs.plan.result == 'failure' || true)", "comment: it must only post a finished plan"),

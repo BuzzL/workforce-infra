@@ -1,8 +1,37 @@
 mock_provider "aws" {}
 
+override_resource {
+  target = aws_organizations_organizational_unit.this["Management"]
+  values = {
+    id = "ou-ab12-mgmt0001"
+  }
+}
+
+override_resource {
+  target = aws_organizations_organizational_unit.this["Environments"]
+  values = {
+    id = "ou-ab12-envs0001"
+  }
+}
+
+override_resource {
+  target = aws_organizations_organizational_unit.this["Development"]
+  values = {
+    id = "ou-ab12-devl0001"
+  }
+}
+
+override_resource {
+  target = aws_organizations_organizational_unit.this["Operations"]
+  values = {
+    id = "ou-ab12-ops00001"
+  }
+}
+
 variables {
-  region  = "eu-west-1"
-  root_id = "r-ab12"
+  region             = "eu-west-1"
+  root_id            = "r-ab12"
+  account_email_base = "owner@example.com"
 }
 
 # Values are asserted literally on purpose: a change to the OU names or their parent must
