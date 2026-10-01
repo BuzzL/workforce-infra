@@ -51,4 +51,5 @@ Notes:
 | Region | variable | `AWS_REGION` in `management` and `management-plan` | workflow, as `TF_VAR_region` |
 | Global-service exceptions | code | SCP module, with a literal test | Terraform |
 | Account email base | secret | `ACCOUNT_EMAIL_BASE` in `management` | apply job, as `TF_VAR_account_email_base` |
+| Organization root ID | secret | `ORGANIZATION_ROOT_ID` in `management` and `management-plan` | plan and apply jobs, as `TF_VAR_root_id` |
 | Role ARNs, state bucket | secret | `AWS_ROLE_ARN`, `AWS_ROLE_ID`, `STATE_BUCKET` | workflow (see `BOOTSTRAP.md`) |
