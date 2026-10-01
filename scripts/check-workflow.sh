@@ -80,7 +80,7 @@ jobs.each do |j, job|
   end
 end
 
-# Contexts: the only variable is AWS_REGION, the only secrets are the seven below, no bracket syntax.
+# Contexts: the only variable is AWS_REGION, the only secrets are the nine below, no bracket syntax.
 text.scan(/\$\{\{(.*?)\}\}/m).flatten.each do |expr|
   expr.scan(/\bvars\s*\.\s*(\w+)/i).flatten.each { |n| need.(n == "AWS_REGION", "variable not allowed: #{n}") }
   expr.scan(/\bsecrets\s*\.\s*(\w+)/i).flatten.each { |n| need.(%w[AWS_ROLE_ARN AWS_ROLE_ID STATE_BUCKET ORGANIZATION_ROOT_ID ACCOUNT_EMAIL_BASE BUDGET_ALERT_EMAIL MEMBER_ACCOUNT_IDS MAINTAINER_USERNAME ASSIGNMENT_ACCOUNT_IDS].include?(n), "secret not allowed: #{n}") }

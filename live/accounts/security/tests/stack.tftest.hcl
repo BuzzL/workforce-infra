@@ -51,36 +51,70 @@ run "bootstrap_account_id_must_be_12_digits" {
   expect_failures = [var.break_glass_account_id]
 }
 
-run "identity_reads_are_read_only_and_literal" {
+run "identity_reads_are_exactly_the_documented_ones" {
   command = apply
 
+  # The whole list, literally: a new action or resource must be a visible change here.
   assert {
-    condition = alltrue([
-      for s in local.identity_read_statements : s.Effect == "Allow" && alltrue([
-        for a in s.Action : can(regex("^(sso:(Get|List|Describe)[A-Za-z]+|identitystore:(Describe|Get)[A-Za-z]+)$", a))
-      ])
+    condition = jsonencode(local.identity_read_statements) == jsonencode([
+      {
+        Sid      = "ReadIdentityCenterInstances"
+        Effect   = "Allow"
+        Action   = ["sso:ListInstances"]
+        Resource = ["*"]
+      },
+      {
+        Sid    = "ReadIdentityCenterPermissionSets"
+        Effect = "Allow"
+        Action = [
+          "sso:DescribePermissionSet",
+          "sso:GetInlinePolicyForPermissionSet",
+          "sso:GetPermissionsBoundaryForPermissionSet",
+          "sso:ListAccountAssignments",
+          "sso:ListCustomerManagedPolicyReferencesInPermissionSet",
+          "sso:ListManagedPoliciesInPermissionSet",
+          "sso:ListPermissionSets",
+          "sso:ListTagsForResource",
+        ]
+        Resource = ["arn:aws:sso:::instance/ssoins-*", "arn:aws:sso:::permissionSet/ssoins-*/ps-*", "arn:aws:sso:::account/*"]
+      },
+      {
+        Sid      = "ReadMaintainerUser"
+        Effect   = "Allow"
+        Action   = ["identitystore:DescribeUser", "identitystore:GetUserId"]
+        Resource = ["*"]
+      },
     ])
-    error_message = "The identity reads of the CI roles must be Get, List and Describe actions only."
+    error_message = "The identity reads of the CI roles must be exactly the three documented read statements."
   }
 
   assert {
-    condition     = jsonencode([for s in local.identity_read_statements : s.Sid]) == jsonencode(["ReadIdentityCenterInstances", "ReadIdentityCenterPermissionSets", "ReadMaintainerUser"])
-    error_message = "The identity read statements are exactly the documented three."
-  }
-
-  # Only the resourceless reads may use *: the permission set statement is scoped to Identity Center ARNs.
-  assert {
-    condition     = alltrue([for r in local.identity_read_statements[1].Resource : startswith(r, "arn:aws:sso:::")])
-    error_message = "Permission set reads must stay scoped to Identity Center ARNs."
+    condition     = join(",", module.access.permission_set_names) == "WorkforceAdministrator,WorkforceReadOnly"
+    error_message = "The stack must manage exactly WorkforceAdministrator and WorkforceReadOnly, never the manual AdministratorAccess set."
   }
 
   assert {
-    condition     = join(",", module.access.permission_set_names) == "AdministratorAccess,ReadOnlyAccess"
-    error_message = "The stack must manage exactly AdministratorAccess and ReadOnlyAccess."
-  }
-
-  assert {
-    condition     = join(",", module.access.assignment_keys) == "AdministratorAccess/security,AdministratorAccess/workforce,ReadOnlyAccess/security,ReadOnlyAccess/workforce"
+    condition     = join(",", module.access.assignment_keys) == "WorkforceAdministrator/security,WorkforceAdministrator/workforce,WorkforceReadOnly/security,WorkforceReadOnly/workforce"
     error_message = "The maintainer must get both sets on every listed account."
   }
+}
+
+run "empty_maintainer_is_rejected" {
+  command = plan
+
+  variables {
+    maintainer_username = ""
+  }
+
+  expect_failures = [var.maintainer_username]
+}
+
+run "management_account_is_rejected" {
+  command = plan
+
+  variables {
+    assignment_account_ids = { management = "111122223333" }
+  }
+
+  expect_failures = [var.assignment_account_ids]
 }

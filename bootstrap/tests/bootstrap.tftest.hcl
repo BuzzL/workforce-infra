@@ -466,7 +466,7 @@ run "no_wildcards_in_any_allow" {
         ) : (
         s.Effect == "Allow" &&
         !anytrue([for a in flatten([s.Action]) : a == "*" || endswith(a, ":*")]) &&
-        (s.Sid == "ReadDelegatedAdministrators" || !anytrue([for r in flatten([try(s.Resource, [])]) : r == "*"])) &&
+        ((s.Sid == "ReadDelegatedAdministrators" && flatten([s.Action]) == ["organizations:ListDelegatedAdministrators"]) || !anytrue([for r in flatten([try(s.Resource, [])]) : r == "*"])) &&
         !contains(flatten([for p in values(try(s.Principal, {})) : p]), "*")
       )
     ])

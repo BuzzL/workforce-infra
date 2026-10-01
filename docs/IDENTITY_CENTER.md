@@ -10,20 +10,24 @@ One door for human access: SSO with MFA into every account, administered from `s
 
 `bootstrap/identity.tf` registers `security` as delegated administrator of `sso.amazonaws.com`. It sits in `bootstrap/` (applied locally with SSO admin), not in `live/management`, so no CI role can change who administers access: the CI roles only get `organizations:ListDelegatedAdministrators`, asserted literally in `bootstrap/tests`. It exists once `security` is in `member_account_ids`.
 
+**Blast radius:** an administrator of `security` can now grant themselves access on every member account. Treat `security` as the most sensitive account: only the maintainer is assigned there, `OrganizationAccountAccessRole` in it is break-glass (`docs/ACCOUNT_CI_BASELINES.md`), and every use is written down in Linear. An SCP that protects the Identity Center administration in `security` is a possible follow-up and needs the maintainer's explicit approval first (`CLAUDE.md`).
+
 Permission sets and assignments live in `live/accounts/security` (`identity.tf`, module `modules/identity-center-access`).
 
-### 2. Two permission sets, one AWS managed policy each
+### 2. Two permission sets of their own, one AWS managed policy each
 
 | Permission set | Policy | Session |
 |---|---|---|
-| `AdministratorAccess` | `AdministratorAccess` | 4 hours |
-| `ReadOnlyAccess` | `ReadOnlyAccess` | 8 hours |
+| `WorkforceAdministrator` | `AdministratorAccess` | 4 hours |
+| `WorkforceReadOnly` | `ReadOnlyAccess` | 8 hours |
 
-Nothing is inlined and customer managed policies are rejected, so what a set can do is readable from its name. The maintainer, the only user, gets both on every member account: use `ReadOnlyAccess` to look, `AdministratorAccess` to change.
+Nothing is inlined and customer managed policies are rejected, so what a set can do is readable from its name. The maintainer, the only user, gets both on every member account: use `WorkforceReadOnly` to look, `WorkforceAdministrator` to change.
+
+The sets are **new** and do not reuse the manual `AdministratorAccess` of `docs/BOOTSTRAP.md`, which is never imported. That set is provisioned in the management account, and a delegated administrator cannot modify a set that is provisioned there: importing it would make the first apply fail on any difference (session duration, tags, policy re-provisioning). The AWS managed policies keep their names, so `get-caller-identity` shows `AWSReservedSSO_WorkforceAdministrator_*` in member accounts and `AWSReservedSSO_AdministratorAccess_*` in management.
 
 ### 3. The management account is assigned by hand
 
-Identity Center does not let a delegated administrator provision a permission set into the management account. The maintainer's `AdministratorAccess` assignment there stays the manual one of `docs/BOOTSTRAP.md`; add `ReadOnlyAccess` there from the management account console if wanted. This is the one account that is not Terraform managed here.
+Identity Center does not let a delegated administrator provision a permission set into the management account. The maintainer's manual `AdministratorAccess` assignment there stays as it is (`docs/BOOTSTRAP.md`); add `ReadOnlyAccess` there from the management account console if wanted. This is the one account that is not Terraform managed here, and the stack refuses `management` in `assignment_account_ids`.
 
 ### 4. MFA is an Identity Center setting, not Terraform
 
@@ -35,22 +39,17 @@ As for every account baseline (`docs/ACCOUNT_CI_BASELINES.md`), CI plans the sta
 
 The maintainer user name and the account IDs to assign are the secrets `MAINTAINER_USERNAME` and `ASSIGNMENT_ACCOUNT_IDS` of the `security` and `security-plan` environments (`scripts/set-account-environment-secrets.sh security`).
 
+The plan role can run from any branch and `identitystore:DescribeUser` has no resource to scope to, so branch code can read the identity store user profiles. Accepted: there is one user and pushing a branch needs write access. The plan output is redacted (`scripts/redact.sh` masks `ssoins-`/`ps-` IDs and UUIDs) before it is posted.
+
 ## Apply, once
 
 Run by the maintainer, locally, in this order. Nothing here is applied by CI.
 
 1. `bootstrap/`: with `security` in `member_account_ids`, `terraform plan` must show exactly one `aws_organizations_delegated_administrator`. Apply it with the management SSO admin session.
-2. `live/accounts/security`: add `maintainer_username` and `assignment_account_ids` to `terraform.tfvars` (see the `.example`). The first run has no SSO access to `security` yet, so set `break_glass_account_id` as in `docs/ACCOUNT_CI_BASELINES.md` and remove it afterwards. Before the first apply, **import** the existing manual permission set so Terraform adopts it instead of failing on the duplicate name (`<instance-arn>` and `<permission-set-arn>` from `aws sso-admin list-instances` and `list-permission-sets`, never committed):
-
-   ```sh
-   terraform import 'module.access.aws_ssoadmin_permission_set.this["AdministratorAccess"]' '<permission-set-arn>,<instance-arn>'
-   terraform plan
-   ```
-
-   Review the plan before applying: the imported set keeps its name; a session duration change from the manual one is expected. It must not remove the maintainer's assignment on the management account (that one is not in this stack).
+2. `live/accounts/security`: add `maintainer_username` and `assignment_account_ids` to `terraform.tfvars` (see the `.example`; not the management account). The first run has no SSO access to `security` yet, so set `break_glass_account_id` as in `docs/ACCOUNT_CI_BASELINES.md` and remove it afterwards. There is nothing to import. `terraform plan` must show only creations: two permission sets, their two managed policy attachments and the assignments, and no change to the manual `AdministratorAccess` set. Review, then apply. A later apply is done from the maintainer's own `WorkforceAdministrator` session in `security`.
 3. `scripts/set-account-environment-secrets.sh security` with `MAINTAINER_USERNAME` and `ASSIGNMENT_ACCOUNT_IDS` in the environment, so the `security` plans can read the stack.
 
-Keep a working `AdministratorAccess` session on the management account while doing this. The root user is the break-glass if Identity Center is broken.
+Keep the working `AdministratorAccess` session on the management account while doing this; it is not touched. The root user is the break-glass if Identity Center is broken.
 
 ## Local SSO profiles
 
@@ -60,15 +59,15 @@ One profile per account in `~/.aws/config`, all on the `workforce` SSO session o
 [profile workforce-security]
 sso_session = workforce
 sso_account_id = <security-account-id>
-sso_role_name = AdministratorAccess
+sso_role_name = WorkforceAdministrator
 
 [profile workforce-security-readonly]
 sso_session = workforce
 sso_account_id = <security-account-id>
-sso_role_name = ReadOnlyAccess
+sso_role_name = WorkforceReadOnly
 ```
 
-Repeat for `workforce` and for any later account. Log in once with `aws sso login --sso-session workforce`.
+The management profile keeps `sso_role_name = AdministratorAccess` (`docs/BOOTSTRAP.md`). Repeat for `workforce` and for any later account. Log in once with `aws sso login --sso-session workforce`.
 
 ## Verify
 

@@ -198,6 +198,7 @@ redacted=$(printf '%s\n' \
   'a r-ab12 r-cd34 ou-ab12-cdef5678,ou-ab12-cdef5679 arn:aws:organizations::111122223333:ou/o-abcdefghij/ou-ab12-cdef5678' \
   'r-ab12 r-cd34,ou-ab12-cdef5678,ou-ab12-cdef5679 arn:aws:organizations::x:ou/o-abcdefghij/ou-ab12-cdef5678' \
   'contact me@example.com sub repo:BuzzL@6116516/workforce-infra@1394667495:environment:m' \
+  'instance_arn = arn:aws:sso:::instance/ssoins-1a2b3c4d5e6f7a8b ps-1a2b3c4d5e6f7a8b principal_id = 11111111-2222-3333-4444-555555555555' \
   '  ~ resource "aws_iam_role" "x" {' | STATE_BUCKET=other-bucket-77 scripts/redact.sh)
 want_redacted=$(printf '%s\n' \
   'id=arn:aws:iam::<account-id>:role/x <aws-id>:GitHubActions' \
@@ -207,6 +208,7 @@ want_redacted=$(printf '%s\n' \
   'a <org-id> <org-id> <org-id>,<org-id> arn:aws:organizations::<account-id>:ou/<org-id>/<org-id>' \
   '<org-id> <org-id>,<org-id>,<org-id> arn:aws:organizations::x:ou/<org-id>/<org-id>' \
   'contact <email> sub repo:BuzzL@6116516/workforce-infra@1394667495:environment:m' \
+  'instance_arn = arn:aws:sso:::instance/<sso-id> <sso-id> principal_id = <uuid>' \
   '  ~ resource "aws_iam_role" "x" {')
 if [ "$redacted" = "$want_redacted" ]; then echo "ok   redact hides account IDs, unique IDs, bucket names, Organization IDs and emails only"; else echo "FAIL redact"; echo "$redacted"; failed=1; fi
 
