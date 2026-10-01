@@ -2,6 +2,10 @@
 
 Terraform monorepo for the AWS side of the AI Workforce: Organization, the workforce account and the `test` / `qa` / `demo` environment accounts. Cross-repo context lives in the workspace `CLAUDE.md` one level up, when it's present.
 
+## Scope
+
+This repo is the **AWS provider** side of the workforce. GitHub resources (repos, rulesets, GitHub Environments) are the **GitHub provider** side and live in `workforce-github`; the AWS pieces its CI needs (state key, OIDC roles) are added here. A cross-repo need is one PR per repo.
+
 ## Rules
 
 - **Commit rule**: every commit is short (one logical change), testable (`terraform validate`, `terraform test` with mocked providers, tflint, trivy) and not breakable (CI green on its own). Conventional Commits.
