@@ -45,7 +45,7 @@ run "apply_role_permissions" {
         Effect    = "Allow"
         Action    = ["s3:ListBucket"]
         Resource  = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4"]
-        Condition = { StringEquals = { "s3:prefix" = ["live/accounts/workforce/terraform.tfstate", "live/accounts/workforce/terraform.tfstate.tflock"] } }
+        Condition = { StringEquals = { "s3:prefix" = ["env:/", "live/accounts/workforce/terraform.tfstate", "live/accounts/workforce/terraform.tfstate.tflock"] } }
       },
       {
         Sid      = "ReadAndWriteState"
@@ -79,7 +79,7 @@ run "plan_role_is_read_only" {
         Effect    = "Allow"
         Action    = ["s3:ListBucket"]
         Resource  = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4"]
-        Condition = { StringEquals = { "s3:prefix" = ["live/accounts/workforce/terraform.tfstate"] } }
+        Condition = { StringEquals = { "s3:prefix" = ["env:/", "live/accounts/workforce/terraform.tfstate"] } }
       },
       {
         Sid      = "ReadState"
@@ -97,6 +97,19 @@ run "plan_role_is_read_only" {
       length(regexall(":(Put|Delete|Create|Update|Attach|Detach)", p)) == 0
     ])
     error_message = "The plan role must have no write action."
+  }
+}
+
+run "baseline_read_includes_tag_reads" {
+  command = apply
+
+  # The resources carry tags, so refreshing them reads the tags too (as in bootstrap/).
+  assert {
+    condition = alltrue([
+      for p in [aws_iam_role_policy.apply_baseline_read.policy, aws_iam_role_policy.plan_baseline_read.policy] :
+      strcontains(p, "iam:ListRoleTags") && strcontains(p, "iam:ListOpenIDConnectProviderTags")
+    ])
+    error_message = "Both roles must be able to read the tags of the provider and the roles they refresh."
   }
 }
 

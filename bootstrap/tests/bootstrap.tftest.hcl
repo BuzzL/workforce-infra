@@ -501,7 +501,7 @@ run "member_roles_reach_only_their_own_state" {
         Principal = { AWS = ["arn:aws:iam::111122223333:role/github-infra-security", "arn:aws:iam::111122223333:role/github-infra-security-plan"] }
         Action    = "s3:ListBucket"
         Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4"
-        Condition = { StringEquals = { "s3:prefix" = ["live/accounts/security/terraform.tfstate", "live/accounts/security/terraform.tfstate.tflock"] } }
+        Condition = { StringEquals = { "s3:prefix" = ["env:/", "live/accounts/security/terraform.tfstate", "live/accounts/security/terraform.tfstate.tflock"] } }
       },
       {
         Sid       = "ReadAndWriteSecurityState"

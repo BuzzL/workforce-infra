@@ -16,7 +16,7 @@ locals {
         Principal = { AWS = ["arn:aws:iam::${id}:role/github-infra-${name}", "arn:aws:iam::${id}:role/github-infra-${name}-plan"] }
         Action    = "s3:ListBucket"
         Resource  = local.state_bucket_arn
-        Condition = { StringEquals = { "s3:prefix" = ["live/accounts/${name}/terraform.tfstate", "live/accounts/${name}/terraform.tfstate.tflock"] } }
+        Condition = { StringEquals = { "s3:prefix" = ["env:/", "live/accounts/${name}/terraform.tfstate", "live/accounts/${name}/terraform.tfstate.tflock"] } }
       },
       {
         Sid       = "ReadAndWrite${title(name)}State"

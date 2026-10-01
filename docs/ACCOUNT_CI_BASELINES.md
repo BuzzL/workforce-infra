@@ -39,8 +39,8 @@ Run by the maintainer, locally, with the management admin session. The account I
 
 1. Fill `live/accounts/<account>/backend.hcl` and `terraform.tfvars` from the `.example` files, with `break_glass_account_id` set.
 2. `terraform init -backend-config=backend.hcl && terraform plan`, review, then `terraform apply`. The provider assumes `OrganizationAccountAccessRole` in the account, the state is written with your own credentials.
-3. Remove `break_glass_account_id` from `terraform.tfvars`: from now on the stack is applied as the account's own role or not at all. Then add the account to `member_account_ids` in `bootstrap/terraform.tfvars` and apply `bootstrap/` locally: this opens the state bucket to the new roles and lets the management CI role assume the break-glass role there.
-4. `scripts/set-account-environment-secrets.sh <account>` creates the GitHub Environments `<account>` and `<account>-plan` with the secrets `AWS_ROLE_ARN`, `AWS_ROLE_ID`, `STATE_BUCKET` and the variable `AWS_REGION`. The role ARN and ID are secrets so that they are masked in public logs.
+3. Remove `break_glass_account_id` from `terraform.tfvars`: from now on the stack is applied as the account's own role or not at all. Then add the account to `member_account_ids` in `bootstrap/terraform.tfvars` and in the secret `MEMBER_ACCOUNT_IDS` of `management` and `management-plan` (`MEMBER_ACCOUNT_IDS='{"security":"<id>"}' scripts/set-environment-secrets.sh`; CI plans `bootstrap/` too and would otherwise see the grants as drift), and apply `bootstrap/` locally: this opens the state bucket to the new roles and lets the management CI role assume the break-glass role there.
+4. `scripts/set-account-environment-secrets.sh <account>` creates the GitHub Environments `<account>` (protected: the maintainer as required reviewer, no admin bypass, `main` only) and `<account>-plan` (no reviewer, any branch, read-only role) with the secrets `AWS_ROLE_ARN`, `AWS_ROLE_ID`, `STATE_BUCKET` and the variable `AWS_REGION`. The role ARN and ID are secrets so that they are masked in public logs.
 5. Commit `live/accounts/<account>/.ci-enabled`. The next PR plans the stack through OIDC, which must be a no-op.
 
 ## Break-glass
@@ -52,5 +52,8 @@ Run by the maintainer, locally, with the management admin session. The account I
 - Who: the maintainer, from the management admin session, or the management CI role (the maintainer approved this for the bootstrap). The CI role may assume it only into the accounts in `member_account_ids` and only with the session name `baseline-bootstrap`, which the stacks use, so its use stands out in CloudTrail. The permission exists only once an account is listed.
 - Every use is recorded as an `AssumeRole` event in CloudTrail (IAT-34); after a use, write down why in the Linear issue.
 - If a use is not the maintainer's, treat it as an incident and rotate.
+
+- The session name is chosen by the caller, so `baseline-bootstrap` is a way to spot a use in CloudTrail, not a control. The control is the `management` environment protection. The permission stays for as long as an account is in `member_account_ids`; to take it away, remove the account there and re-apply (its state access goes too).
+- If a CI role is deleted and recreated, the bucket policy stops matching it (AWS stores role principals by ID): re-apply `bootstrap/` after recreating a role.
 
 Rejected: removing the role. It is the only way back into an account whose OIDC provider was deleted. Closing that door is not worth the lockout.

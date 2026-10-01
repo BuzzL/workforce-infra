@@ -17,13 +17,13 @@ locals {
     {
       Sid      = "ReadBaselineProvider"
       Effect   = "Allow"
-      Action   = ["iam:GetOpenIDConnectProvider"]
+      Action   = ["iam:GetOpenIDConnectProvider", "iam:ListOpenIDConnectProviderTags"]
       Resource = [aws_iam_openid_connect_provider.github.arn]
     },
     {
       Sid      = "ReadBaselineRoles"
       Effect   = "Allow"
-      Action   = ["iam:GetRole", "iam:ListRolePolicies", "iam:GetRolePolicy", "iam:ListAttachedRolePolicies"]
+      Action   = ["iam:GetRole", "iam:ListRolePolicies", "iam:GetRolePolicy", "iam:ListAttachedRolePolicies", "iam:ListRoleTags"]
       Resource = ["arn:aws:iam::${local.account_id}:role/${local.apply_role_name}", "arn:aws:iam::${local.account_id}:role/${local.plan_role_name}"]
     },
   ]
@@ -78,6 +78,8 @@ resource "aws_iam_role_policy_attachments_exclusive" "apply" {
 # State and native lockfile of this stack only. The apply role cannot change IAM: the
 # baseline itself is changed through the break-glass bootstrap, never by CI, so CI cannot
 # widen its own permissions.
+# s3:prefix "env:/": `terraform init` lists the workspaces of the S3 backend with that prefix,
+# and fails with AccessDenied if the listing is not allowed. It exposes key names only.
 resource "aws_iam_role_policy" "apply_state" {
   name = "terraform-state"
   role = aws_iam_role.apply.id
@@ -91,7 +93,7 @@ resource "aws_iam_role_policy" "apply_state" {
         Action   = ["s3:ListBucket"]
         Resource = [local.state_bucket_arn]
         Condition = {
-          StringEquals = { "s3:prefix" = [var.state_key, "${var.state_key}.tflock"] }
+          StringEquals = { "s3:prefix" = ["env:/", var.state_key, "${var.state_key}.tflock"] }
         }
       },
       {
@@ -170,7 +172,7 @@ resource "aws_iam_role_policy" "plan_state_read" {
         Action   = ["s3:ListBucket"]
         Resource = [local.state_bucket_arn]
         Condition = {
-          StringEquals = { "s3:prefix" = [var.state_key] }
+          StringEquals = { "s3:prefix" = ["env:/", var.state_key] }
         }
       },
       {

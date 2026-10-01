@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sets AWS_ROLE_ARN, AWS_ROLE_ID, STATE_BUCKET, ORGANIZATION_ROOT_ID and ACCOUNT_EMAIL_BASE as SECRETS of the
+# Sets AWS_ROLE_ARN, AWS_ROLE_ID, STATE_BUCKET, ORGANIZATION_ROOT_ID, ACCOUNT_EMAIL_BASE and MEMBER_ACCOUNT_IDS as SECRETS of the
 # `management` and `management-plan` GitHub Environments and deletes the variables of the
 # same names.
 #   AWS_ROLE_ARN   the ARN of the environment's role (from the outputs of bootstrap/)
@@ -9,6 +9,10 @@
 #   ORGANIZATION_ROOT_ID  the Organization root ID (from `aws organizations list-roots`)
 #   ACCOUNT_EMAIL_BASE    the base mailbox local@domain of the member accounts, read from the
 #                         environment variable of the same name (it cannot be derived)
+#   MEMBER_ACCOUNT_IDS    JSON map of the member account IDs, e.g. {"security":"<12 digits>"}, read from
+#                         the environment variable of the same name ({} if unset). It is the CI side of
+#                         bootstrap's local var.member_account_ids: without it CI would plan the removal
+#                         of the member accounts' grants. Keep the two in sync.
 # A secret is masked everywhere in a public repository's logs, a variable is not.
 #
 # Idempotent: running it again converges on the same state. Secrets are overwritten (the
@@ -71,6 +75,9 @@ id_plan=$(read_value "the plan role ID" '^AROA[A-Z0-9]{12,}$' aws iam get-role -
 
 email_base=$(read_value "ACCOUNT_EMAIL_BASE (set it in the environment)" '^[A-Za-z0-9._%-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$' printenv ACCOUNT_EMAIL_BASE)
 
+members=${MEMBER_ACCOUNT_IDS:-\{\}}
+[[ $members =~ ^\{(\"(security|workforce)\":\"[0-9]{12}\"(,\"(security|workforce)\":\"[0-9]{12}\")*)?\}$ ]] || { echo "MEMBER_ACCOUNT_IDS does not have the expected shape" >&2; exit 1; }
+
 root_id=$(read_value "the Organization root ID" '^r-[a-z0-9]{4,32}$' aws organizations list-roots --query 'Roots[0].Id' --output text)
 
 set_secret() { # set_secret <env> <name> <value>
@@ -82,23 +89,25 @@ set_secret management AWS_ROLE_ID "$id_management"
 set_secret management STATE_BUCKET "$bucket"
 set_secret management ORGANIZATION_ROOT_ID "$root_id"
 set_secret management ACCOUNT_EMAIL_BASE "$email_base"
+set_secret management MEMBER_ACCOUNT_IDS "$members"
 set_secret management-plan AWS_ROLE_ARN "$arn_plan"
 set_secret management-plan AWS_ROLE_ID "$id_plan"
 set_secret management-plan STATE_BUCKET "$bucket"
 set_secret management-plan ORGANIZATION_ROOT_ID "$root_id"
 set_secret management-plan ACCOUNT_EMAIL_BASE "$email_base"
+set_secret management-plan MEMBER_ACCOUNT_IDS "$members"
 
 status=0
 for e in $environments; do
-  for v in ACCOUNT_EMAIL_BASE AWS_ROLE_ARN AWS_ROLE_ID ORGANIZATION_ROOT_ID STATE_BUCKET; do
+  for v in ACCOUNT_EMAIL_BASE AWS_ROLE_ARN AWS_ROLE_ID MEMBER_ACCOUNT_IDS ORGANIZATION_ROOT_ID STATE_BUCKET; do
     case " $(names variable "$e") " in
       *" $v "*) gh variable delete "$v" --repo "$repo" --env "$e" ;;
     esac
   done
   list "$e"
-  [ "$(names secret "$e")" = "ACCOUNT_EMAIL_BASE AWS_ROLE_ARN AWS_ROLE_ID ORGANIZATION_ROOT_ID STATE_BUCKET" ] || { echo "unexpected secrets in $e" >&2; status=1; }
+  [ "$(names secret "$e")" = "ACCOUNT_EMAIL_BASE AWS_ROLE_ARN AWS_ROLE_ID MEMBER_ACCOUNT_IDS ORGANIZATION_ROOT_ID STATE_BUCKET" ] || { echo "unexpected secrets in $e" >&2; status=1; }
   case " $(names variable "$e") " in
-    *" ACCOUNT_EMAIL_BASE "* | *" AWS_ROLE_ARN "* | *" AWS_ROLE_ID "* | *" ORGANIZATION_ROOT_ID "* | *" STATE_BUCKET "*) echo "a variable of the same name is left in $e" >&2; status=1 ;;
+    *" ACCOUNT_EMAIL_BASE "* | *" AWS_ROLE_ARN "* | *" AWS_ROLE_ID "* | *" MEMBER_ACCOUNT_IDS "* | *" ORGANIZATION_ROOT_ID "* | *" STATE_BUCKET "*) echo "a variable of the same name is left in $e" >&2; status=1 ;;
   esac
 done
 exit "$status"
