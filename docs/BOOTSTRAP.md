@@ -284,7 +284,9 @@ The `management` role can manage the state of `live/management`, read the bootst
 
 | OU | Accounts |
 |---|---|
-| `Management` | `management` (root of the Organization), `security` |
+| `Management` | `security` |
 | `Environments` | none yet |
 | `Development` | `workforce` |
 | `Operations` | none yet |
+
+The `management` account is the Organization's management account and sits at the root, outside every OU.
