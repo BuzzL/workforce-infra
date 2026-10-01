@@ -1,5 +1,9 @@
 mock_provider "aws" {}
 
+variables {
+  allowed_region = "eu-south-1"
+}
+
 # Values below are asserted literally on purpose: a change to any policy must be a
 # visible, reviewed change to this file.
 
@@ -90,8 +94,8 @@ run "module_creates_these_policies_and_attaches_none" {
   command = apply
 
   assert {
-    condition     = length(output.policy_ids) == 3
-    error_message = "The module must create exactly the three policies of this stage."
+    condition     = length(output.policy_ids) == 4
+    error_message = "The module must create exactly the four baseline policies."
   }
 
   # The module is a library of definitions: attaching is the job of the stack that calls

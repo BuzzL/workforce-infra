@@ -44,6 +44,22 @@ locals {
         Resource = "*"
       }
     }
+
+    # NotAction inside a Deny: everything except the global services is denied outside
+    # the allowed region. The condition narrows it, so the Deny never reaches a call made
+    # in the allowed region. The exceptions are explicit prefixes, not a wildcard.
+    deny-outside-allowed-region = {
+      description = "Requests outside ${var.allowed_region} are denied, except for global services."
+      statement = {
+        Sid       = "DenyOutsideAllowedRegion"
+        Effect    = "Deny"
+        NotAction = [for prefix in var.global_service_prefixes : "${prefix}:*"]
+        Resource  = "*"
+        Condition = {
+          StringNotEquals = { "aws:RequestedRegion" = [var.allowed_region] }
+        }
+      }
+    }
   }
 }
 
