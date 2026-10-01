@@ -50,6 +50,8 @@ need.(jobs["apply"].dig("concurrency", "cancel-in-progress") == false, "apply: a
   need.(e["TF_VAR_account_email_base"] == "${{ secrets.ACCOUNT_EMAIL_BASE }}", "#{j}: the account email base must be a secret")
   need.(e["TF_VAR_member_account_ids"] == "${{ secrets.MEMBER_ACCOUNT_IDS || \x27{}\x27 }}", "#{j}: the member account IDs must be a secret")
   need.(e["TF_VAR_budget_alert_email"] == "${{ secrets.BUDGET_ALERT_EMAIL }}", "#{j}: the budget alert address must be a secret")
+  need.(e["TF_VAR_maintainer_username"] == "${{ secrets.MAINTAINER_USERNAME }}", "#{j}: the maintainer user name must be a secret")
+  need.(e["TF_VAR_assignment_account_ids"] == "${{ secrets.ASSIGNMENT_ACCOUNT_IDS || \x27{}\x27 }}", "#{j}: the assignment account IDs must be a secret")
 end
 
 # Actions: an allowlist, pinned by commit SHA (case-sensitive), checkout without credentials.
@@ -78,10 +80,10 @@ jobs.each do |j, job|
   end
 end
 
-# Contexts: the only variable is AWS_REGION, the only secrets are the seven below, no bracket syntax.
+# Contexts: the only variable is AWS_REGION, the only secrets are the nine below, no bracket syntax.
 text.scan(/\$\{\{(.*?)\}\}/m).flatten.each do |expr|
   expr.scan(/\bvars\s*\.\s*(\w+)/i).flatten.each { |n| need.(n == "AWS_REGION", "variable not allowed: #{n}") }
-  expr.scan(/\bsecrets\s*\.\s*(\w+)/i).flatten.each { |n| need.(%w[AWS_ROLE_ARN AWS_ROLE_ID STATE_BUCKET ORGANIZATION_ROOT_ID ACCOUNT_EMAIL_BASE BUDGET_ALERT_EMAIL MEMBER_ACCOUNT_IDS].include?(n), "secret not allowed: #{n}") }
+  expr.scan(/\bsecrets\s*\.\s*(\w+)/i).flatten.each { |n| need.(%w[AWS_ROLE_ARN AWS_ROLE_ID STATE_BUCKET ORGANIZATION_ROOT_ID ACCOUNT_EMAIL_BASE BUDGET_ALERT_EMAIL MEMBER_ACCOUNT_IDS MAINTAINER_USERNAME ASSIGNMENT_ACCOUNT_IDS].include?(n), "secret not allowed: #{n}") }
   need.(expr !~ /\b(vars|secrets)\s*\[/i, "vars and secrets must not use bracket syntax: #{expr.strip}")
   need.(expr !~ /\bsecrets\s*(\}|$)/i, "the whole secrets context must not be used")
 end

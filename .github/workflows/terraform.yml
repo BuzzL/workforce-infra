@@ -83,6 +83,8 @@ jobs:
       TF_VAR_account_email_base: ${{ secrets.ACCOUNT_EMAIL_BASE }}
       TF_VAR_member_account_ids: ${{ secrets.MEMBER_ACCOUNT_IDS || '{}' }}
       TF_VAR_budget_alert_email: ${{ secrets.BUDGET_ALERT_EMAIL }}
+      TF_VAR_maintainer_username: ${{ secrets.MAINTAINER_USERNAME }}
+      TF_VAR_assignment_account_ids: ${{ secrets.ASSIGNMENT_ACCOUNT_IDS || '{}' }}
       AWS_REGION_NAME: ${{ vars.AWS_REGION }}
       STATE_BUCKET: ${{ secrets.STATE_BUCKET }}
       # Registered as a secret only to be masked: the credentials action prints the role's
@@ -228,6 +230,8 @@ jobs:
       TF_VAR_account_email_base: ${{ secrets.ACCOUNT_EMAIL_BASE }}
       TF_VAR_member_account_ids: ${{ secrets.MEMBER_ACCOUNT_IDS || '{}' }}
       TF_VAR_budget_alert_email: ${{ secrets.BUDGET_ALERT_EMAIL }}
+      TF_VAR_maintainer_username: ${{ secrets.MAINTAINER_USERNAME }}
+      TF_VAR_assignment_account_ids: ${{ secrets.ASSIGNMENT_ACCOUNT_IDS || '{}' }}
       AWS_REGION_NAME: ${{ vars.AWS_REGION }}
       STATE_BUCKET: ${{ secrets.STATE_BUCKET }}
       AWS_ROLE_ID: ${{ secrets.AWS_ROLE_ID }}

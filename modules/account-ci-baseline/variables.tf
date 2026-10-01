@@ -47,3 +47,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "extra_read_statements" {
+  description = "IAM statements added to the read-only policies of both roles, for what the stack itself manages beyond the baseline (e.g. Identity Center in the security account). Read actions only; the stack's own tests assert them literally."
+  type        = any
+  default     = []
+}

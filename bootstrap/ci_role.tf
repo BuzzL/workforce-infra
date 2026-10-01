@@ -196,6 +196,15 @@ locals {
         aws_iam_role.github_infra_management.arn,
         aws_iam_role.github_infra_management_plan.arn,
       ], local.github_ci_role_arns)
+    },
+    # The one Organizations read that has no resource: the Identity Center delegation
+    # (identity.tf). It lists delegated administrators; the registration itself is applied
+    # locally, so neither role can register or remove one.
+    {
+      Sid      = "ReadDelegatedAdministrators"
+      Effect   = "Allow"
+      Action   = ["organizations:ListDelegatedAdministrators"]
+      Resource = "*"
     }
   ]
 }
