@@ -28,10 +28,16 @@ override_resource {
   }
 }
 
+# A mock provider cannot import: the imported budget is overridden instead.
+override_resource {
+  target = module.budget.aws_budgets_budget.this
+}
+
 variables {
   region             = "eu-west-1"
   root_id            = "r-ab12"
   account_email_base = "owner@example.com"
+  budget_alert_email = "alerts@example.com"
 }
 
 # A separate file, so that it starts from an empty state: `ignore_changes = [email]` keeps

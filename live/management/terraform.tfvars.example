@@ -2,3 +2,4 @@
 region  = "<region>"
 root_id = "r-xxxx"
 account_email_base = "local@example.com"
+budget_alert_email = "alerts@example.com"

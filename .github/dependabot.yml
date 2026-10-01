@@ -28,6 +28,7 @@ updates:
     directories:
       - /modules/scp-baseline
       - /modules/account-ci-baseline
+      - /modules/budget
     schedule:
       interval: weekly
     commit-message:

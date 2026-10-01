@@ -69,3 +69,9 @@ variable "tags" {
     Stack     = "bootstrap"
   }
 }
+
+variable "budget_name" {
+  description = "Name of the monthly budget that live/management manages. The CI roles may touch this budget and no other."
+  type        = string
+  default     = "Workforce Budget"
+}
