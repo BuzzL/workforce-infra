@@ -65,6 +65,17 @@ hcl_value() { sed -n "s/^$1[[:space:]]*=[[:space:]]*\"\(.*\)\"[[:space:]]*\$/\1/
 bucket=$(read_value "the state bucket name in backend.hcl" '^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$' hcl_value bucket)
 region=$(read_value "the region in backend.hcl" '^[a-z]{2}(-[a-z]+)+-[0-9]$' hcl_value region)
 
+# The security stack also manages Identity Center (IAT-33): its plans need the maintainer's
+# user name and the accounts to assign, from the environment, never from a file.
+#   MAINTAINER_USERNAME=... ASSIGNMENT_ACCOUNT_IDS='{"security":"<12 digits>","workforce":"<12 digits>"}' \
+#     scripts/set-account-environment-secrets.sh security
+expected_secrets="AWS_ROLE_ARN AWS_ROLE_ID STATE_BUCKET"
+if [ "$account" = security ]; then
+  maintainer=$(read_value "MAINTAINER_USERNAME (set it in the environment)" '^[A-Za-z0-9._@+-]{1,128}$' printenv MAINTAINER_USERNAME)
+  assignments=$(read_value "ASSIGNMENT_ACCOUNT_IDS (set it in the environment)" '^\{("[a-z][a-z0-9-]*":"[0-9]{12}")(,"[a-z][a-z0-9-]*":"[0-9]{12}")*\}$' printenv ASSIGNMENT_ACCOUNT_IDS)
+  expected_secrets="ASSIGNMENT_ACCOUNT_IDS AWS_ROLE_ARN AWS_ROLE_ID MAINTAINER_USERNAME STATE_BUCKET" # sorted, as gh lists them
+fi
+
 set_secret() { # set_secret <env> <name> <value>
   printf '%s' "$3" | gh secret set "$2" --repo "$repo" --env "$1"
 }
@@ -100,6 +111,10 @@ set_environment() { # set_environment <env> <role arn> <role id>
   set_secret "$1" AWS_ROLE_ID "$3"
   set_secret "$1" STATE_BUCKET "$bucket"
   gh variable set AWS_REGION --repo "$repo" --env "$1" --body "$region"
+  if [ "$account" = security ]; then
+    set_secret "$1" MAINTAINER_USERNAME "$maintainer"
+    set_secret "$1" ASSIGNMENT_ACCOUNT_IDS "$assignments"
+  fi
 }
 
 set_environment "$account" "$arn_apply" "$id_apply"
@@ -108,6 +123,6 @@ set_environment "${account}-plan" "$arn_plan" "$id_plan"
 status=0
 for e in $environments; do
   list "$e"
-  [ "$(names secret "$e")" = "AWS_ROLE_ARN AWS_ROLE_ID STATE_BUCKET" ] || { echo "unexpected secrets in $e" >&2; status=1; }
+  [ "$(names secret "$e")" = "$expected_secrets" ] || { echo "unexpected secrets in $e" >&2; status=1; }
 done
 exit "$status"

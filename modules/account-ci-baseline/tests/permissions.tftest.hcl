@@ -124,3 +124,29 @@ run "baseline_read_scope" {
     error_message = "The baseline reads must name exactly the provider and the two roles."
   }
 }
+
+run "extra_read_statements_reach_both_roles" {
+  command = apply
+
+  variables {
+    extra_read_statements = [{
+      Sid      = "ReadSomethingElse"
+      Effect   = "Allow"
+      Action   = ["sso:ListInstances"]
+      Resource = ["*"]
+    }]
+  }
+
+  assert {
+    condition = alltrue([
+      for p in [aws_iam_role_policy.apply_baseline_read.policy, aws_iam_role_policy.plan_baseline_read.policy] :
+      contains([for s in jsondecode(p).Statement : s.Sid], "ReadSomethingElse")
+    ])
+    error_message = "Extra read statements must be in the read policy of both the apply and the plan role."
+  }
+
+  assert {
+    condition     = length(jsondecode(aws_iam_role_policy.plan_baseline_read.policy).Statement) == 3
+    error_message = "The two baseline statements must stay, with the extra one added."
+  }
+}

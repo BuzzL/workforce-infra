@@ -13,7 +13,7 @@ locals {
   plan_role_name  = "github-infra-${var.account_name}-plan"
 
   # What the stack manages: this provider and these two roles. Read-only, on exactly them.
-  baseline_read_statements = [
+  baseline_read_statements = concat(var.extra_read_statements, [
     {
       Sid      = "ReadBaselineProvider"
       Effect   = "Allow"
@@ -26,7 +26,7 @@ locals {
       Action   = ["iam:GetRole", "iam:ListRolePolicies", "iam:GetRolePolicy", "iam:ListAttachedRolePolicies", "iam:ListRoleTags"]
       Resource = ["arn:aws:iam::${local.account_id}:role/${local.apply_role_name}", "arn:aws:iam::${local.account_id}:role/${local.plan_role_name}"]
     },
-  ]
+  ])
 }
 
 # One OIDC provider per account. No thumbprint: AWS validates GitHub's certificate chain
