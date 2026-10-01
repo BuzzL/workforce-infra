@@ -29,6 +29,7 @@ updates:
       - /modules/scp-baseline
       - /modules/account-ci-baseline
       - /modules/budget
+      - /modules/identity-center-access
     schedule:
       interval: weekly
     commit-message:

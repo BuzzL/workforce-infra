@@ -21,3 +21,8 @@ output "plan_role_id" {
   value       = module.baseline.plan_role_id
   sensitive   = true
 }
+
+output "permission_set_names" {
+  description = "Permission sets managed by this stack."
+  value       = module.access.permission_set_names
+}
