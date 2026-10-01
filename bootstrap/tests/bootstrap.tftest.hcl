@@ -1,4 +1,10 @@
-mock_provider "aws" {}
+mock_provider "aws" {
+  mock_data "aws_caller_identity" {
+    defaults = {
+      account_id = "111122223333" # fake: the mock must not need a real account
+    }
+  }
+}
 
 variables {
   region            = "eu-west-1"
@@ -57,6 +63,18 @@ run "role_permissions_are_exactly_the_documented_ones" {
           Resource = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4/bootstrap/terraform.tfstate"]
         },
         {
+          Sid      = "ReadAndWriteManagementState"
+          Effect   = "Allow"
+          Action   = ["s3:GetObject", "s3:PutObject"]
+          Resource = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4/live/management/terraform.tfstate"]
+        },
+        {
+          Sid      = "LockManagementState"
+          Effect   = "Allow"
+          Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+          Resource = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4/live/management/terraform.tfstate.tflock"]
+        },
+        {
           Sid      = "LockBootstrapState"
           Effect   = "Allow"
           Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
@@ -64,7 +82,7 @@ run "role_permissions_are_exactly_the_documented_ones" {
         }
       ]
     }
-    error_message = "State access must be list on the bucket, read of the bootstrap state and lock/unlock of its lockfile only."
+    error_message = "State access must be list on the bucket, read of the bootstrap state, read and write of the live/management state, and lock/unlock of the two lockfiles only."
   }
 
   assert {
@@ -123,8 +141,8 @@ run "role_has_no_other_permissions" {
 
   # The exclusive resources make Terraform remove anything else attached to the role.
   assert {
-    condition     = aws_iam_role_policies_exclusive.github_infra_management.policy_names == toset(["terraform-state", "plan-bootstrap-stack"])
-    error_message = "Only the two documented inline policies may exist on the role."
+    condition     = aws_iam_role_policies_exclusive.github_infra_management.policy_names == toset(["terraform-state", "plan-bootstrap-stack", "organization-units"])
+    error_message = "Only the three documented inline policies may exist on the role."
   }
 
   assert {
@@ -180,10 +198,16 @@ run "plan_role_is_read_only" {
           Effect   = "Allow"
           Action   = ["s3:GetObject"]
           Resource = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4/bootstrap/terraform.tfstate"]
+        },
+        {
+          Sid      = "ReadManagementState"
+          Effect   = "Allow"
+          Action   = ["s3:GetObject"]
+          Resource = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4/live/management/terraform.tfstate"]
         }
       ]
     }
-    error_message = "The plan role may only list the bucket and read the bootstrap state: no other stack, no lockfile, no writes."
+    error_message = "The plan role may only list the bucket and read the bootstrap and live/management states: no other stack, no lockfile, no writes."
   }
 
   # Every action of every policy of this role is a Get or a List.
@@ -192,11 +216,12 @@ run "plan_role_is_read_only" {
       for s in concat(
         jsondecode(aws_iam_role_policy.plan_state_read.policy).Statement,
         jsondecode(aws_iam_role_policy.plan_bootstrap_read.policy).Statement,
+        jsondecode(aws_iam_role_policy.plan_organization_units.policy).Statement,
         ) : alltrue([
-          for a in flatten([s.Action]) : can(regex("^(s3|iam):(Get|List)[A-Za-z]*$", a))
+          for a in flatten([s.Action]) : can(regex("^(s3|iam|organizations):(Get|List|Describe)[A-Za-z]*$", a))
       ])
     ])
-    error_message = "The plan role may only have S3 and IAM Get and List actions, and exactly the documented ones (see the literals above and below)."
+    error_message = "The plan role may only have S3, IAM and Organizations Get, List and Describe actions, and exactly the documented ones (see the literals above and below)."
   }
 
   assert {
@@ -210,7 +235,9 @@ run "plan_role_is_read_only" {
       aws_iam_role_policy.plan_state_read.role == aws_iam_role.github_infra_management_plan.id &&
       aws_iam_role_policy.plan_bootstrap_read.role == aws_iam_role.github_infra_management_plan.id &&
       aws_iam_role_policy.state_access.role == aws_iam_role.github_infra_management.id &&
-      aws_iam_role_policy.plan_bootstrap.role == aws_iam_role.github_infra_management.id
+      aws_iam_role_policy.plan_bootstrap.role == aws_iam_role.github_infra_management.id &&
+      aws_iam_role_policy.organization_units.role == aws_iam_role.github_infra_management.id &&
+      aws_iam_role_policy.plan_organization_units.role == aws_iam_role.github_infra_management_plan.id
     )
     error_message = "Every inline policy must be attached to its own role."
   }
@@ -236,13 +263,55 @@ run "plan_role_is_read_only" {
   }
 
   assert {
-    condition     = aws_iam_role_policies_exclusive.github_infra_management_plan.policy_names == toset(["terraform-state-read", "plan-bootstrap-stack"])
-    error_message = "Only the two documented inline policies may exist on the plan role."
+    condition     = aws_iam_role_policies_exclusive.github_infra_management_plan.policy_names == toset(["terraform-state-read", "plan-bootstrap-stack", "plan-organization-units"])
+    error_message = "Only the three documented inline policies may exist on the plan role."
   }
 
   assert {
     condition     = length(aws_iam_role_policy_attachments_exclusive.github_infra_management_plan.policy_arns) == 0
     error_message = "No managed policy may be attached to the plan role."
+  }
+}
+
+run "organization_permissions_are_exactly_the_documented_ones" {
+  command = apply
+
+  assert {
+    condition = jsondecode(aws_iam_role_policy.organization_units.policy) == {
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Sid    = "ReadOrganizationalUnits"
+          Effect = "Allow"
+          Action = [
+            "organizations:DescribeOrganizationalUnit",
+            "organizations:ListAccountsForParent",
+            "organizations:ListOrganizationalUnitsForParent",
+            "organizations:ListParents",
+            "organizations:ListTagsForResource",
+          ]
+          Resource = ["arn:aws:organizations::111122223333:root/o-*/r-*", "arn:aws:organizations::111122223333:ou/o-*/ou-*"]
+        },
+        {
+          Sid    = "ManageOrganizationalUnits"
+          Effect = "Allow"
+          Action = [
+            "organizations:CreateOrganizationalUnit",
+            "organizations:UpdateOrganizationalUnit",
+            "organizations:DeleteOrganizationalUnit",
+            "organizations:TagResource",
+            "organizations:UntagResource",
+          ]
+          Resource = ["arn:aws:organizations::111122223333:root/o-*/r-*", "arn:aws:organizations::111122223333:ou/o-*/ou-*"]
+        }
+      ]
+    }
+    error_message = "The management role may read the Organization and manage organizational units of this account's Organization, and nothing else in Organizations."
+  }
+
+  assert {
+    condition     = jsondecode(aws_iam_role_policy.plan_organization_units.policy).Statement == slice(jsondecode(aws_iam_role_policy.organization_units.policy).Statement, 0, 1)
+    error_message = "The plan role must have exactly the read statements of the management role, without the write statement."
   }
 }
 
@@ -341,6 +410,8 @@ run "no_wildcards_in_any_allow" {
         jsondecode(aws_iam_role.github_infra_management_plan.assume_role_policy).Statement,
         jsondecode(aws_iam_role_policy.plan_state_read.policy).Statement,
         jsondecode(aws_iam_role_policy.plan_bootstrap_read.policy).Statement,
+        jsondecode(aws_iam_role_policy.organization_units.policy).Statement,
+        jsondecode(aws_iam_role_policy.plan_organization_units.policy).Statement,
         ) : (
         s.Effect == "Allow" &&
         !anytrue([for a in flatten([s.Action]) : a == "*" || endswith(a, ":*")]) &&

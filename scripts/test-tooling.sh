@@ -179,15 +179,21 @@ redacted=$(printf '%s\n' \
   'id=arn:aws:iam::123456789012:role/x AROAABCDEFGHIJKLMNOP:GitHubActions' \
   "Assumed AS""IAABCDEFGHIJKLMNOP token" \
   'bucket workforce-tfstate-a1b2c3d4 and other-bucket-77' \
+  'parent_id = "r-ab12" ou-ab12-cdef5678 for-r-abcd' \
+  'a r-ab12 r-cd34 ou-ab12-cdef5678,ou-ab12-cdef5679 arn:aws:organizations::111122223333:ou/o-abcdefghij/ou-ab12-cdef5678' \
+  'r-ab12 r-cd34,ou-ab12-cdef5678,ou-ab12-cdef5679 arn:aws:organizations::x:ou/o-abcdefghij/ou-ab12-cdef5678' \
   'contact me@example.com sub repo:BuzzL@6116516/workforce-infra@1394667495:environment:m' \
   '  ~ resource "aws_iam_role" "x" {' | STATE_BUCKET=other-bucket-77 scripts/redact.sh)
 want_redacted=$(printf '%s\n' \
   'id=arn:aws:iam::<account-id>:role/x <aws-id>:GitHubActions' \
   'Assumed <aws-id> token' \
   'bucket <state-bucket> and <state-bucket>' \
+  'parent_id = "<org-id>" <org-id> for-r-abcd' \
+  'a <org-id> <org-id> <org-id>,<org-id> arn:aws:organizations::<account-id>:ou/<org-id>/<org-id>' \
+  '<org-id> <org-id>,<org-id>,<org-id> arn:aws:organizations::x:ou/<org-id>/<org-id>' \
   'contact <email> sub repo:BuzzL@6116516/workforce-infra@1394667495:environment:m' \
   '  ~ resource "aws_iam_role" "x" {')
-if [ "$redacted" = "$want_redacted" ]; then echo "ok   redact hides account IDs, unique IDs, bucket names and emails only"; else echo "FAIL redact"; echo "$redacted"; failed=1; fi
+if [ "$redacted" = "$want_redacted" ]; then echo "ok   redact hides account IDs, unique IDs, bucket names, Organization IDs and emails only"; else echo "FAIL redact"; echo "$redacted"; failed=1; fi
 
 # Structure of the workflow: it passes as written and each mutation is rejected.
 expect pass "workflow structure holds" scripts/check-workflow.sh "$work/wf/terraform.yml"
@@ -213,6 +219,8 @@ CASES = [
     ("no script that encodes a secret", "      - name: Init\n", "      - run: echo \"$STATE_BUCKET\" | base64\n      - name: Init\n", "could print or send values"),
     ("-lock=false cannot hide in a comment", "-input=false -lock=false -no-color -detailed-exitcode 2>&1", "-input=false -no-color -detailed-exitcode # -lock=false\n          echo 2>&1", "-lock=false"),
     ("terraform output goes through the redaction", '2>&1 | "$GITHUB_WORKSPACE/scripts/redact.sh" | tee', "2>&1 | tee", "must go through scripts/redact.sh"),
+    ("the Organization root ID stays a secret", "TF_VAR_root_id: ${{ secrets.ORGANIZATION_ROOT_ID }}", 'TF_VAR_root_id: "r-ab12"', "the Organization root ID must be a secret"),
+    ("the Organization root ID stays a secret", "TF_VAR_root_id: ${{ secrets.ORGANIZATION_ROOT_ID }}", 'TF_VAR_root_id: "r-ab12"', "the Organization root ID must be a secret"),
     ("the role ID stays referenced so that it is masked", "AWS_ROLE_ID: ${{ secrets.AWS_ROLE_ID }}", 'AWS_ROLE_ID: ""', "AWS_ROLE_ID must be referenced"),
     ("checkout does not persist credentials", "        with:\n          persist-credentials: false\n", "        with: {}\n", "must not persist credentials"),
     ("the comment job only posts a finished plan", "needs.plan.result == 'failure')", "needs.plan.result == 'failure' || true)", "comment: it must only post a finished plan"),

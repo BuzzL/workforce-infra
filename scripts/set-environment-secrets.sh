@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Sets AWS_ROLE_ARN, AWS_ROLE_ID and STATE_BUCKET as SECRETS of the `management` and
-# `management-plan` GitHub Environments and deletes the variables of the same names.
+# Sets AWS_ROLE_ARN, AWS_ROLE_ID, STATE_BUCKET and ORGANIZATION_ROOT_ID as SECRETS of the
+# `management` and `management-plan` GitHub Environments and deletes the variables of the
+# same names.
 #   AWS_ROLE_ARN   the ARN of the environment's role (from the outputs of bootstrap/)
 #   AWS_ROLE_ID    the role's unique ID (from `aws iam get-role`): the credentials action
 #                  prints it, and it decodes to the account ID, so it must be masked
 #   STATE_BUCKET   the state bucket name
+#   ORGANIZATION_ROOT_ID  the Organization root ID (from `aws organizations list-roots`)
 # A secret is masked everywhere in a public repository's logs, a variable is not.
 #
 # Idempotent: running it again converges on the same state. Secrets are overwritten (the
@@ -17,7 +19,8 @@
 #   scripts/set-environment-secrets.sh          set the secrets, delete the old variables
 #   scripts/set-environment-secrets.sh --check  list names only, change nothing
 #
-# Needs an AWS session that can read the state bucket and IAM roles (AWS_PROFILE) and a gh
+# Needs an AWS session that can read the state bucket, IAM roles and the Organization
+# (`organizations:ListRoots`: the admin SSO profile, not the CI role) (AWS_PROFILE) and a gh
 # login that can administer the repository. AWS_REGION stays a variable: it is not sensitive.
 set -euo pipefail
 cd "$(dirname "$0")/../bootstrap"
@@ -64,6 +67,8 @@ arn_plan=$(read_value "the plan role ARN" '^arn:aws:iam::[0-9]{12}:role/github-i
 id_management=$(read_value "the management role ID" '^AROA[A-Z0-9]{12,}$' aws iam get-role --role-name github-infra-management --query Role.RoleId --output text)
 id_plan=$(read_value "the plan role ID" '^AROA[A-Z0-9]{12,}$' aws iam get-role --role-name github-infra-management-plan --query Role.RoleId --output text)
 
+root_id=$(read_value "the Organization root ID" '^r-[a-z0-9]{4,32}$' aws organizations list-roots --query 'Roots[0].Id' --output text)
+
 set_secret() { # set_secret <env> <name> <value>
   printf '%s' "$3" | gh secret set "$2" --repo "$repo" --env "$1"
 }
@@ -71,21 +76,23 @@ set_secret() { # set_secret <env> <name> <value>
 set_secret management AWS_ROLE_ARN "$arn_management"
 set_secret management AWS_ROLE_ID "$id_management"
 set_secret management STATE_BUCKET "$bucket"
+set_secret management ORGANIZATION_ROOT_ID "$root_id"
 set_secret management-plan AWS_ROLE_ARN "$arn_plan"
 set_secret management-plan AWS_ROLE_ID "$id_plan"
 set_secret management-plan STATE_BUCKET "$bucket"
+set_secret management-plan ORGANIZATION_ROOT_ID "$root_id"
 
 status=0
 for e in $environments; do
-  for v in AWS_ROLE_ARN AWS_ROLE_ID STATE_BUCKET; do
+  for v in AWS_ROLE_ARN AWS_ROLE_ID ORGANIZATION_ROOT_ID STATE_BUCKET; do
     case " $(names variable "$e") " in
       *" $v "*) gh variable delete "$v" --repo "$repo" --env "$e" ;;
     esac
   done
   list "$e"
-  [ "$(names secret "$e")" = "AWS_ROLE_ARN AWS_ROLE_ID STATE_BUCKET" ] || { echo "unexpected secrets in $e" >&2; status=1; }
+  [ "$(names secret "$e")" = "AWS_ROLE_ARN AWS_ROLE_ID ORGANIZATION_ROOT_ID STATE_BUCKET" ] || { echo "unexpected secrets in $e" >&2; status=1; }
   case " $(names variable "$e") " in
-    *" AWS_ROLE_ARN "* | *" AWS_ROLE_ID "* | *" STATE_BUCKET "*) echo "a variable of the same name is left in $e" >&2; status=1 ;;
+    *" AWS_ROLE_ARN "* | *" AWS_ROLE_ID "* | *" ORGANIZATION_ROOT_ID "* | *" STATE_BUCKET "*) echo "a variable of the same name is left in $e" >&2; status=1 ;;
   esac
 done
 exit "$status"

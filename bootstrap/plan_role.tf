@@ -32,8 +32,12 @@ resource "aws_iam_role" "github_infra_management_plan" {
 }
 
 resource "aws_iam_role_policies_exclusive" "github_infra_management_plan" {
-  role_name    = aws_iam_role.github_infra_management_plan.name
-  policy_names = [aws_iam_role_policy.plan_state_read.name, aws_iam_role_policy.plan_bootstrap_read.name]
+  role_name = aws_iam_role.github_infra_management_plan.name
+  policy_names = [
+    aws_iam_role_policy.plan_state_read.name,
+    aws_iam_role_policy.plan_bootstrap_read.name,
+    aws_iam_role_policy.plan_organization_units.name,
+  ]
 }
 
 resource "aws_iam_role_policy_attachments_exclusive" "github_infra_management_plan" {
@@ -41,8 +45,13 @@ resource "aws_iam_role_policy_attachments_exclusive" "github_infra_management_pl
   policy_arns = []
 }
 
-# Read the bootstrap state only, not every stack: this role is open to any branch, and the
-# state of a stack can hold secret values. Read only: there is no lock write, so plans on
+# Read the state of the bootstrap and live/management stacks only, not every stack: this role
+# is open to any branch, and the state of a stack can hold secret values (the account emails
+# of a later stack must stay out of this list). Its Organizations reads let branch code list
+# the member accounts of an OU (ListAccountsForParent), which is accepted: a branch needs
+# write access to this repository, and fork pull requests get no token. The Organizations reads below also list the
+# member accounts of an OU (ListAccountsForParent), so code on any branch can enumerate
+# account IDs: accepted for this PoC, since pushing a branch needs write access. Read only: there is no lock write, so plans on
 # pull requests must use -lock=false.
 resource "aws_iam_role_policy" "plan_state_read" {
   name = "terraform-state-read"
@@ -62,6 +71,12 @@ resource "aws_iam_role_policy" "plan_state_read" {
         Effect   = "Allow"
         Action   = ["s3:GetObject"]
         Resource = ["${local.state_bucket_arn}/bootstrap/terraform.tfstate"] # key of backend.hcl
+      },
+      {
+        Sid      = "ReadManagementState"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = ["${local.state_bucket_arn}/live/management/terraform.tfstate"]
       }
     ]
   })
@@ -74,5 +89,15 @@ resource "aws_iam_role_policy" "plan_bootstrap_read" {
   policy = jsonencode({
     Version   = "2012-10-17"
     Statement = local.bootstrap_read_statements
+  })
+}
+
+resource "aws_iam_role_policy" "plan_organization_units" {
+  name = "plan-organization-units"
+  role = aws_iam_role.github_infra_management_plan.id
+
+  policy = jsonencode({
+    Version   = "2012-10-17"
+    Statement = local.organization_read_statements
   })
 }

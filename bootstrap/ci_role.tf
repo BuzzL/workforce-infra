@@ -35,8 +35,12 @@ resource "aws_iam_role" "github_infra_management" {
 # Terraform owns the role's permissions completely: any inline policy or managed policy
 # attached outside these resources is removed on the next apply.
 resource "aws_iam_role_policies_exclusive" "github_infra_management" {
-  role_name    = aws_iam_role.github_infra_management.name
-  policy_names = [aws_iam_role_policy.state_access.name, aws_iam_role_policy.plan_bootstrap.name]
+  role_name = aws_iam_role.github_infra_management.name
+  policy_names = [
+    aws_iam_role_policy.state_access.name,
+    aws_iam_role_policy.plan_bootstrap.name,
+    aws_iam_role_policy.organization_units.name,
+  ]
 }
 
 resource "aws_iam_role_policy_attachments_exclusive" "github_infra_management" {
@@ -65,6 +69,18 @@ resource "aws_iam_role_policy" "state_access" {
         Resource = ["${local.state_bucket_arn}/bootstrap/terraform.tfstate"] # key of backend.hcl
       },
       {
+        Sid      = "ReadAndWriteManagementState"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject"]
+        Resource = ["${local.state_bucket_arn}/live/management/terraform.tfstate"]
+      },
+      {
+        Sid      = "LockManagementState"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Resource = ["${local.state_bucket_arn}/live/management/terraform.tfstate.tflock"]
+      },
+      {
         Sid      = "LockBootstrapState"
         Effect   = "Allow"
         Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
@@ -82,6 +98,32 @@ resource "aws_iam_role_policy" "plan_bootstrap" {
   policy = jsonencode({
     Version   = "2012-10-17"
     Statement = local.bootstrap_read_statements
+  })
+}
+
+# Manages organizational units, and nothing else in Organizations: no accounts, no policies,
+# no service access. Deleting OUs is allowed on purpose: the stack owns them. Writes are limited to OUs of this management account's Organization;
+# the new OU's ARN is not known before the call, hence the ou-* pattern.
+resource "aws_iam_role_policy" "organization_units" {
+  name = "organization-units"
+  role = aws_iam_role.github_infra_management.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = concat(local.organization_read_statements, [
+      {
+        Sid    = "ManageOrganizationalUnits"
+        Effect = "Allow"
+        Action = [
+          "organizations:CreateOrganizationalUnit",
+          "organizations:UpdateOrganizationalUnit",
+          "organizations:DeleteOrganizationalUnit",
+          "organizations:TagResource",
+          "organizations:UntagResource",
+        ]
+        Resource = [local.organization_root_arn_pattern, local.organization_ou_arn_pattern]
+      }
+    ])
   })
 }
 
