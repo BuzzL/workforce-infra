@@ -36,11 +36,11 @@ resource "aws_iam_role" "github_infra_management" {
 # attached outside these resources is removed on the next apply.
 resource "aws_iam_role_policies_exclusive" "github_infra_management" {
   role_name = aws_iam_role.github_infra_management.name
-  policy_names = [
+  policy_names = concat([
     aws_iam_role_policy.state_access.name,
     aws_iam_role_policy.plan_bootstrap.name,
     aws_iam_role_policy.organization_units.name,
-  ]
+  ], [for p in aws_iam_role_policy.break_glass_bootstrap : p.name])
 }
 
 resource "aws_iam_role_policy_attachments_exclusive" "github_infra_management" {
@@ -124,6 +124,31 @@ resource "aws_iam_role_policy" "organization_units" {
         Resource = [local.organization_root_arn_pattern, local.organization_ou_arn_pattern]
       }
     ])
+  })
+}
+
+# The one-time bootstrap of a member account's baseline: assume OrganizationAccountAccessRole
+# there, and only under the session name the baseline stacks use (baseline-bootstrap), so the
+# use is recognisable in CloudTrail. Named accounts only, from var.member_account_ids; the
+# policy does not exist until an account is listed. The role is break-glass
+# (docs/ACCOUNT_CI_BASELINES.md): a deploy through CI is not a use that needs it.
+resource "aws_iam_role_policy" "break_glass_bootstrap" {
+  count = length(var.member_account_ids) > 0 ? 1 : 0
+
+  name = "break-glass-bootstrap"
+  role = aws_iam_role.github_infra_management.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "BootstrapMemberAccounts"
+        Effect    = "Allow"
+        Action    = "sts:AssumeRole"
+        Resource  = [for name in sort(keys(var.member_account_ids)) : "arn:aws:iam::${var.member_account_ids[name]}:role/OrganizationAccountAccessRole"]
+        Condition = { StringEquals = { "sts:RoleSessionName" = "baseline-bootstrap" } }
+      }
+    ]
   })
 }
 

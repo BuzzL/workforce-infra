@@ -25,7 +25,7 @@ Rejected: letting CI apply its own baseline. It needs `iam:PutRolePolicy` on its
 
 ### 3. State stays in the management bucket
 
-One bucket, one key per stack: `live/accounts/<account>/terraform.tfstate`, the key CI derives from the stack path. Each role reaches its own key (and `.tflock` for the apply role) only. This needs a bucket policy in `bootstrap/` that names the member-account roles; changing it needs the maintainer's explicit approval and is applied locally.
+One bucket, one key per stack: `live/accounts/<account>/terraform.tfstate`, the key CI derives from the stack path. Each role reaches its own key (and `.tflock` for the apply role) only. The bucket policy in `bootstrap/` names those roles, one exact ARN per Allow and no wildcard (approved by the maintainer for IAT-32). It is driven by the local variable `member_account_ids`, empty until the account's stack exists: S3 rejects a policy that names a principal that is not there yet.
 
 Rejected: a bucket per account, which needs a second bootstrap for every account and splits the state.
 
@@ -39,7 +39,7 @@ Run by the maintainer, locally, with the management admin session. The account I
 
 1. Fill `live/accounts/<account>/backend.hcl` and `terraform.tfvars` from the `.example` files, with `break_glass_account_id` set.
 2. `terraform init -backend-config=backend.hcl && terraform plan`, review, then `terraform apply`. The provider assumes `OrganizationAccountAccessRole` in the account, the state is written with your own credentials.
-3. Remove `break_glass_account_id` from `terraform.tfvars`: from now on the stack is applied as the account's own role or not at all.
+3. Remove `break_glass_account_id` from `terraform.tfvars`: from now on the stack is applied as the account's own role or not at all. Then add the account to `member_account_ids` in `bootstrap/terraform.tfvars` and apply `bootstrap/` locally: this opens the state bucket to the new roles and lets the management CI role assume the break-glass role there.
 4. `scripts/set-account-environment-secrets.sh <account>` creates the GitHub Environments `<account>` and `<account>-plan` with the secrets `AWS_ROLE_ARN`, `AWS_ROLE_ID`, `STATE_BUCKET` and the variable `AWS_REGION`. The role ARN and ID are secrets so that they are masked in public logs.
 5. Commit `live/accounts/<account>/.ci-enabled`. The next PR plans the stack through OIDC, which must be a no-op.
 
@@ -49,7 +49,7 @@ Run by the maintainer, locally, with the management admin session. The account I
 
 - Allowed uses: the one-time bootstrap above, and recovery when the CI roles or the OIDC provider are broken or deleted.
 - Not allowed: routine changes, anything CI can do, or any use by an agent.
-- Who: the maintainer, from the management admin session. The management CI role may assume it only for the bootstrap, and only into the accounts named in its policy.
+- Who: the maintainer, from the management admin session, or the management CI role (the maintainer approved this for the bootstrap). The CI role may assume it only into the accounts in `member_account_ids` and only with the session name `baseline-bootstrap`, which the stacks use, so its use stands out in CloudTrail. The permission exists only once an account is listed.
 - Every use is recorded as an `AssumeRole` event in CloudTrail (IAT-34); after a use, write down why in the Linear issue.
 - If a use is not the maintainer's, treat it as an incident and rotate.
 

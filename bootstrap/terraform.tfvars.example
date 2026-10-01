@@ -1,3 +1,6 @@
 # Copy to terraform.tfvars (gitignored) and fill in the real values.
 region            = "<region>"
 state_bucket_name = "<workforce-tfstate-random-suffix>"
+
+# Set locally after live/accounts/<name> has been bootstrapped (docs/ACCOUNT_CI_BASELINES.md); never committed.
+# member_account_ids = { security = "<12 digits>", workforce = "<12 digits>" }
