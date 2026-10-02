@@ -54,7 +54,7 @@ variable "tags" {
 }
 
 variable "audit_log_bucket_name" {
-  description = "Name of the organization trail's log bucket. Null keeps audit logging off. To be set by CI from the secret AUDIT_LOG_BUCKET (TF_VAR_audit_log_bucket_name) once the workflow is wired, see docs/AUDIT_LOGGING.md; never committed."
+  description = "Name of the organization trail's log bucket. Null or empty keeps audit logging off. To be set by CI from the secret AUDIT_LOG_BUCKET (TF_VAR_audit_log_bucket_name) once the workflow is wired, see docs/AUDIT_LOGGING.md; never committed."
   type        = string
   default     = null
   sensitive   = true
@@ -67,7 +67,7 @@ variable "organization_id" {
   sensitive   = true
 
   validation {
-    condition     = var.audit_log_bucket_name == null || var.organization_id != null
+    condition     = !try(length(var.audit_log_bucket_name) > 0, false) || try(length(var.organization_id) > 0, false)
     error_message = "organization_id is required when audit_log_bucket_name is set."
   }
 }
@@ -79,12 +79,12 @@ variable "management_account_id" {
   sensitive   = true
 
   validation {
-    condition     = var.audit_log_bucket_name == null || var.management_account_id != null
+    condition     = !try(length(var.audit_log_bucket_name) > 0, false) || try(length(var.management_account_id) > 0, false)
     error_message = "management_account_id is required when audit_log_bucket_name is set."
   }
 
   validation {
-    condition     = var.management_account_id == null || can(regex("^[0-9]{12}$", var.management_account_id))
+    condition     = !try(length(var.management_account_id) > 0, false) || can(regex("^[0-9]{12}$", var.management_account_id))
     error_message = "The management account ID must be 12 digits."
   }
 }

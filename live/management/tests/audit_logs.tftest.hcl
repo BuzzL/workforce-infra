@@ -33,3 +33,16 @@ run "the_trail_is_created_for_the_given_bucket_when_enabled" {
     error_message = "Setting audit_log_bucket_name must create the organization trail with its default name."
   }
 }
+
+run "an_empty_bucket_name_keeps_it_off" {
+  command = plan
+
+  variables {
+    audit_log_bucket_name = ""
+  }
+
+  assert {
+    condition     = length(module.organization_trail) == 0
+    error_message = "An unset secret arrives as an empty string and must keep the trail off."
+  }
+}

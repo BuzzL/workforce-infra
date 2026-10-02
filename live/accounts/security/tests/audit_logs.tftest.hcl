@@ -89,3 +89,18 @@ run "malformed_management_account_is_refused" {
 
   expect_failures = [var.management_account_id]
 }
+
+run "an_empty_bucket_name_keeps_it_off" {
+  command = plan
+
+  variables {
+    audit_log_bucket_name = ""
+    organization_id       = ""
+    management_account_id = ""
+  }
+
+  assert {
+    condition     = length(module.audit_log_bucket) == 0
+    error_message = "An unset secret arrives as an empty string and must keep the log bucket off."
+  }
+}
