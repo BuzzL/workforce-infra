@@ -19,10 +19,10 @@ Keys are PascalCase, a single word, case-sensitive, and never start with `aws:` 
 
 | Key | Required | Value | Pattern | Meaning |
 |---|---|---|---|---|
-| `Project` | yes | the short name of the project, as registered in `docs/ENVIRONMENT_PERMISSIONS.md` and defined by the Linear project (today `workforce`) | `^[a-z0-9]{1,10}$` | the project, the same word as in resource names. Other projects are not excluded |
+| `Project` | yes | the short name of the project, as registered in `docs/ENVIRONMENT_PERMISSIONS.md`, mapped to a Linear project (today `foundation`) | `^[a-z0-9]{1,10}$` | the project, the same word as in resource names. Other projects are not excluded |
 | `Environment` | yes | the **name** of the account the resource lives in: `management`, `security`, `workforce`, `test`, `quality`, `demo` | one of the names in `scripts/environment-keys.tsv` | where it runs. The name, not the four-letter key: a key is never accepted where a name is expected (`docs/ENVIRONMENTS.md`) |
 | `App` | yes | `agent`, `platform`, or a registered application (`testbed`) | `^[a-z0-9]{1,16}$` | what the resource belongs to. Matches the application segment of its resource name where it has one; `platform` is for shared infrastructure that belongs to no application |
-| `Repository` | yes | the repository that holds that code, without owner | `^workforce-[a-z]+$` | where to change it. Together with `ManagedBy` and `Stack` it is the full pointer: repository, technology, unit of deployment |
+| `Repository` | yes | the repository that holds that code, without owner | `^[a-z0-9][a-z0-9-]{0,99}$` | where to change it. Together with `ManagedBy` and `Stack` it is the full pointer: repository, technology, unit of deployment |
 | `ManagedBy` | yes | the **technology** whose code is the source of truth: `terraform`, `cdk`, `cloudformation` (a hand-written template) or `manual`; `sam` is reserved (the `lambda` archetype has no transform, `docs/ENVIRONMENT_PERMISSIONS.md`) | closed list | what to run to change it. It names the tool the code is written in, not the engine: a CDK or SAM stack is deployed by CloudFormation but is `cdk` or `sam`. `manual` is for break-glass and bootstrap and needs a note in the Linear issue |
 | `Stack` | yes | the Terraform root stack path (`live/management`) or the CloudFormation stack name | `^[A-Za-z0-9/_-]{1,128}$` | which unit of deployment owns it |
 | `Archetype` | for applications | `lambda`, and later `ecs-service`, `ecs-task` | closed list | the workload archetype of the application |
@@ -71,7 +71,7 @@ Existing stacks already tag `Project`, `ManagedBy` and `Stack`.
 
 | Change | Reason |
 |---|---|
-| `Project`: `ai-workforce` → `workforce` | the project word of the names and tags, the short name of the Linear project. `ai-workforce` stays as the GitHub topic |
+| `Project`: `ai-workforce` → `foundation` | the project word of the names and tags: the short name of the basic AWS setup of the Linear project "AI Workforce". `ai-workforce` stays as the GitHub topic |
 | add `Environment`, `App` and `Repository` to every stack | required keys. For the current stacks `App=platform`, `Repository=workforce-infra`, and `Environment` is the name of the account |
 | add `Archetype` and `Target` where they apply | optional keys |
 

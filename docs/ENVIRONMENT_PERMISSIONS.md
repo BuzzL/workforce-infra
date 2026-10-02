@@ -21,7 +21,7 @@ in this order, with hyphens between the parts:
 | Part | Content | Rule |
 |---|---|---|
 | `<acct>` | the four-letter **key** of the account the resource lives in (`test`, `qual`, `demo`, from `scripts/environment-keys.tsv`) | always the first four characters |
-| `<project>` | the project the resource belongs to, defined by the Linear project and registered below (today `workforce`, the Linear project "AI Workforce"). Other projects are not excluded | lowercase letters and digits, `^[a-z0-9]{1,10}$` |
+| `<project>` | the project the resource belongs to: a short name chosen by the maintainer, registered below and mapped to a Linear project (today `foundation`, the basic AWS setup of the Linear project "AI Workforce"). Other projects are not excluded | lowercase letters and digits, `^[a-z0-9]{1,10}$` |
 | `<name>` | what the resource belongs to or does: `agent`, or a registered application (`testbed`) followed by a qualifier (`testbed-main`) | lowercase letters and digits, hyphens between segments |
 | `<resource>` | the type of the resource, last | one word from a closed list: `role`, `policy`, `boundary`, `stack`, `function`, `alarm` |
 
@@ -37,17 +37,17 @@ Exempt, because the name is not ours to choose: Organizations resources (OUs, ac
 
 ### Projects, applications and qualifiers
 
-A project is a Linear project, and its short name is registered here. Everything this repository creates for it carries that name in the second slot and in the `Project` tag (`docs/TAG_CONVENTION.md`). An application belongs to exactly one project.
+A project has a short name, registered here with the Linear project it belongs to and what it covers. The short name need not equal the Linear project's name. Everything this repository creates for it carries that name in the second slot and in the `Project` tag (`docs/TAG_CONVENTION.md`). An application belongs to exactly one project.
 
-| Project | Linear project |
-|---|---|
-| `workforce` | AI Workforce |
+| Project | Linear project | Covers |
+|---|---|---|
+| `foundation` | AI Workforce | the basic AWS setup: organization, accounts, access, CI roles, and the roles to deploy into the environment accounts |
 
-An application name is one segment, `^[a-z0-9]{1,16}$`, registered in the table below, unique within its project, and never `agent`. The `<qualifier>` is one or more segments that tell resources of the same type apart (`main`, `api`), at least one is required, and `<app>-<qualifier>` is at most 39 characters. With the longest prefix, a 10-character project (`qual-` plus 10 plus `-`, 16 characters), and the longest suffix `-function` (9), a function name is then at most 64 characters (16 + 39 + 9), which is the limit of IAM role and Lambda function names. A future application whose name would contain a hyphen (`testbed-api`) is a qualifier, never an application.
+An application name is one segment, `^[a-z0-9]{1,16}$`, registered in the table below, unique within its project, and never one of the reserved names `agent`, `platform`, `infra` and `github`. The `<qualifier>` is one or more segments that tell resources of the same type apart (`main`, `api`), at least one is required, and `<app>-<qualifier>` is at most 39 characters. With the longest prefix, a 10-character project (`qual-` plus 10 plus `-`, 16 characters), and the longest suffix `-function` (9), a function name is then at most 64 characters (16 + 39 + 9), which is the limit of IAM role and Lambda function names. A future application whose name would contain a hyphen (`testbed-api`) is a qualifier, never an application.
 
 | Application | Project | Repository | Archetype | Stacks |
 |---|---|---|---|---|
-| `testbed` | `workforce` | `workforce-testbed` | `lambda` | `main` |
+| `testbed` | `foundation` | `workforce-testbed` | `lambda` | `main` |
 
 Adding an application is one row here plus one instantiation per environment. The **Stacks** column lists its stack qualifiers: `quality` and `demo` allow exactly those stacks, `test` any stack of the application (see the deploy role).
 
@@ -58,12 +58,12 @@ Resources the application creates, with its qualifier (PCRE, because the last ru
 ```
 ^(test|qual|demo)-<project>-[a-z0-9]{1,16}(-[a-z0-9]+)+-(role|policy|stack|function|alarm)$
 ```
-with the extra rules that `<app>-<qualifier>` is at most 40 characters and that no name ends in `-deploy-role` or `-exec-role`.
+with the extra rules that `<app>-<qualifier>` is at most 39 characters (checked by the matrix script, the regexp does not encode it) and that its `<name>` does not start with a reserved name (`agent`, `platform`, `infra`, `github`) and does not end in `-deploy`, `-exec` or `-boundary`, which the platform regexp owns.
 
-Platform resources, enumerated exactly:
+Platform resources, enumerated exactly (the roles of the CI baselines (`infra`, `github`) live in the account of their key, so the account slot also admits `root`, `wrkf` and `scrt` here):
 
 ```
-^(test|qual|demo)-<project>-(agent-role|[a-z0-9]{1,16}-(deploy-role|exec-role|boundary))$
+^(test|qual|demo|root|wrkf|scrt)-<project>-(agent-role|infra-role|infra-plan-role|github-role|github-plan-role|[a-z0-9]{1,16}-(deploy-role|exec-role|boundary))$
 ```
 
 The Lambda alias is the one resource with a fixed name, `live`: it is scoped by its function, so a prefix adds nothing. The log group of a function is named after it, `/aws/lambda/<function name>`.
@@ -75,6 +75,7 @@ The allowed/denied matrix script asserts that every name in a policy matches one
 | Resource | Name | IAM path |
 |---|---|---|
 | Agent role (one per environment, shared) | `<acct>-<project>-agent-role` | `/platform/` |
+| CI roles of the baselines (apply, plan) | `<acct>-<project>-infra-role`, `<acct>-<project>-infra-plan-role`, and for the CI of `workforce-github` `root-<project>-github-role`, `root-<project>-github-plan-role` | `/platform/` |
 | Permissions boundary (one per application) | `<acct>-<project>-<app>-boundary` | `/platform/` |
 | Deploy role (one per application) | `<acct>-<project>-<app>-deploy-role` | `/platform/` |
 | CloudFormation execution role (one per application) | `<acct>-<project>-<app>-exec-role` | `/platform/` |
@@ -117,8 +118,8 @@ The resources created before this decision are renamed to it, and their tags mig
 
 How, because a CI role cannot rename itself and a name is part of its ARN:
 
-1. One role at a time, in its own PR, **new role first**: create the new role with the same permissions and trust, then switch the GitHub Environment secret that holds its ARN (`AWS_ROLE_ARN`, `AWS_ROLE_ID`), the state bucket policy that names it, and every trust that references it, then delete the old role in a later PR. The CI-permissions-first rule applies to each step (`CLAUDE.md`).
-2. Never both names in use for longer than one apply. The state bucket policy lists exact role ARNs, so it is re-applied with the new one before the old one is removed.
+1. One role at a time, in its own PR, **new role first**. In order: (a) the CI role's permissions allow creating the new name and path (CI-permissions-first, `CLAUDE.md`); (b) create the new role with the same permissions and trust; (c) the state bucket policy, applied locally from `bootstrap/`, carries **both** ARNs; (d) switch the GitHub Environment secrets that hold the ARN and ID (`AWS_ROLE_ARN`, `AWS_ROLE_ID`) and every trust that names the role; (e) a real run assumes the new role and reaches the state through the bucket policy, which proves the ARN form (an assumed role's ARN may not carry the path); (f) only then delete the old role and its ARN in the bucket policy, in a later PR.
+2. Both roles may exist until that later PR, but only one is in use at any time. A step that fails before (d) leaves the old role working, so a rename is a failure at worst, never a lockout.
 3. The IAM paths of the convention (`/platform/` for platform roles) apply to the new roles. The roles of the baselines are platform roles.
 4. Each rename is proven by a no-op plan afterwards, and by the first CI run that assumes the new role.
 
@@ -175,7 +176,7 @@ An **archetype** is a named permission template: the actions allowed with the re
 
 All platform roles and the boundary are created by the environment account's stack in `workforce-infra`, applied through the gated CI (order of changes: the CI-permissions-first rule in `CLAUDE.md`). The application's resources are created by its pipeline.
 
-**Bootstrap and recovery are the maintainer's, not a role's.** The first creation of an application's stack in `quality` and `demo`, and the recovery of a stack stuck in `CREATE_FAILED` or `ROLLBACK_COMPLETE` (which can only be deleted), are done by the maintainer from the SSO admin session, like the account baselines (`docs/ACCOUNT_CI_BASELINES.md`), and noted in the Linear issue. No role in `quality` or `demo` can create or delete a stack. `test` can, because its stacks are ephemeral.
+**Bootstrap and recovery are the maintainer's, not a role's.** The first creation of an application's stack in `quality` and `demo`, and the recovery of a stack stuck in `CREATE_FAILED` or `ROLLBACK_COMPLETE` (which can only be deleted), are done by the maintainer from the SSO admin session, like the account baselines (`docs/ACCOUNT_CI_BASELINES.md`), and noted in the Linear issue. No role in `quality` or `demo` can delete a stack, or create one under a name that is not registered for the application. `test` can do both, because its stacks are ephemeral. The one gap IAM cannot close: a registered stack that the maintainer has deleted could be recreated by the deploy role, still bound to its execution role, its template location and the stack tags (in `demo` the execution role cannot create the resources, so the recreation fails). So the recovery step begins by removing the stack's qualifier from the Stacks column and ends by putting it back.
 
 ## Archetype `lambda`
 
@@ -183,7 +184,7 @@ The reason column is part of the decision: a statement without one is not allowe
 
 **Resource `*` exception.** Two read-only actions need `Resource: "*"`, listed in the tables as "(resource `*`)": `logs:DescribeLogGroups`, which has no resource type at all, and `cloudformation:GetTemplateSummary` when it is called with a template URL, because there is no stack to name (it is narrowed by `cloudformation:TemplateUrl` to the artifact prefix). Nothing else has a `*` resource. `CLAUDE.md` forbids `*` actions and principals, not a `*` resource, but a resource wildcard is still a widening, so it needs the maintainer's approval in this review.
 
-**Verified against the AWS service authorization reference** (Service Reference data, 2026-10-02), which this document relies on: `cloudformation:CreateChangeSet`, `CreateStack`, `UpdateStack`, `DeleteStack` take `cloudformation:RoleArn` (written `RoleArn`), `ExecuteChangeSet` does not; `CreateChangeSet`, `CreateStack`, `UpdateStack` take `cloudformation:TemplateUrl`; all stack actions are resource-level on `stack`; `cloudwatch:DescribeAlarms`, `PutMetricAlarm`, `DeleteAlarms` are resource-level on `alarm`; `logs:GetLogEvents` is resource-level on `log-stream` and `DescribeLogStreams`, `FilterLogEvents`, `CreateLogGroup`, `DeleteLogGroup`, `PutRetentionPolicy` on `log-group`. **The condition key `cloudformation:ChangeSetType` does not exist**, so a rule cannot tell a `CREATE` change set from an `UPDATE` one: stack creation is prevented in `quality` and `demo` by the resource instead (see the deploy role). 
+**Verified against the AWS service authorization reference** (Service Reference data, 2026-10-02), which this document relies on: `cloudformation:CreateChangeSet`, `CreateStack`, `UpdateStack`, `DeleteStack` take `cloudformation:RoleArn` (written `RoleArn`), `ExecuteChangeSet` does not; `CreateChangeSet`, `CreateStack`, `UpdateStack` take `cloudformation:TemplateUrl`; all stack actions are resource-level on `stack`; `cloudwatch:DescribeAlarms`, `PutMetricAlarm`, `DeleteAlarms` are resource-level on `alarm`; `logs:GetLogEvents` is resource-level on `log-stream` and `DescribeLogStreams`, `FilterLogEvents`, `CreateLogGroup`, `DeleteLogGroup`, `PutRetentionPolicy` on `log-group`. **The condition key `cloudformation:ChangeSetType` does not exist**, so a rule cannot tell a `CREATE` change set from an `UPDATE` one: creating a stack under an unregistered name is prevented in `quality` and `demo` by the resource instead (see the deploy role). 
 
 **No secrets in function configuration.** Environment variables of a function carry names and endpoints, never secrets (a secret is referenced by its Secrets Manager name and read at runtime). This is what lets the agent read configuration.
 
@@ -210,8 +211,8 @@ Opening a release is a GitHub operation and needs nothing in AWS, so the agent r
 | Capability | Resource | `test` | `quality` | `demo` | Reason |
 |---|---|---|---|---|---|
 | `cloudformation:CreateStack`, `DeleteStack` | stacks `<acct>-<project>-<app>-*-stack` | yes | no | no | `test` deploys every pull request, so it creates and deletes ephemeral stacks |
-| `cloudformation:CreateChangeSet` | stacks `<acct>-<project>-<app>-*-stack` in `test`; **exactly the registered stacks** (`<acct>-<project>-<app>-<qualifier>-stack` for each qualifier of the Stacks column) in `quality` and `demo` | yes | yes | yes | the only way a change is made. A change set can also create a stack, and no condition key separates the two, so in `quality` and `demo` the resource is the control: a name that is not registered is outside it, and a registered one already exists. Carries `cloudformation:RoleArn` and `cloudformation:TemplateUrl` below |
-| `cloudformation:ExecuteChangeSet`, `DeleteChangeSet`, `DescribeStacks`, `DescribeStackEvents`, `DescribeChangeSet`, `GetTemplate` | same as the row above | yes | yes | yes | follow and finish a deployment of this application only |
+| `cloudformation:CreateChangeSet` | stacks `<acct>-<project>-<app>-*-stack` in `test`; **exactly the registered stacks** (`<acct>-<project>-<app>-<qualifier>-stack` for each qualifier of the Stacks column) in `quality` and `demo` | yes | yes | yes | the only way a change is made. A change set can also create a stack, and no condition key separates the two, so in `quality` and `demo` the resource is the control: a name that is not registered is outside it, and a registered one already exists. Only a registered stack that was deleted could be recreated, see "Bootstrap and recovery". Carries `cloudformation:RoleArn` and `cloudformation:TemplateUrl` below |
+| `cloudformation:ExecuteChangeSet`, `DeleteChangeSet`, `DescribeStacks`, `DescribeStackEvents`, `DescribeChangeSet`, `GetTemplate` | same stacks as the row above: the pattern in `test`, exactly the registered ones in `quality` and `demo` | yes | yes | yes | follow and finish a deployment of this application only |
 | `cloudformation:GetTemplateSummary` (resource `*`), condition `cloudformation:TemplateUrl` under the artifact prefix | | yes | yes | yes | reads the template before a change set |
 | `cloudformation:TagResource`, `UntagResource` | same | yes | yes | yes | the stack tags of `docs/TAG_CONVENTION.md`, only those keys (`aws:TagKeys`). A stack cannot be created without them: `aws:RequestTag` equals the literals for `App` and `Environment` |
 | `iam:PassRole` of `<acct>-<project>-<app>-exec-role`, condition `iam:PassedToService` = `cloudformation.amazonaws.com` | that one role | yes | yes | yes | CloudFormation needs the execution role, and only that one |
@@ -305,7 +306,7 @@ The matrix is a table on purpose: the module tests assert the inclusion with `te
 
 Decided when the first resource of the kind exists, not guessed now. Each is a new section here, never an edit above.
 
-- **More resource types:** the S3 artifact bucket (global names, 63 characters, a name that cannot be guessed in a public repository), Secrets Manager and SSM parameters (hierarchical names, `<acct>/workforce/<app>/<key>`), KMS aliases, SQS (`.fifo` ends a name), EventBridge, ECS (task definition ARNs end in `:*`). Each with its ARN shape, length limit and word, kept in a table next to `scripts/environment-keys.tsv`, which the matrix script also reads.
+- **More resource types:** the S3 artifact bucket (global names, 63 characters, a name that cannot be guessed in a public repository), Secrets Manager and SSM parameters (hierarchical names, `<acct>/<project>/<app>/<key>`), KMS aliases, SQS (`.fifo` ends a name), EventBridge, ECS (task definition ARNs end in `:*`). Each with its ARN shape, length limit and word, kept in a table next to `scripts/environment-keys.tsv`, which the matrix script also reads.
 - `iam:PolicyARN` on `AttachRolePolicy`, so that an application role can only be given policies from a list.
 - Whether `aws:PrincipalArn` carries the IAM path for the agent task role in `workforce`: prove it with one real call, or give that role no path, before the agent roles are built.
 - Policy size: the agent role grows with every application, and the trust policy holds two ExternalIds during a rotation. Check against the IAM limits when the second application is added.
