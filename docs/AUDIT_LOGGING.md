@@ -9,7 +9,7 @@ Every API call in every account is recorded by one organization trail and kept i
 | Log bucket: private, versioned, SSE-S3, lifecycle, TLS-only Deny, Allows only for the one trail ARN | `security` account | `modules/audit-log-bucket`, wired in `live/accounts/security/audit_logs.tf` |
 | Organization trail: single region, log file validation, global service events, management events only | `management` account | `modules/organization-trail`, wired in `live/management/audit_logs.tf` |
 
-Both stacks keep the feature **off** while `audit_log_bucket_name` is unset or empty, so merging the code creates nothing. Creating the trail needs trusted access for `cloudtrail.amazonaws.com` in the Organization, enabled once by hand (`organizations:EnableAWSServiceAccess` is not granted to CI).
+Both stacks keep the feature **off** while `audit_log_bucket_name` is unset or empty, so merging the code creates nothing. Creating the trail needs trusted access for `cloudtrail.amazonaws.com` in the Organization, enabled once by hand. The apply role may repeat it for that one service principal only (`organizations:EnableAWSServiceAccess` with a `organizations:ServicePrincipal` condition), because CloudTrail does so itself when it creates an organization trail.
 
 ## Decisions
 
