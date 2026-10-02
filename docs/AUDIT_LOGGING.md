@@ -17,7 +17,7 @@ Both stacks keep the feature **off** while `audit_log_bucket_name` is unset, so 
 - **Management events only.** The first copy of management events is free; data events are billed per event and are not enabled.
 - **SSE-S3, no customer-managed KMS key.** A key costs money every month and adds a key policy that can lock the logs away. Log file validation digests prove the logs were not altered. Trivy AWS-0015 (trail) and AVD-AWS-0132 (bucket) are waived in code with this reason, the same as the state bucket. Only HIGH and CRITICAL findings gate CI; lower severities such as bucket access logging and CloudWatch integration of the trail are not evaluated.
 - **Deleting logs is denied to everyone but the break-glass role.** The bucket policy denies `s3:DeleteObject`, `s3:DeleteObjectVersion` and `s3:DeleteBucket` unless `aws:PrincipalArn` is `OrganizationAccountAccessRole` of `security` (the maintainer approved this Deny). Lifecycle expiry is done by S3 itself and is not affected. `PutBucketPolicy` is deliberately not denied: that would lock Terraform and the account root out of the only way to repair the policy. The root user can still edit the policy, which is the recovery path.
-- **The trail cannot be stopped or deleted by CI.** The apply role of `management` is not granted `cloudtrail:DeleteTrail` or `cloudtrail:StopLogging`, so only an admin session can. SCPs do not apply to the management account, so IAT-36's "deny disabling logging" protects the member accounts only.
+- **CI can neither delete the trail nor stop it.** The apply role of `management` is not granted `cloudtrail:DeleteTrail` or `cloudtrail:StopLogging`, so only an admin session can. It does hold `cloudtrail:UpdateTrail`, which can still alter the trail (another bucket, validation off): that is guarded by review and by the approval of the `management` environment, not by IAM. SCPs do not apply to the management account, so IAT-36's "deny disabling logging" protects the member accounts only.
 - **The bucket policy names the exact trail ARN** (`aws:SourceArn`), so no other trail, in this Organization or elsewhere, can write to it.
 
 ## Order of rollout
@@ -29,6 +29,11 @@ CI plans the `security` stack and never applies it (`docs/IDENTITY_CENTER.md`, s
 3. Set the secrets with the scripts, from the environment: `AUDIT_LOG_BUCKET=<globally unique name> scripts/set-environment-secrets.sh` for `management` and `management-plan`, and `AUDIT_LOG_BUCKET=... ORGANIZATION_ID=o-... MANAGEMENT_ACCOUNT_ID=<12 digits> scripts/set-account-environment-secrets.sh security`. They are secrets because the repository is public, and unset ones keep the feature off.
 4. Right after step 3, apply `live/accounts/security` locally, as for the identity stack: set the same three values in `terraform.tfvars` (see the `.example`), review that the plan creates only the bucket and its settings and adds the bucket reads to the two CI roles, then apply. Until then the CI drift check of `security` fails by design, since it sees the bucket as missing.
 5. Merge to `main`: the gated CI apply of `live/management` creates the trail. Check with `aws cloudtrail get-trail-status`, then look for a test event in the bucket.
+
+## Known limits
+
+- **The Deny does not stop an administrator of `security` from shortening retention.** `s3:PutLifecycleConfiguration`, `s3:PutBucketVersioning` (suspending) and overwriting objects are not denied: denying them would risk locking out Terraform or the repair path, and needs a separate maintainer decision. Only the module's validation (at least 90 days) guards retention, at apply time.
+- **The trail permissions are the documented minimum, not a proven one.** AWS's guidance for organization trails also mentions `organizations:ListAccounts`, and `organizations:EnableAWSServiceAccess` when trusted access is not yet on. This setup enables trusted access by hand (step 1) and does not grant the latter. If step 5 fails with `AccessDenied` on an `organizations:` action, add only that read action to `bootstrap/audit_trail.tf` and its literal test.
 
 ## Behaviour to know
 

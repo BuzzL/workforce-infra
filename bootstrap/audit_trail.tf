@@ -24,8 +24,10 @@ locals {
 }
 
 # Creates and updates the one trail, and starts logging. There is deliberately no
-# cloudtrail:DeleteTrail and no cloudtrail:StopLogging: CI cannot remove or silence the audit
-# trail, only an admin session can. Enabling trusted access for CloudTrail in the
+# cloudtrail:DeleteTrail and no cloudtrail:StopLogging: CI cannot delete the trail or stop it,
+# only an admin session can. UpdateTrail can still alter it (another bucket, validation off),
+# so a change to the trail is only as safe as the review of its PR and the approval of the
+# `management` environment. Enabling trusted access for CloudTrail in the
 # Organization is a manual step (organizations:EnableAWSServiceAccess is not granted).
 resource "aws_iam_role_policy" "audit_trail" {
   count = var.audit_trail_enabled ? 1 : 0

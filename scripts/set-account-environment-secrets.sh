@@ -141,6 +141,13 @@ set_environment "${account}-plan" "$arn_plan" "$id_plan"
 status=0
 for e in $environments; do
   list "$e"
-  [ "$(names secret "$e")" = "$expected_secrets" ] || { echo "unexpected secrets in $e" >&2; status=1; }
+  want=$expected_secrets
+  # Already set by an earlier run: accepted, as in set-environment-secrets.sh.
+  if [ "$account" = security ] && [ -z "$audit_bucket" ]; then
+    case " $(names secret "$e") " in
+      *" AUDIT_LOG_BUCKET "*) want="ASSIGNMENT_ACCOUNT_IDS AUDIT_LOG_BUCKET AWS_ROLE_ARN AWS_ROLE_ID MAINTAINER_USERNAME MANAGEMENT_ACCOUNT_ID ORGANIZATION_ID STATE_BUCKET" ;;
+    esac
+  fi
+  [ "$(names secret "$e")" = "$want" ] || { echo "unexpected secrets in $e" >&2; status=1; }
 done
 exit "$status"
