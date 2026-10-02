@@ -1,4 +1,8 @@
-mock_provider "aws" {}
+mock_provider "aws" {
+  mock_data "aws_caller_identity" {
+    defaults = { account_id = "444455556666" } # fake, and not the trail's account
+  }
+}
 
 variables {
   bucket_name      = "workforce-audit-logs-example"
@@ -44,7 +48,7 @@ run "bucket_is_private_versioned_and_encrypted" {
   }
 }
 
-run "policy_is_tls_only_and_admits_only_the_named_trail" {
+run "policy_denies_deletion_to_all_but_break_glass_and_admits_only_the_named_trail" {
   command = plan
 
   assert {
@@ -58,6 +62,22 @@ run "policy_is_tls_only_and_admits_only_the_named_trail" {
           Action    = "s3:*"
           Resource  = ["arn:aws:s3:::workforce-audit-logs-example", "arn:aws:s3:::workforce-audit-logs-example/*"]
           Condition = { Bool = { "aws:SecureTransport" = "false" } }
+        },
+        {
+          Sid       = "DenyLogDeletionExceptBreakGlass"
+          Effect    = "Deny"
+          Principal = { AWS = "*" }
+          Action    = ["s3:DeleteObject", "s3:DeleteObjectVersion"]
+          Resource  = "arn:aws:s3:::workforce-audit-logs-example/*"
+          Condition = { ArnNotEquals = { "aws:PrincipalArn" = "arn:aws:iam::444455556666:role/OrganizationAccountAccessRole" } }
+        },
+        {
+          Sid       = "DenyBucketDeletionExceptBreakGlass"
+          Effect    = "Deny"
+          Principal = { AWS = "*" }
+          Action    = "s3:DeleteBucket"
+          Resource  = "arn:aws:s3:::workforce-audit-logs-example"
+          Condition = { ArnNotEquals = { "aws:PrincipalArn" = "arn:aws:iam::444455556666:role/OrganizationAccountAccessRole" } }
         },
         {
           Sid       = "CloudTrailAclCheck"
@@ -85,7 +105,7 @@ run "policy_is_tls_only_and_admits_only_the_named_trail" {
         },
       ]
     }
-    error_message = "The policy must be the TLS-only Deny plus two Allows for the one trail ARN, and nothing else."
+    error_message = "The policy must be the TLS-only Deny, the two deletion Denies (everyone but the break-glass role) and two Allows for the one trail ARN, and nothing else."
   }
 }
 

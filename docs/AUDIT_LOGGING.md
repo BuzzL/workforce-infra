@@ -16,6 +16,8 @@ Both stacks keep the feature **off** while `audit_log_bucket_name` is unset, so 
 - **Single region.** The region-deny SCP leaves one region in use (`docs/ORGANIZATION_INPUTS.md`), so a multi-region trail would only add cost. Global service events (IAM, STS) are recorded in the home region.
 - **Management events only.** The first copy of management events is free; data events are billed per event and are not enabled.
 - **SSE-S3, no customer-managed KMS key.** A key costs money every month and adds a key policy that can lock the logs away. Log file validation digests prove the logs were not altered. Trivy AWS-0015 (trail) and AVD-AWS-0132 (bucket) are waived in code with this reason, the same as the state bucket. Only HIGH and CRITICAL findings gate CI; lower severities such as bucket access logging and CloudWatch integration of the trail are not evaluated.
+- **Deleting logs is denied to everyone but the break-glass role.** The bucket policy denies `s3:DeleteObject`, `s3:DeleteObjectVersion` and `s3:DeleteBucket` unless `aws:PrincipalArn` is `OrganizationAccountAccessRole` of `security` (the maintainer approved this Deny). Lifecycle expiry is done by S3 itself and is not affected. `PutBucketPolicy` is deliberately not denied: that would lock Terraform and the account root out of the only way to repair the policy. The root user can still edit the policy, which is the recovery path.
+- **The trail cannot be stopped or deleted by CI.** The apply role of `management` is not granted `cloudtrail:DeleteTrail` or `cloudtrail:StopLogging`, so only an admin session can. SCPs do not apply to the management account, so IAT-36's "deny disabling logging" protects the member accounts only.
 - **The bucket policy names the exact trail ARN** (`aws:SourceArn`), so no other trail, in this Organization or elsewhere, can write to it.
 
 ## Order of rollout
@@ -39,5 +41,4 @@ The workflow secrets (`AUDIT_LOG_BUCKET`, `ORGANIZATION_ID`, `MANAGEMENT_ACCOUNT
 
 ## Not decided yet
 
-- **Protection against deleting logs or the trail.** A bucket Deny on `s3:DeleteObject*` or on stopping the trail that excepts only the break-glass path could lock out a principal, so it needs the maintainer's explicit approval and its own PR with a literal test.
 - **CI permissions to create these resources.** The apply roles of `security` and `management` do not yet allow S3 bucket or CloudTrail management; adding them is a separate, reviewed change.

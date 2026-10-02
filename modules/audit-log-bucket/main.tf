@@ -1,7 +1,13 @@
+data "aws_caller_identity" "current" {}
+
 locals {
   # Commercial partition only: this repo does not target GovCloud or China.
   bucket_arn = "arn:aws:s3:::${var.bucket_name}"
-  trail_arn  = "arn:aws:cloudtrail:${var.trail_region}:${var.trail_account_id}:trail/${var.trail_name}"
+
+  # The one principal that may delete logs or the bucket: the account's break-glass role
+  # (docs/ACCOUNT_CI_BASELINES.md). aws:PrincipalArn of an assumed role is the role ARN.
+  break_glass_role_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.break_glass_role_name}"
+  trail_arn            = "arn:aws:cloudtrail:${var.trail_region}:${var.trail_account_id}:trail/${var.trail_name}"
 }
 
 resource "aws_s3_bucket" "this" {
@@ -77,6 +83,11 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
   depends_on = [aws_s3_bucket_versioning.this]
 }
 
+# Two Denies protect the archive: deleting objects or versions, and deleting the bucket, are
+# refused to everyone but the break-glass role. Lifecycle expiry is done by S3 itself and is
+# not subject to the policy. Nothing denies PutBucketPolicy, on purpose: that would lock
+# Terraform and the account root out of the policy, the only way to repair it.
+#
 # The policy names the one trail that may write, by ARN. The Organization trail writes under
 # the owner account and under the Organization ID prefix, so both prefixes are listed.
 resource "aws_s3_bucket_policy" "this" {
@@ -92,6 +103,22 @@ resource "aws_s3_bucket_policy" "this" {
         Action    = "s3:*"
         Resource  = [local.bucket_arn, "${local.bucket_arn}/*"]
         Condition = { Bool = { "aws:SecureTransport" = "false" } }
+      },
+      {
+        Sid       = "DenyLogDeletionExceptBreakGlass"
+        Effect    = "Deny"
+        Principal = { AWS = "*" }
+        Action    = ["s3:DeleteObject", "s3:DeleteObjectVersion"]
+        Resource  = "${local.bucket_arn}/*"
+        Condition = { ArnNotEquals = { "aws:PrincipalArn" = local.break_glass_role_arn } }
+      },
+      {
+        Sid       = "DenyBucketDeletionExceptBreakGlass"
+        Effect    = "Deny"
+        Principal = { AWS = "*" }
+        Action    = "s3:DeleteBucket"
+        Resource  = local.bucket_arn
+        Condition = { ArnNotEquals = { "aws:PrincipalArn" = local.break_glass_role_arn } }
       },
       {
         Sid       = "CloudTrailAclCheck"

@@ -46,6 +46,12 @@ variable "trail_name" {
   }
 }
 
+variable "break_glass_role_name" {
+  description = "Name of the role, in the bucket's account, that may still delete logs and the bucket. Everyone else is denied."
+  type        = string
+  default     = "OrganizationAccountAccessRole"
+}
+
 variable "log_retention_days" {
   description = "Days after which log objects expire."
   type        = number
