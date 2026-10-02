@@ -37,4 +37,9 @@ run "sets_no_attribute_the_apply_role_cannot_update" {
     condition     = aws_iam_service_linked_role.cloudtrail.custom_suffix == null
     error_message = "A custom suffix would replace the role: it must stay unset."
   }
+
+  assert {
+    condition     = aws_iam_service_linked_role.cloudtrail.description == null
+    error_message = "A description would plan an iam:UpdateRole that the apply role cannot do: it must stay unset."
+  }
 }

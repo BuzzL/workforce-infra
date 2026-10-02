@@ -13,7 +13,6 @@ Both stacks keep the feature **off** while `audit_log_bucket_name` is unset or e
 
 ## Prerequisites in the management account
 
-- Trusted access for `cloudtrail.amazonaws.com` in the Organization, enabled once by hand.
 - The service-linked role `AWSServiceRoleForCloudTrail`, managed by `live/management/service_linked_role.tf` (imported, `prevent_destroy`). The first apply of the trail failed until it existed; why CloudTrail could not create it itself under the CI role was not identified. In a rebuilt account, create it first (`aws iam create-service-linked-role --aws-service-name cloudtrail.amazonaws.com`), then apply.
 
 ## Decisions
