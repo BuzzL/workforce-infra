@@ -149,8 +149,8 @@ run "role_has_no_other_permissions" {
 
   # The exclusive resources make Terraform remove anything else attached to the role.
   assert {
-    condition     = aws_iam_role_policies_exclusive.github_infra_management.policy_names == toset(["terraform-state", "plan-bootstrap-stack", "organization-units", "budget"])
-    error_message = "Only the four documented inline policies may exist on the role."
+    condition     = aws_iam_role_policies_exclusive.github_infra_management.policy_names == toset(["terraform-state", "plan-bootstrap-stack", "organization-units", "budget", "audit-trail"])
+    error_message = "Only the five documented inline policies may exist on the role."
   }
 
   assert {
@@ -274,8 +274,8 @@ run "plan_role_is_read_only" {
   }
 
   assert {
-    condition     = aws_iam_role_policies_exclusive.github_infra_management_plan.policy_names == toset(["terraform-state-read", "plan-bootstrap-stack", "plan-organization-units", "plan-budget"])
-    error_message = "Only the four documented inline policies may exist on the plan role."
+    condition     = aws_iam_role_policies_exclusive.github_infra_management_plan.policy_names == toset(["terraform-state-read", "plan-bootstrap-stack", "plan-organization-units", "plan-budget", "plan-audit-trail"])
+    error_message = "Only the five documented inline policies may exist on the plan role."
   }
 
   assert {
@@ -472,7 +472,7 @@ run "no_wildcards_in_any_allow" {
         !contains(flatten([for p in values(try(s.Principal, {})) : p]), "*")
       )
     ])
-    error_message = "Allow statements must not use * as principal, action or resource (the one resourceless read ReadDelegatedAdministrators is asserted literally above). The audit trail policies exist only with audit_trail_enabled, and their read-only resourceless statements are asserted literally in audit_trail_grants_are_exactly_the_documented_ones."
+    error_message = "Allow statements must not use * as principal, action or resource (the one resourceless read ReadDelegatedAdministrators is asserted literally above). The audit trail policies exist by default, and their read-only resourceless statements are asserted literally in audit_trail_grants_are_exactly_the_documented_ones."
   }
 }
 
@@ -606,7 +606,7 @@ run "management_role_may_bootstrap_listed_accounts_only" {
   }
 
   assert {
-    condition     = aws_iam_role_policies_exclusive.github_infra_management.policy_names == toset(["terraform-state", "plan-bootstrap-stack", "organization-units", "budget", "break-glass-bootstrap"])
+    condition     = aws_iam_role_policies_exclusive.github_infra_management.policy_names == toset(["terraform-state", "plan-bootstrap-stack", "organization-units", "budget", "audit-trail", "break-glass-bootstrap"])
     error_message = "The break-glass policy must be the last inline policy."
   }
 }
@@ -848,21 +848,21 @@ run "ci_roles_cannot_register_delegated_administrators" {
   }
 }
 
-run "audit_trail_grants_are_absent_until_enabled" {
+run "audit_trail_grants_are_absent_when_disabled" {
   command = apply
+
+  variables {
+    audit_trail_enabled = false
+  }
 
   assert {
     condition     = length(aws_iam_role_policy.audit_trail) == 0 && length(aws_iam_role_policy.plan_audit_trail) == 0
-    error_message = "The roles must gain no CloudTrail permission before audit_trail_enabled is set."
+    error_message = "The roles must gain no CloudTrail permission when audit_trail_enabled is false."
   }
 }
 
 run "audit_trail_grants_are_exactly_the_documented_ones" {
   command = apply
-
-  variables {
-    audit_trail_enabled = true
-  }
 
   # The whole policy, literally. There is no DeleteTrail and no StopLogging on purpose.
   assert {

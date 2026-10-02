@@ -89,7 +89,7 @@ variable "budget_name" {
 }
 
 variable "audit_trail_enabled" {
-  description = "Grant the management CI roles what the organization trail needs (docs/AUDIT_LOGGING.md). Set locally, once, before the trail is created in live/management; false until then."
+  description = "Grant the management CI roles what the organization trail needs (docs/AUDIT_LOGGING.md). True now that the grants are applied: CI plans bootstrap/ without any local variable, so a false default would plan their removal. Set false only to take the grants away on purpose."
   type        = bool
-  default     = false
+  default     = true
 }

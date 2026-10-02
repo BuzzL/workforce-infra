@@ -1,5 +1,6 @@
-# What CI needs for the organization trail of live/management (docs/AUDIT_LOGGING.md). Off
-# until var.audit_trail_enabled is set locally, so the roles gain nothing before the rollout.
+# What CI needs for the organization trail of live/management (docs/AUDIT_LOGGING.md). On by
+# default, because CI plans this stack without any local variable; set audit_trail_enabled to
+# false only to take the grants away on purpose.
 locals {
   # Must equal the default name of modules/organization-trail, which the log bucket policy
   # also names in its trail ARN.
