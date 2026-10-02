@@ -185,7 +185,7 @@ jobs:
           {
             echo "## Terraform plan"
             echo
-            echo "Read-only plan through the management-plan environment, without a lock, for commit \`${SHA:0:7}\`."
+            echo "Read-only plan through the \`<stack>-plan\` environments, without a lock, for commit \`${SHA:0:7}\`."
             echo
             while IFS= read -r f; do
               # Only a header of the expected shape is printed outside the code fence.
