@@ -22,11 +22,13 @@ Keys are PascalCase, a single word, case-sensitive, and never start with `aws:` 
 | `Project` | yes | `workforce` | `^workforce$` | the project, the same word as in resource names |
 | `Environment` | yes | the **name** of the account the resource lives in: `management`, `security`, `workforce`, `test`, `quality`, `demo` | one of the names in `scripts/environment-keys.tsv` | where it runs. The name, not the four-letter key: a key is never accepted where a name is expected (`docs/ENVIRONMENTS.md`) |
 | `App` | yes | `agent`, `platform`, or a registered application (`testbed`) | `^[a-z0-9]{1,16}$` | what the resource belongs to. Matches the `<name>` part of its resource name |
-| `Repository` | yes | the repository that declares it, without owner | `^workforce-[a-z]+$` | where to change it |
-| `ManagedBy` | yes | `terraform`, `cloudformation` or `manual` | closed list | the tool that owns it. `manual` is for break-glass and bootstrap and needs a note in the Linear issue |
+| `Repository` | yes | the repository that holds that code, without owner | `^workforce-[a-z]+$` | where to change it. Together with `ManagedBy` and `Stack` it is the full pointer: repository, technology, unit of deployment |
+| `ManagedBy` | yes | the **technology** whose code is the source of truth: `terraform`, `cdk`, `sam`, `cloudformation` (a hand-written template) or `manual` | closed list | what to run to change it. It names the tool the code is written in, not the engine: a CDK or SAM stack is deployed by CloudFormation but is `cdk` or `sam`. `manual` is for break-glass and bootstrap and needs a note in the Linear issue |
 | `Stack` | yes | the Terraform root stack path (`live/management`) or the CloudFormation stack name | `^[A-Za-z0-9/_-]{1,128}$` | which unit of deployment owns it |
 | `Archetype` | for applications | `lambda`, and later `ecs-service`, `ecs-task` | closed list | the workload archetype of the application |
 | `Target` | when different from `Environment` | the **name** of the environment the resource serves, for resources that live in another account | same as `Environment` | for example the ExternalId secret of `quality`, which lives in `workforce`: `Environment=workforce`, `Target=quality` |
+
+Reading the three together: `Repository=workforce-infra`, `ManagedBy=terraform`, `Stack=live/management` means "change `live/management` in `workforce-infra` with Terraform". A new technology (for example Pulumi) is a new value in the list, added here first.
 
 Rules for values:
 
@@ -41,7 +43,7 @@ Not used on purpose: a ticket or PR number (it changes and invites drift), an ow
 | Where | Mechanism |
 |---|---|
 | Terraform stacks | `default_tags` of every AWS provider block, fed by the `tags` variable. Modules also take `tags` for the resources the provider cannot default-tag (`aws_iam_role_policies_exclusive`, resources created by services). One provider block per stack, so one place |
-| CloudFormation / SAM / CDK (application repositories) | stack tags, which CloudFormation propagates to the stack's resources. The deploy role is allowed to set them at `CreateStack`, and the stack's tags are fixed by the pipeline, not the template |
+| CDK / SAM / CloudFormation (application repositories) | stack tags, which CloudFormation propagates to the stack's resources, with `ManagedBy` set to `cdk`, `sam` or `cloudformation`. The deploy role is allowed to set them at `CreateStack`, and the stack's tags are fixed by the pipeline, not the template |
 | Manual (break-glass, bootstrap) | the same tags, `ManagedBy=manual`, added before the issue is closed |
 | Resources a service creates itself (CloudTrail log delivery, auto-created log groups) | not tagged. They are declared explicitly where it matters (`docs/ENVIRONMENT_PERMISSIONS.md`, explicit names) so that they can be tagged |
 
