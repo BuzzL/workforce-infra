@@ -1021,15 +1021,15 @@ run "service_control_policy_permissions_are_exactly_the_documented_ones" {
   assert {
     condition = alltrue([
       for s in jsondecode(aws_iam_role_policy.service_control_policies.policy).Statement :
-      !contains(s.Action, "organizations:AttachPolicy") || (
-        !anytrue([for r in s.Resource : strcontains(r, ":root/") || strcontains(r, ":account/") || strcontains(r, "arn:aws:organizations::aws:") || r == "*"])
+      !(contains(s.Action, "organizations:AttachPolicy") || contains(s.Action, "organizations:DetachPolicy")) || (
+        alltrue([for r in s.Resource : (strcontains(r, ":policy/") || strcontains(r, ":ou/")) && !strcontains(r, "arn:aws:organizations::aws:") && r != "*"])
       )
     ])
-    error_message = "AttachPolicy and DetachPolicy must never be allowed on the root, an account, an AWS-managed policy or *."
+    error_message = "AttachPolicy and DetachPolicy may only name an SCP of this Organization or an organizational unit: never the root, an account, an AWS-managed policy, *, or a broad pattern."
   }
 
   assert {
-    condition     = !anytrue([for a in flatten([for s in jsondecode(aws_iam_role_policy.service_control_policies.policy).Statement : s.Action]) : a == "*" || endswith(a, ":*") || contains(["organizations:EnablePolicyType", "organizations:DisablePolicyType", "organizations:MoveAccount", "organizations:DeleteOrganization"], a)])
+    condition     = !anytrue([for a in flatten([for s in jsondecode(aws_iam_role_policy.service_control_policies.policy).Statement : s.Action]) : strcontains(a, "*") || contains(["organizations:EnablePolicyType", "organizations:DisablePolicyType", "organizations:MoveAccount", "organizations:DeleteOrganization"], a)])
     error_message = "No wildcard action, and no change of policy types or account placement."
   }
 

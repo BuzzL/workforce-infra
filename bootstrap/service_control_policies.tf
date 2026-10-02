@@ -42,8 +42,10 @@ resource "aws_iam_role_policy" "service_control_policies" {
         Action   = ["organizations:CreatePolicy"]
         Resource = ["*"]
       },
-      # The stack owns its SCPs, so it may change and delete them, as it may the OUs. The imported
-      # hand-made one has prevent_destroy in the code.
+      # The stack owns its SCPs, so it may change and delete them, as it may the OUs. IAM does not
+      # tell the imported hand-made root SCP apart: its deletion is blocked in the code
+      # (prevent_destroy), and a change of its content is guarded by the review of the PR and the
+      # approval of the `management` environment.
       {
         Sid      = "ManageServiceControlPolicies"
         Effect   = "Allow"
