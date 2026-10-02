@@ -25,12 +25,17 @@ cd "$(dirname "$0")/.."
 keys_file=${ENV_KEYS_FILE:-scripts/environment-keys.tsv}
 environments=""
 seen_keys=" "
-while IFS=$'\t' read -r name ou key description; do
+seen_names=" "
+# `|| [ -n "$name" ]` keeps a last row that has no trailing newline; a CR (CRLF file) is stripped.
+while IFS=$'\t' read -r name ou key description || [ -n "$name" ]; do
+  description=${description%$'\r'}
   case "$name" in "" | \#*) continue ;; esac
   [[ $name =~ ^[a-z]+$ ]] || { echo "name must be lowercase letters: $name" >&2; exit 1; }
   [[ $key =~ ^[a-z]{4}$ ]] || { echo "key of $name must be exactly four lowercase letters (^[a-z]{4}\$): $key" >&2; exit 1; }
   case "$ou" in Management | Development | Environments | Operations) ;; *) echo "unknown OU for $name: $ou" >&2; exit 1 ;; esac
-  [ -n "$description" ] || { echo "description of $name is empty" >&2; exit 1; }
+  [[ $description =~ [^[:space:]] ]] || { echo "description of $name is empty" >&2; exit 1; }
+  case "$seen_names" in *" $name "*) echo "duplicate name: $name" >&2; exit 1 ;; esac
+  seen_names+="$name "
   case "$seen_keys" in *" $key "*) echo "duplicate key: $key" >&2; exit 1 ;; esac
   seen_keys+="$key "
   if [ "$ou" = Environments ]; then environments+="$name "; fi

@@ -180,9 +180,20 @@ printf 'quality\tEnvironments\tqual\t\n' > bad-keys.tsv
 expect fail:"description" "ci-stacks refuses an empty description" env ENV_KEYS_FILE=bad-keys.tsv scripts/ci-stacks.sh
 printf 'security\tManagement\tscrt\tx\n' > bad-keys.tsv
 expect fail:"Environments OU" "ci-stacks refuses a table without an account in the Environments OU" env ENV_KEYS_FILE=bad-keys.tsv scripts/ci-stacks.sh
+printf 'test\tEnvironments\ttest\tx\ntest\tEnvironments\tdemo\tx\n' > bad-keys.tsv
+expect fail:"duplicate name" "ci-stacks refuses a duplicate name" env ENV_KEYS_FILE=bad-keys.tsv scripts/ci-stacks.sh
+printf 'quality\tEnvironments\tqual\t \n' > bad-keys.tsv
+expect fail:"description" "ci-stacks refuses a blank description" env ENV_KEYS_FILE=bad-keys.tsv scripts/ci-stacks.sh
+printf 'quality\tEnvironments\tqual\t\r\n' > bad-keys.tsv
+expect fail:"description" "ci-stacks refuses an empty description in a CRLF file" env ENV_KEYS_FILE=bad-keys.tsv scripts/ci-stacks.sh
+# The stacks written above include live/environments/demo: it only maps if the last row (demo, no
+# trailing newline) is kept, so a pass proves the row was read.
+printf 'test\tEnvironments\ttest\tx\nquality\tEnvironments\tqual\tx\ndemo\tEnvironments\tdemo\tx' > bad-keys.tsv
+expect pass "ci-stacks keeps a last row without a trailing newline" env ENV_KEYS_FILE=bad-keys.tsv scripts/ci-stacks.sh
 rm bad-keys.tsv
-# The key is not the name: neither the retired qa nor the key qual maps to a stack.
-for old in qa qual; do
+# The key is not the name, and an account outside the Environments OU is not an environment:
+# neither the retired qa, the key qual, nor management, security or workforce map to a stack.
+for old in qa qual management security workforce; do
   rm -rf live/environments/$old
   mkdir -p live/environments/$old && printf 'terraform {}\n' > live/environments/$old/main.tf
   expect fail:unmapped "ci-stacks does not map live/environments/$old" scripts/ci-stacks.sh

@@ -18,6 +18,7 @@ on:
       - .terraform-version
       - scripts/stacks.sh
       - scripts/ci-stacks.sh
+      - scripts/environment-keys.tsv
       - scripts/redact.sh
       - .github/workflows/terraform.yml
   push:
@@ -29,6 +30,7 @@ on:
       - .terraform-version
       - scripts/stacks.sh
       - scripts/ci-stacks.sh
+      - scripts/environment-keys.tsv
       - scripts/redact.sh
       - .github/workflows/terraform.yml
 
