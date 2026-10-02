@@ -34,7 +34,7 @@ Notes:
 
 ## 3. Account email scheme
 
-**Decision:** one base mailbox with plus-addressing, `<local>+<account>@<domain>`, one address per account: `management`, `security`, `workforce` and later `test`, `qa`, `demo`. The account name is the same lowercase name used everywhere else (see the workspace `CLAUDE.md`).
+**Decision:** one base mailbox with plus-addressing, `<local>+<account>@<domain>`, one address per account: `management`, `security`, `workforce` and later `test`, `quality`, `demo`. The account name is the same lowercase name used everywhere else (see the workspace `CLAUDE.md`).
 
 **Why:** AWS requires a unique email per account, and a plus-address delivers to the same mailbox, so there is nothing to administer per account. Root recovery and alerts all land in one place that the maintainer controls.
 

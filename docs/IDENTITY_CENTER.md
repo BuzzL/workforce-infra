@@ -92,4 +92,4 @@ Done when these are confirmed in chat for every account (IAT-33).
 ## Not covered
 
 - Groups and more than one user: out of scope, there is one maintainer.
-- The `test`, `qa` and `demo` accounts (M3): add them to `ASSIGNMENT_ACCOUNT_IDS` when they exist.
+- The `test`, `quality` and `demo` accounts (M3): add them to `ASSIGNMENT_ACCOUNT_IDS` when they exist.

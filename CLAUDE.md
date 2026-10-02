@@ -1,6 +1,6 @@
 # workforce-infra
 
-Terraform monorepo for the AWS side of the AI Workforce: Organization, the workforce account and the `test` / `qa` / `demo` environment accounts. Cross-repo context lives in the workspace `CLAUDE.md` one level up, when it's present.
+Terraform monorepo for the AWS side of the AI Workforce: Organization, the workforce account and the `test` / `quality` / `demo` environment accounts. Cross-repo context lives in the workspace `CLAUDE.md` one level up, when it's present.
 
 ## Scope
 
@@ -23,7 +23,7 @@ This repo is the **AWS provider** side of the workforce. GitHub resources (repos
 - `.github/workflows/terraform.yml`: read-only plan on pull requests (`management-plan` environment, redacted PR comment) and, after a merge to `main`, one approval-gated job per stack. The repo is public: `AWS_ROLE_ARN`, `AWS_ROLE_ID`, `STATE_BUCKET`, `ORGANIZATION_ROOT_ID`, `BUDGET_ALERT_EMAIL` and the audit logging values (`AUDIT_LOG_BUCKET`, `ORGANIZATION_ID`, `MANAGEMENT_ACCOUNT_ID`) are environment secrets and Terraform output goes through `scripts/redact.sh`. `scripts/ci-stacks.sh` maps paths to environments, `scripts/check-workflow.sh` checks the workflow against an allowlist. `bootstrap/` is plan only.
 - `docs/BOOTSTRAP.md`: manual bootstrap of the management account, SSO and the Terraform tooling.
 - `docs/IDENTITY_CENTER.md`: Identity Center delegated to `security`, permission sets, assignments, local SSO profiles. The delegation is in `bootstrap/identity.tf` (applied locally), the sets in `live/accounts/security/identity.tf`.
-- `docs/ENVIRONMENTS.md`: environments, branch model and promotion.
+- `docs/ENVIRONMENTS.md`: environments, branch model and promotion. Names are explanatory (`test`, `quality`, `demo`, `management`, `security`, `workforce`); each has a unique four-letter key (`test`, `qual`, `demo`, `root`, `scrt`, `wrkf`) for AWS naming conventions, kept in `scripts/environment-keys.tsv` and validated by `scripts/ci-stacks.sh`.
 - `docs/ORGANIZATION_INPUTS.md`: decision record for the region, the region-deny SCP exceptions and the account email scheme.
 - `scripts/set-environment-secrets.sh` and `scripts/set-account-environment-secrets.sh` both set GitHub Environment secrets, for different scopes: the first for the **management** account (existing environments `management` and `management-plan`, Organization-wide values), the second for **one member account** (creates `<account>` and `<account>-plan`, per-account role and state values). Each script's header says which to use.
 - `Makefile`, `scripts/`: `make check` runs fmt, validate, tflint, version and Dependabot conventions, trivy, `terraform test` and `make selftest` (the gates' own test). CI runs the same targets. Loops live in `scripts/each.sh`, not in recipes (macOS Make 3.81). Terraform version: `.terraform-version`.

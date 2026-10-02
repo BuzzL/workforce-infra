@@ -9,13 +9,38 @@
 #   bootstrap             management          no (local)      management-plan
 #   live/management       management          yes             management-plan
 #   live/accounts/security|workforce  same name  no (local)  <acct>-plan, once <stack>/.ci-enabled exists
-#   live/environments/test|qa|demo  same name  yes  none
+#   live/environments/<name>  same name  yes  none  (accounts of the Environments OU in scripts/environment-keys.tsv)
 #
 # A stack name is used in JSON and in job names, so it is limited to [a-z0-9/_-], and only
 # the environments named below exist: a directory name cannot inject anything or select
 # another environment.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+# Names and keys (scripts/environment-keys.tsv, documented in docs/ENVIRONMENTS.md). The name
+# is explanatory and used for the account, the live/environments/<name> stack, the GitHub
+# Environment and APP_ENV; the key is exactly four lowercase letters, unique, and used in the
+# naming conventions of AWS resources so that strict regexps can check them. ENV_KEYS_FILE
+# exists for the selftest.
+keys_file=${ENV_KEYS_FILE:-scripts/environment-keys.tsv}
+environments=""
+seen_keys=" "
+seen_names=" "
+# `|| [ -n "$name" ]` keeps a last row that has no trailing newline; a CR (CRLF file) is stripped.
+while IFS=$'\t' read -r name ou key description || [ -n "$name" ]; do
+  description=${description%$'\r'}
+  case "$name" in "" | \#*) continue ;; esac
+  [[ $name =~ ^[a-z]+$ ]] || { echo "name must be lowercase letters: $name" >&2; exit 1; }
+  [[ $key =~ ^[a-z]{4}$ ]] || { echo "key of $name must be exactly four lowercase letters (^[a-z]{4}\$): $key" >&2; exit 1; }
+  case "$ou" in Management | Development | Environments | Operations) ;; *) echo "unknown OU for $name: $ou" >&2; exit 1 ;; esac
+  [[ $description =~ [^[:space:]] ]] || { echo "description of $name is empty" >&2; exit 1; }
+  case "$seen_names" in *" $name "*) echo "duplicate name: $name" >&2; exit 1 ;; esac
+  seen_names+="$name "
+  case "$seen_keys" in *" $key "*) echo "duplicate key: $key" >&2; exit 1 ;; esac
+  seen_keys+="$key "
+  if [ "$ou" = Environments ]; then environments+="$name "; fi
+done < "$keys_file"
+[ -n "$environments" ] || { echo "no account in the Environments OU in $keys_file" >&2; exit 1; }
 
 mode=${1:-apply}
 case "$mode" in apply | plan) ;; *) echo "usage: $0 [apply|plan]" >&2; exit 2 ;; esac
@@ -35,8 +60,10 @@ while IFS= read -r stack; do
     live/accounts/security | live/accounts/workforce)
       [ -f "$stack/.ci-enabled" ] || continue
       env=${stack#live/accounts/} apply=false plan_env=${stack#live/accounts/}-plan ;;
-    live/environments/test | live/environments/qa | live/environments/demo)
-      env=${stack#live/environments/} apply=true ;;
+    live/environments/*)
+      env=${stack#live/environments/}
+      case " $environments " in *" $env "*) ;; *) echo "unmapped stack: $stack" >&2; exit 1 ;; esac
+      apply=true ;;
     *)                     echo "unmapped stack: $stack" >&2; exit 1 ;;
   esac
   if [ "$mode" = plan ]; then
