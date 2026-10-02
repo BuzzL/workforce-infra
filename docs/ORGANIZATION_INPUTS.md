@@ -1,6 +1,6 @@
 # Organization inputs: region, SCP exceptions and account emails
 
-Decision record. It fixes the inputs the rest of milestone M2 (Organization stack, accounts, SCPs) reads, so no later change guesses them.
+Decision record. It fixes the inputs that the Organization stack, the accounts and the SCPs read, so no later change guesses them.
 
 ## 1. Region
 
@@ -19,7 +19,7 @@ Attach the SCP in stages and run a Bedrock call from the workforce account after
 
 ## 2. Global-service exceptions for the region-deny SCP
 
-The SCP denies every action outside the allowed region, except the actions of services that are global or served from `us-east-1` only. The exceptions are an explicit list of service prefixes, asserted literally in a test. The SCP expresses them with `NotAction` in a `Deny`, narrowed by `StringNotEquals` on `aws:RequestedRegion` (module `modules/scp-baseline`, IAT-35). A `NotAction` is only used in a Deny, never in an Allow, and the PR that defines it needs the maintainer's approval like any SCP. The module defines the four baseline SCPs and attaches none: attaching is staged in IAT-36.
+The SCP denies every action outside the allowed region, except the actions of services that are global or served from `us-east-1` only. The exceptions are an explicit list of service prefixes, asserted literally in a test. The SCP expresses them with `NotAction` in a `Deny`, narrowed by `StringNotEquals` on `aws:RequestedRegion` (module `modules/scp-baseline`). A `NotAction` is only used in a Deny, never in an Allow, and the PR that defines it needs the maintainer's approval like any SCP. The module defines the four baseline SCPs and attaches none: attaching is staged, one SCP at a time, each proved with a controlled denied call.
 
 | Area | Service prefixes |
 |---|---|
@@ -34,7 +34,7 @@ Notes:
 
 ## 3. Account email scheme
 
-**Decision:** one base mailbox with plus-addressing, `<local>+<account>@<domain>`, one address per account: `management`, `security`, `workforce` and later `test`, `quality`, `demo`. The account name is the same lowercase name used everywhere else (see the workspace `CLAUDE.md`).
+**Decision:** one base mailbox with plus-addressing, `<local>+<account>@<domain>`, one address per account: `management`, `security`, `workforce`, `test`, `quality` and `demo`. The account name is the same lowercase name used everywhere else (`docs/ENVIRONMENTS.md`).
 
 **Why:** AWS requires a unique email per account, and a plus-address delivers to the same mailbox, so there is nothing to administer per account. Root recovery and alerts all land in one place that the maintainer controls.
 

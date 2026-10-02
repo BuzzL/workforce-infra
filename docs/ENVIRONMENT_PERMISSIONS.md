@@ -8,7 +8,7 @@ Scope of the decision:
 
 - **The environment accounts hold applications, not infrastructure that Terraform owns.** A deployable repository (the testbed first) creates and updates its own resources through CloudFormation (a template written by hand or synthesized by CDK, with no transform, see "Templates" below), in its own pipeline. `workforce-infra` provides only the *access*: the roles below. It never owns an application's function, queue or service.
 - **The first workload is serverless, Lambda with an alias,** because it costs nothing to maintain. The model is a catalogue of **archetypes** so that another repository with the same kind of workload is enabled by instantiating a template, not by writing a policy. Further archetypes (`ecs-service`, `ecs-task`) are future sections of this document.
-- Placeholders only. No account IDs, emails or ARNs are written here (`scripts/check-docs-public.sh` enforces it).
+- Placeholders only. No account IDs, emails or ARNs are written here (`scripts/check-docs.sh` enforces it).
 
 ## Naming rule
 
@@ -281,7 +281,7 @@ The matrix is a table on purpose: the module tests assert the inclusion with `te
 
 ## Guardrails
 
-- The M2 SCPs apply to the Environments OU. Nothing here loosens them and no SCP is added.
+- The Organization's SCPs apply to the Environments OU. Nothing here loosens them and no SCP is added.
 - No `*` principal, no `*` or `service:*` action, no `NotAction`, `NotPrincipal` or `NotResource` in an Allow, as in `CLAUDE.md`.
 - The permissions boundary `<acct>-<project>-<app>-boundary` can lock a role out. It, the `Resource: "*"` exception above, and any `Deny` added by the implementation, need the maintainer's explicit approval in review. This decision introduces no `Deny` statement. A `Deny` may use a wildcard only when it is narrowed by a `Condition` or by specific resources, and it is asserted literally in a test.
 

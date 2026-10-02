@@ -247,25 +247,58 @@ want_redacted=$(printf '%s\n' \
   '  ~ resource "aws_iam_role" "x" {')
 if [ "$redacted" = "$want_redacted" ]; then echo "ok   redact hides account IDs, unique IDs, bucket names, Organization IDs and emails only"; else echo "FAIL redact"; echo "$redacted"; failed=1; fi
 
-# The public-docs gate passes on placeholders and refuses an account ID, an ARN with an ID and an email.
-mkdir -p docs-ok docs-id docs-arn docs-mail docs-sep docs-letters docs-13 docs-gov
-echo 'role arn:aws:iam::<account-id>:role/test-agent in <workforce-account-id>' > docs-ok/A.md
-echo 'account 123456789012 here' > docs-id/A.md
-echo 'arn:aws:iam::123456789012:role/x' > docs-arn/A.md
-echo 'mail someone@example.com' > docs-mail/A.md
-echo 'account 1234-5678-9012 here' > docs-sep/A.md
-echo 'idx123456789012y' > docs-letters/A.md
-echo 'number 1234567890123 is 13 digits' > docs-13/A.md
-echo 'arn:aws-us-gov:iam::123456789012:role/x' > docs-gov/A.md
-expect pass "docs: placeholders are accepted" scripts/check-docs-public.sh docs-ok
-expect fail:"12-digit" "docs: an account ID is refused" scripts/check-docs-public.sh docs-id
-expect fail:"ARN with an account ID" "docs: an ARN with an ID is refused" scripts/check-docs-public.sh docs-arn
-expect fail:"email address" "docs: an email is refused" scripts/check-docs-public.sh docs-mail
-expect fail:"separators" "docs: an ID with separators is refused" scripts/check-docs-public.sh docs-sep
-expect fail:"12-digit" "docs: an ID next to letters is refused" scripts/check-docs-public.sh docs-letters
-expect fail:"no such directory" "docs: a missing directory is an error, not a pass" scripts/check-docs-public.sh docs-missing
-expect pass "docs: a 13-digit number is not an account ID" scripts/check-docs-public.sh docs-13
-expect fail:"ARN with an account ID" "docs: an ARN of another partition is refused" scripts/check-docs-public.sh docs-gov
+# The docs gate: a clean tree passes, and each kind of mess is refused for its own reason.
+# docs_tree <dir> <file> <content>: a minimal clean tree with one doc, then <file> replaced by <content>.
+docs_tree() {
+  mkdir -p "$1/docs"
+  printf '# Good\n\nA clean document.\n' > "$1/docs/GOOD_DOC.md"
+  printf '# Repo\n\n- `docs/GOOD_DOC.md`: a clean document.\n' > "$1/CLAUDE.md"
+  [ -z "${2:-}" ] || printf '%s\n' "$3" > "$1/$2"
+}
+docs_tree docs-ok
+docs_tree docs-example docs/EXAMPLE_DOC.md 'mail owner@example.com, `docs/GOOD_DOC.md`, `live/environments/test` and `<acct>` are fine'
+printf '%s\n' '- `docs/EXAMPLE_DOC.md`: x' >> docs-example/CLAUDE.md
+docs_tree docs-id docs/GOOD_DOC.md 'account 123456789012 here'
+docs_tree docs-sep docs/GOOD_DOC.md 'account 1234-5678-9012 here'
+docs_tree docs-letters docs/GOOD_DOC.md 'idx123456789012y'
+docs_tree docs-13 docs/GOOD_DOC.md 'number 1234567890123 is 13 digits'
+docs_tree docs-arn docs/GOOD_DOC.md 'arn:aws:iam::123456789012:role/x'
+docs_tree docs-gov docs/GOOD_DOC.md 'arn:aws-us-gov:iam::123456789012:role/x'
+docs_tree docs-mail docs/GOOD_DOC.md 'mail someone@gmail.com'
+docs_tree docs-ticket docs/GOOD_DOC.md 'done in IAT-12'
+docs_tree docs-trivy docs/GOOD_DOC.md 'Trivy AWS-0015 is waived'
+docs_tree docs-milestone docs/GOOD_DOC.md 'comes in M3'
+docs_tree docs-todo docs/GOOD_DOC.md 'TODO write this'
+docs_tree docs-qa docs/GOOD_DOC.md 'deploy to qa first'
+docs_tree docs-qa-ok docs/GOOD_DOC.md 'qa was renamed quality'
+docs_tree docs-name docs/bad-name.md 'a clean document'
+printf '%s\n' '- `docs/bad-name.md`: x' >> docs-name/CLAUDE.md
+docs_tree docs-orphan docs/ORPHAN.md 'a clean document'
+docs_tree docs-dead docs/GOOD_DOC.md 'see `scripts/missing.sh` and `docs/NOPE.md`'
+docs_tree docs-local docs/GOOD_DOC.md 'edit `live/management/terraform.tfvars` and `bootstrap/backend.hcl`'
+mkdir -p docs-example/live/management && echo 'x = "owner@example.com"' > docs-example/live/management/terraform.tfvars.example
+mkdir -p docs-example-bad && docs_tree docs-example-bad && echo 'x = "owner@gmail.com"' > docs-example-bad/a.tfvars.example
+expect pass "docs: a clean tree passes" scripts/check-docs.sh docs-ok
+expect pass "docs: example.com, placeholders and local paths are accepted" scripts/check-docs.sh docs-example
+expect pass "docs: qa next to quality (the rename) is accepted" scripts/check-docs.sh docs-qa-ok
+expect pass "docs: files that are never committed are not looked up" scripts/check-docs.sh docs-local
+expect pass "docs: a 13-digit number is not an account ID" scripts/check-docs.sh docs-13
+expect pass "docs: tool IDs such as AWS-0015 are not tickets" scripts/check-docs.sh docs-trivy
+expect fail:"12-digit" "docs: an account ID is refused" scripts/check-docs.sh docs-id
+expect fail:"separators" "docs: an ID with separators is refused" scripts/check-docs.sh docs-sep
+expect fail:"12-digit" "docs: an ID next to letters is refused" scripts/check-docs.sh docs-letters
+expect fail:"ARN with an account ID" "docs: an ARN with an ID is refused" scripts/check-docs.sh docs-arn
+expect fail:"ARN with an account ID" "docs: an ARN of another partition is refused" scripts/check-docs.sh docs-gov
+expect fail:"email address" "docs: an email is refused" scripts/check-docs.sh docs-mail
+expect fail:"email address" "docs: an email in an example file is refused" scripts/check-docs.sh docs-example-bad
+expect fail:"ticket ID" "docs: a ticket ID is refused" scripts/check-docs.sh docs-ticket
+expect fail:"milestone" "docs: a milestone number is refused" scripts/check-docs.sh docs-milestone
+expect fail:"unfinished marker" "docs: a TODO is refused" scripts/check-docs.sh docs-todo
+expect fail:"not qa" "docs: the qa environment is refused" scripts/check-docs.sh docs-qa
+expect fail:"UPPERCASE_WITH_UNDERSCORES" "docs: a lowercase file name is refused" scripts/check-docs.sh docs-name
+expect fail:"not named in CLAUDE.md" "docs: an orphaned doc is refused" scripts/check-docs.sh docs-orphan
+expect fail:"does not exist" "docs: a dead path is refused" scripts/check-docs.sh docs-dead
+expect fail:"no docs directory" "docs: a missing tree is an error, not a pass" scripts/check-docs.sh docs-missing
 
 # Structure of the workflow: it passes as written and each mutation is rejected.
 expect pass "workflow structure holds" scripts/check-workflow.sh "$work/wf/terraform.yml"

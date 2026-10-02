@@ -2,7 +2,7 @@
 
 ## Context
 
-`workforce-github` manages GitHub as code (repos, rulesets, GitHub Environments) with the GitHub provider. The provider is not AWS, so its CI needs AWS for two things only: the Terraform state of its stack `live/github` in the state bucket, and the key of the GitHub App the provider authenticates as. This repo owns the AWS side of that; `workforce-github` owns the GitHub side (see the Scope section of `CLAUDE.md`).
+`workforce-github` manages GitHub as code (repos, rulesets, GitHub Environments) with the GitHub provider. The provider is not AWS, so its CI needs AWS for two things only: the Terraform state of its stack `workforce-github/live/github` in the state bucket, and the key of the GitHub App the provider authenticates as. This repo owns the AWS side of that; `workforce-github` owns the GitHub side (see the Scope section of `CLAUDE.md`).
 
 ## Decisions
 
@@ -10,16 +10,16 @@
 
 | Role | Trusted environment (of `workforce-github`) | Can do |
 |---|---|---|
-| `github-infra-github` | `github` | read and write the state and lockfile of `live/github`, read the write App's key |
-| `github-infra-github-plan` | `github-plan` | read the state object of `live/github`, read the read-only App's key |
+| `github-infra-github` | `github` | read and write the state and lockfile of `workforce-github/live/github`, read the write App's key |
+| `github-infra-github-plan` | `github-plan` | read the state object of `workforce-github/live/github`, read the read-only App's key |
 
 Both trust the OIDC provider of the account for one exact subject (`repo:<owner>@<id>/workforce-github@<id>:environment:<environment>`, `StringEquals` on `sub` and `aud`). The `github-plan` environment has no reviewer and accepts any branch, so its role is read-only and only ever sees the read-only App. No other AWS permission: nothing in AWS is managed through them.
 
 Same account as the state bucket, so no bucket policy change: the identity policies are enough. `s3:ListBucket` is not narrowed by prefix, like the management roles: without it S3 answers 403 instead of "not found" for a state object that does not exist yet, and `terraform init` lists the `env:/` prefix. It shows key names only.
 
-The trust relies on the GitHub Environments of `workforce-github`: `github` must have a required reviewer, no admin bypass and `main` only; `github-plan` has no reviewer and any branch, so its role must stay read-only. Nothing here can verify that, `workforce-github` manages it (`modules/github-environment`).
+The trust relies on the GitHub Environments of `workforce-github`: `github` must have a required reviewer, no admin bypass and `main` only; `github-plan` has no reviewer and any branch, so its role must stay read-only. Nothing here can verify that, `workforce-github` manages it (`workforce-github/modules/github-environment`).
 
-**Accepted risk:** the plan role can read the whole state of `live/github`, and code on any branch can run with it (pushing a branch needs write access, fork PRs get no token). That is acceptable only because `live/github` never manages secret values: `workforce-github` fails its checks on a `github_*secret*` resource and rejects secret-looking variable names. If that ever changes, the plan role must lose the state read.
+**Accepted risk:** the plan role can read the whole state of `workforce-github/live/github`, and code on any branch can run with it (pushing a branch needs write access, fork PRs get no token). That is acceptable only because `workforce-github/live/github` never manages secret values: `workforce-github` fails its checks on a `github_*secret*` resource and rejects secret-looking variable names. If that ever changes, the plan role must lose the state read.
 
 ### 2. The App keys are parameters created by hand
 

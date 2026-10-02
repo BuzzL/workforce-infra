@@ -32,9 +32,9 @@ workflows:
 lifecycle:
 	scripts/check-account-lifecycle.sh
 
-# The repo is public: no account IDs, ARNs with IDs or emails in docs.
+# Docs stay clean: nothing a public repo must hide, no tickets or milestones, no orphans or dead paths.
 docs:
-	scripts/check-docs-public.sh
+	scripts/check-docs.sh
 
 # Proves the gates above pass on valid code and fail on broken code.
 selftest:
