@@ -153,4 +153,11 @@ run "no_log_bucket_reads_while_it_is_off" {
     condition     = length(local.audit_read_statements) == 0
     error_message = "While audit logging is off the CI roles get no log bucket permission."
   }
+
+  # The switch is not a secret. If it were sensitive, the CI roles' policies would be marked
+  # sensitive too and plan an in-place update (a false drift) while logging is off.
+  assert {
+    condition     = !issensitive(local.audit_logging) && !issensitive(local.audit_read_statements)
+    error_message = "The on/off switch and the statements it decides must not be sensitive while logging is off."
+  }
 }
