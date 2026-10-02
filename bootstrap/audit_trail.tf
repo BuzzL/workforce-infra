@@ -30,7 +30,7 @@ locals {
 # so a change to the trail is only as safe as the review of its PR and the approval of the
 # `management` environment. Trusted access for CloudTrail in the Organization was enabled once
 # by hand; the role may repeat it for that one service principal only (the condition below),
-# because CloudTrail does so itself when it creates an organization trail.
+# because AWS documents that the principal creating an organization trail needs this permission.
 resource "aws_iam_role_policy" "audit_trail" {
   count = var.audit_trail_enabled ? 1 : 0
 
@@ -52,9 +52,10 @@ resource "aws_iam_role_policy" "audit_trail" {
         Action   = ["organizations:DescribeOrganization", "organizations:ListAccounts", "organizations:ListAWSServiceAccessForOrganization"]
         Resource = ["*"] # no resource-level permission; read only
       },
-      # CloudTrail enables its trusted access as part of creating an organization trail, with the
-      # caller's permissions, even when it is already on. Narrowed to that one service principal:
-      # CI cannot enable access for any other service.
+      # AWS documents that the principal creating an organization trail needs this permission. It
+      # is not known whether CreateTrail calls it when the access is already on; the failure did
+      # not name the denied call. Narrowed to that one service principal, so CI cannot enable
+      # access for any other service.
       {
         Sid       = "EnableCloudTrailTrustedAccess"
         Effect    = "Allow"
