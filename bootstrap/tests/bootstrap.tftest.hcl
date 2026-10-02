@@ -149,8 +149,8 @@ run "role_has_no_other_permissions" {
 
   # The exclusive resources make Terraform remove anything else attached to the role.
   assert {
-    condition     = aws_iam_role_policies_exclusive.github_infra_management.policy_names == toset(["terraform-state", "plan-bootstrap-stack", "organization-units", "budget", "audit-trail"])
-    error_message = "Only the five documented inline policies may exist on the role."
+    condition     = aws_iam_role_policies_exclusive.github_infra_management.policy_names == toset(["terraform-state", "plan-bootstrap-stack", "organization-units", "budget", "service-control-policies", "audit-trail"])
+    error_message = "Only the six documented inline policies may exist on the role."
   }
 
   assert {
@@ -274,8 +274,8 @@ run "plan_role_is_read_only" {
   }
 
   assert {
-    condition     = aws_iam_role_policies_exclusive.github_infra_management_plan.policy_names == toset(["terraform-state-read", "plan-bootstrap-stack", "plan-organization-units", "plan-budget", "plan-audit-trail"])
-    error_message = "Only the five documented inline policies may exist on the plan role."
+    condition     = aws_iam_role_policies_exclusive.github_infra_management_plan.policy_names == toset(["terraform-state-read", "plan-bootstrap-stack", "plan-organization-units", "plan-budget", "plan-service-control-policies", "plan-audit-trail"])
+    error_message = "Only the six documented inline policies may exist on the plan role."
   }
 
   assert {
@@ -606,7 +606,7 @@ run "management_role_may_bootstrap_listed_accounts_only" {
   }
 
   assert {
-    condition     = aws_iam_role_policies_exclusive.github_infra_management.policy_names == toset(["terraform-state", "plan-bootstrap-stack", "organization-units", "budget", "audit-trail", "break-glass-bootstrap"])
+    condition     = aws_iam_role_policies_exclusive.github_infra_management.policy_names == toset(["terraform-state", "plan-bootstrap-stack", "organization-units", "budget", "service-control-policies", "audit-trail", "break-glass-bootstrap"])
     error_message = "The break-glass policy must be the last inline policy."
   }
 }
@@ -966,7 +966,91 @@ run "audit_trail_grants_are_exactly_the_documented_ones" {
   }
 
   assert {
-    condition     = aws_iam_role_policies_exclusive.github_infra_management.policy_names == toset(["terraform-state", "plan-bootstrap-stack", "organization-units", "budget", "audit-trail"]) && aws_iam_role_policies_exclusive.github_infra_management_plan.policy_names == toset(["terraform-state-read", "plan-bootstrap-stack", "plan-organization-units", "plan-budget", "plan-audit-trail"])
+    condition     = aws_iam_role_policies_exclusive.github_infra_management.policy_names == toset(["terraform-state", "plan-bootstrap-stack", "organization-units", "budget", "service-control-policies", "audit-trail"]) && aws_iam_role_policies_exclusive.github_infra_management_plan.policy_names == toset(["terraform-state-read", "plan-bootstrap-stack", "plan-organization-units", "plan-budget", "plan-service-control-policies", "plan-audit-trail"])
     error_message = "The new policies must be owned by the exclusive resources, so nothing else can be attached."
+  }
+}
+
+# SCP management: the apply role can create, change, tag, attach to organizational units and detach
+# the stack's SCPs; the plan role only reads. Asserted literally, so widening either is a visible,
+# reviewed change here.
+run "service_control_policy_permissions_are_exactly_the_documented_ones" {
+  command = apply
+
+  assert {
+    condition = jsondecode(aws_iam_role_policy.service_control_policies.policy) == {
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Sid      = "ReadServiceControlPolicies"
+          Effect   = "Allow"
+          Action   = ["organizations:DescribePolicy", "organizations:ListTagsForResource", "organizations:ListTargetsForPolicy"]
+          Resource = ["arn:aws:organizations::111122223333:policy/o-*/service_control_policy/p-*", "arn:aws:organizations::aws:policy/service_control_policy/p-*"]
+        },
+        {
+          Sid      = "ListServiceControlPolicies"
+          Effect   = "Allow"
+          Action   = ["organizations:ListPolicies"]
+          Resource = ["*"]
+        },
+        {
+          Sid      = "CreateServiceControlPolicies"
+          Effect   = "Allow"
+          Action   = ["organizations:CreatePolicy"]
+          Resource = ["*"]
+        },
+        {
+          Sid      = "ManageServiceControlPolicies"
+          Effect   = "Allow"
+          Action   = ["organizations:UpdatePolicy", "organizations:DeletePolicy", "organizations:TagResource", "organizations:UntagResource"]
+          Resource = ["arn:aws:organizations::111122223333:policy/o-*/service_control_policy/p-*"]
+        },
+        {
+          Sid      = "AttachServiceControlPoliciesToUnits"
+          Effect   = "Allow"
+          Action   = ["organizations:AttachPolicy", "organizations:DetachPolicy"]
+          Resource = ["arn:aws:organizations::111122223333:policy/o-*/service_control_policy/p-*", "arn:aws:organizations::111122223333:ou/o-*/ou-*"]
+        },
+      ]
+    }
+    error_message = "The apply role may manage the stack's SCPs and attach them to organizational units, and nothing more."
+  }
+
+  # The guarantees that matter, asserted on their own: attach and detach never reach the root, an
+  # account or an AWS-managed policy (FullAWSAccess), and nothing is a wildcard action.
+  assert {
+    condition = alltrue([
+      for s in jsondecode(aws_iam_role_policy.service_control_policies.policy).Statement :
+      !contains(s.Action, "organizations:AttachPolicy") || (
+        !anytrue([for r in s.Resource : strcontains(r, ":root/") || strcontains(r, ":account/") || strcontains(r, "arn:aws:organizations::aws:") || r == "*"])
+      )
+    ])
+    error_message = "AttachPolicy and DetachPolicy must never be allowed on the root, an account, an AWS-managed policy or *."
+  }
+
+  assert {
+    condition     = !anytrue([for a in flatten([for s in jsondecode(aws_iam_role_policy.service_control_policies.policy).Statement : s.Action]) : a == "*" || endswith(a, ":*") || contains(["organizations:EnablePolicyType", "organizations:DisablePolicyType", "organizations:MoveAccount", "organizations:DeleteOrganization"], a)])
+    error_message = "No wildcard action, and no change of policy types or account placement."
+  }
+
+  assert {
+    condition = jsondecode(aws_iam_role_policy.plan_service_control_policies.policy) == {
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Sid      = "ReadServiceControlPolicies"
+          Effect   = "Allow"
+          Action   = ["organizations:DescribePolicy", "organizations:ListTagsForResource", "organizations:ListTargetsForPolicy"]
+          Resource = ["arn:aws:organizations::111122223333:policy/o-*/service_control_policy/p-*", "arn:aws:organizations::aws:policy/service_control_policy/p-*"]
+        },
+        {
+          Sid      = "ListServiceControlPolicies"
+          Effect   = "Allow"
+          Action   = ["organizations:ListPolicies"]
+          Resource = ["*"]
+        },
+      ]
+    }
+    error_message = "The plan role may only read SCPs: no write of any kind."
   }
 }
