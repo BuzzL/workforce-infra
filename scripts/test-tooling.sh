@@ -248,15 +248,23 @@ want_redacted=$(printf '%s\n' \
 if [ "$redacted" = "$want_redacted" ]; then echo "ok   redact hides account IDs, unique IDs, bucket names, Organization IDs and emails only"; else echo "FAIL redact"; echo "$redacted"; failed=1; fi
 
 # The public-docs gate passes on placeholders and refuses an account ID, an ARN with an ID and an email.
-mkdir -p docs-ok docs-id docs-arn docs-mail
+mkdir -p docs-ok docs-id docs-arn docs-mail docs-sep docs-letters docs-13 docs-gov
 echo 'role arn:aws:iam::<account-id>:role/test-agent in <workforce-account-id>' > docs-ok/A.md
 echo 'account 123456789012 here' > docs-id/A.md
 echo 'arn:aws:iam::123456789012:role/x' > docs-arn/A.md
 echo 'mail someone@example.com' > docs-mail/A.md
+echo 'account 1234-5678-9012 here' > docs-sep/A.md
+echo 'idx123456789012y' > docs-letters/A.md
+echo 'number 1234567890123 is 13 digits' > docs-13/A.md
+echo 'arn:aws-us-gov:iam::123456789012:role/x' > docs-gov/A.md
 expect pass "docs: placeholders are accepted" scripts/check-docs-public.sh docs-ok
 expect fail:"12-digit" "docs: an account ID is refused" scripts/check-docs-public.sh docs-id
 expect fail:"ARN with an account ID" "docs: an ARN with an ID is refused" scripts/check-docs-public.sh docs-arn
 expect fail:"email address" "docs: an email is refused" scripts/check-docs-public.sh docs-mail
+expect fail:"separators" "docs: an ID with separators is refused" scripts/check-docs-public.sh docs-sep
+expect fail:"12-digit" "docs: an ID next to letters is refused" scripts/check-docs-public.sh docs-letters
+expect pass "docs: a 13-digit number is not an account ID" scripts/check-docs-public.sh docs-13
+expect fail:"ARN with an account ID" "docs: an ARN of another partition is refused" scripts/check-docs-public.sh docs-gov
 
 # Structure of the workflow: it passes as written and each mutation is rejected.
 expect pass "workflow structure holds" scripts/check-workflow.sh "$work/wf/terraform.yml"

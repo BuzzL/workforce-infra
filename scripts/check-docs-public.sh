@@ -12,6 +12,7 @@ scan() { # <description> <extended regexp>
   fi
 }
 scan "a 12-digit AWS account ID" '(^|[^0-9])[0-9]{12}([^0-9]|$)'
+scan "an AWS account ID written with separators" '(^|[^0-9])[0-9]{4}[- ][0-9]{4}[- ][0-9]{4}([^0-9]|$)'
 scan "an ARN with an account ID" 'arn:aws[a-z-]*:[a-z0-9-]*:[a-z0-9-]*:[0-9]+:'
 scan "an email address" '[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.[A-Za-z]{2,}'
 exit "$status"
