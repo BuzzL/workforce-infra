@@ -890,8 +890,24 @@ run "audit_trail_grants_are_exactly_the_documented_ones" {
         {
           Sid      = "ReadOrganizationForTheTrail"
           Effect   = "Allow"
-          Action   = ["organizations:DescribeOrganization", "organizations:ListAWSServiceAccessForOrganization"]
+          Action   = ["organizations:DescribeOrganization", "organizations:ListAccounts", "organizations:ListAWSServiceAccessForOrganization"]
           Resource = ["*"]
+        },
+        {
+          Sid       = "EnableCloudTrailTrustedAccess"
+          Effect    = "Allow"
+          Action    = ["organizations:EnableAWSServiceAccess"]
+          Resource  = ["*"]
+          Condition = { StringEquals = { "organizations:ServicePrincipal" = "cloudtrail.amazonaws.com" } }
+        },
+        {
+          Sid    = "ReadTheServiceLinkedRoles"
+          Effect = "Allow"
+          Action = ["iam:GetRole"]
+          Resource = [
+            "arn:aws:iam::111122223333:role/aws-service-role/organizations.amazonaws.com/AWSServiceRoleForOrganizations",
+            "arn:aws:iam::111122223333:role/aws-service-role/cloudtrail.amazonaws.com/AWSServiceRoleForCloudTrail",
+          ]
         },
         {
           Sid       = "CreateTheCloudTrailServiceLinkedRole"
@@ -906,8 +922,8 @@ run "audit_trail_grants_are_exactly_the_documented_ones" {
   }
 
   assert {
-    condition     = !anytrue([for a in flatten([for s in jsondecode(aws_iam_role_policy.audit_trail[0].policy).Statement : s.Action]) : contains(["cloudtrail:DeleteTrail", "cloudtrail:StopLogging"], a) || a == "*" || endswith(a, ":*")])
-    error_message = "CI must not be able to delete the trail or stop logging, and no action may be a wildcard."
+    condition     = !anytrue([for a in flatten([for s in jsondecode(aws_iam_role_policy.audit_trail[0].policy).Statement : s.Action]) : contains(["cloudtrail:DeleteTrail", "cloudtrail:StopLogging", "organizations:DisableAWSServiceAccess"], a) || a == "*" || endswith(a, ":*")])
+    error_message = "CI must not be able to delete the trail, stop logging or disable the trusted access, and no action may be a wildcard."
   }
 
   assert {
