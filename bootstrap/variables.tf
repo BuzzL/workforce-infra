@@ -89,7 +89,7 @@ variable "budget_name" {
 }
 
 variable "audit_trail_enabled" {
-  description = "Grant the management CI roles what the organization trail needs (docs/AUDIT_LOGGING.md). Set locally, at the rollout step that creates the trail; false until then."
+  description = "Grant the management CI roles what the organization trail needs (docs/AUDIT_LOGGING.md). Set locally, once, before the trail is created in live/management; false until then."
   type        = bool
   default     = false
 }

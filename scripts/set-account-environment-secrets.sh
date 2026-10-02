@@ -1,4 +1,11 @@
 #!/usr/bin/env bash
+# WHICH SCRIPT? This one is for ONE MEMBER account (security or workforce), run once per account
+# after its local bootstrap. Its sibling set-environment-secrets.sh is for the MANAGEMENT account
+# (environments `management` and `management-plan`, the Organization-wide values, management SSO
+# admin session needed); see the header of that script for the full comparison. This script also
+# CREATES the two environments of the account and protects the apply one, which the management
+# script does not.
+#
 # Creates the GitHub Environments <account> and <account>-plan of a member account and sets
 # their SECRETS AWS_ROLE_ARN, AWS_ROLE_ID and STATE_BUCKET and the variable AWS_REGION (copied
 # from the stack's backend.hcl). A secret is masked everywhere in a public repository's

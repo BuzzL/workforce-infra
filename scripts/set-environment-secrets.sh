@@ -1,4 +1,24 @@
 #!/usr/bin/env bash
+# WHICH SCRIPT? There are two, and they differ in scope, in what they read and in who runs them:
+#
+#   set-environment-secrets.sh          (this one) the MANAGEMENT account. One run, two GitHub
+#                                       Environments that already exist: `management` and
+#                                       `management-plan`. Holds the values the Organization stack
+#                                       needs (root ID, email base, budget address, member account
+#                                       IDs) and, optionally, the audit log bucket name. It reads
+#                                       from bootstrap/ outputs, IAM and Organizations, so it needs the
+#                                       management SSO admin session. It does not create environments.
+#   set-account-environment-secrets.sh  ONE MEMBER account (security or workforce), once per
+#                                       account, after that account's local bootstrap. It creates
+#                                       the environments `<account>` (protected) and `<account>-plan`
+#                                       and sets that account's role ARN and ID, the state bucket and
+#                                       AWS_REGION, plus the security-only values (Identity Center
+#                                       user, account IDs to assign, audit logging). It reads from
+#                                       that stack's own outputs and backend.hcl.
+#
+# Rule of thumb: a value of the Organization (management) goes through this script; a value of
+# one member account goes through the account script.
+#
 # Sets AWS_ROLE_ARN, AWS_ROLE_ID, STATE_BUCKET, ORGANIZATION_ROOT_ID, ACCOUNT_EMAIL_BASE, BUDGET_ALERT_EMAIL and MEMBER_ACCOUNT_IDS as SECRETS of the
 # `management` and `management-plan` GitHub Environments and deletes the variables of the
 # same names.
