@@ -1,6 +1,6 @@
 locals {
   # Member accounts and the top-level OU each one sits in. Accounts are created only when
-  # needed; the environment accounts (test, qa, demo) come later (M3).
+  # needed; the environment accounts (test, qual, demo) come later (M3).
   accounts = {
     security  = "Management"
     workforce = "Development"
