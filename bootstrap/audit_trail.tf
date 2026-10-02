@@ -21,6 +21,13 @@ locals {
       Action   = ["cloudtrail:DescribeTrails"]
       Resource = ["*"]
     },
+    # The CloudTrail service-linked role is managed by live/management.
+    {
+      Sid      = "ReadTheCloudTrailServiceLinkedRole"
+      Effect   = "Allow"
+      Action   = ["iam:GetRole", "iam:ListRoleTags"]
+      Resource = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/cloudtrail.amazonaws.com/AWSServiceRoleForCloudTrail"]
+    },
   ]
 }
 
@@ -63,7 +70,9 @@ resource "aws_iam_role_policy" "audit_trail" {
         Resource  = ["*"] # no resource-level permission; the condition names the service
         Condition = { StringEquals = { "organizations:ServicePrincipal" = "cloudtrail.amazonaws.com" } }
       },
-      # CloudTrail checks that the two service-linked roles exist before creating the trail.
+      # CloudTrail checks that the two service-linked roles exist before creating the trail. The
+      # CloudTrail ARN is also in ReadTheCloudTrailServiceLinkedRole (shared with the plan role):
+      # the duplication is harmless and keeps this statement about what CloudTrail itself checks.
       {
         Sid    = "ReadTheServiceLinkedRoles"
         Effect = "Allow"
@@ -72,6 +81,15 @@ resource "aws_iam_role_policy" "audit_trail" {
           "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/organizations.amazonaws.com/AWSServiceRoleForOrganizations",
           "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/cloudtrail.amazonaws.com/AWSServiceRoleForCloudTrail",
         ]
+      },
+      # live/management sets default tags, and the hand-made service-linked role has none, so the
+      # first apply after the import tags it. That is the only write on it: no UpdateRole (the
+      # stack must not set a description or other attribute), no delete (prevent_destroy).
+      {
+        Sid      = "TagTheCloudTrailServiceLinkedRole"
+        Effect   = "Allow"
+        Action   = ["iam:TagRole"]
+        Resource = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/cloudtrail.amazonaws.com/AWSServiceRoleForCloudTrail"]
       },
       {
         Sid      = "CreateTheCloudTrailServiceLinkedRole"
