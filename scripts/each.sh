@@ -56,6 +56,15 @@ data_dir=$(mktemp -d)
 trap 'rm -rf "$data_dir"' EXIT
 export TF_DATA_DIR="$data_dir"
 
+# The data dir is wiped for every directory, so without a plugin cache each init downloads
+# the AWS provider again (about 18 times in `make check`). Keep the cache outside the data
+# dir, and respect one the caller already set.
+if [ -z "${TF_PLUGIN_CACHE_DIR:-}" ]; then
+  TF_PLUGIN_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/terraform-plugin-cache"
+  export TF_PLUGIN_CACHE_DIR
+fi
+mkdir -p "$TF_PLUGIN_CACHE_DIR"
+
 status=0
 while IFS= read -r d; do
   rm -rf "${data_dir:?}"/* "${data_dir:?}"/.[!.]* 2>/dev/null || true
