@@ -916,6 +916,12 @@ run "audit_trail_grants_are_exactly_the_documented_ones" {
           ]
         },
         {
+          Sid      = "TagTheCloudTrailServiceLinkedRole"
+          Effect   = "Allow"
+          Action   = ["iam:TagRole"]
+          Resource = ["arn:aws:iam::111122223333:role/aws-service-role/cloudtrail.amazonaws.com/AWSServiceRoleForCloudTrail"]
+        },
+        {
           Sid       = "CreateTheCloudTrailServiceLinkedRole"
           Effect    = "Allow"
           Action    = ["iam:CreateServiceLinkedRole"]
@@ -956,7 +962,7 @@ run "audit_trail_grants_are_exactly_the_documented_ones" {
         },
       ]
     }
-    error_message = "The plan role may only read the trail."
+    error_message = "The plan role may only read the trail and the CloudTrail service-linked role: no write of any kind."
   }
 
   assert {
