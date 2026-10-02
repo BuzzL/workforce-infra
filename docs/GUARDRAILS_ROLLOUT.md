@@ -1,6 +1,6 @@
 # Guardrails: attaching the baseline SCPs in stages
 
-The four baseline service control policies (`modules/scp-baseline`) are attached to the organizational units one at a time, from `live/guardrails`, and each attachment is proved. An SCP that is wrong can lock principals out, so this stack is applied **only locally**, with the management SSO admin session and the maintainer's explicit yes before every stage. CI never applies it: `scripts/ci-stacks.sh` leaves it out of both the plan and the apply matrix until a `.ci-enabled` marker is committed, which needs the CI roles to be able to read it first.
+The four baseline service control policies (`modules/scp-baseline`) are attached to the organizational units one at a time, from `live/guardrails`, and each attachment is proved. An SCP that is wrong can lock principals out, so this stack is applied **only locally**, with the management SSO admin session and the maintainer's explicit yes before every stage. CI never applies it: `scripts/ci-stacks.sh` leaves it out of both the plan and the apply matrix. Committing a `.ci-enabled` marker would add a plan-only run (`apply` stays false), and the CI roles have no permission to read these resources today: that comes first, in its own PR ("CI permissions first").
 
 ## What it manages
 
@@ -35,7 +35,7 @@ Each stage is one attachment of the four SCPs to one OU, and its proofs. Every p
 | 3 | `Operations` | none yet | Same checks. |
 | 4 | `Management` | `security` | Same checks. Last, because `security` holds Identity Center and the audit log bucket. |
 
-The plan of a stage must contain only `+ aws_organizations_policy_attachment` for that OU. Rollback, one command per policy per OU, then reconcile Terraform (remove the entry from `attachments` and apply, or `terraform state rm`):
+The plan of a stage must contain only `+ aws_organizations_policy_attachment` for that OU. Rollback, one command per policy per OU. The policy IDs are in the sensitive output (`terraform output -json policy_ids`), the OU ID is `aws organizations list-organizational-units-for-parent`. In this order: detach, then remove the entry from `attachments` in `terraform.tfvars`, then `terraform plan`, which must show no change for that attachment (if you detached first and left the entry, the next plan wants to re-attach it):
 
 ```sh
 aws organizations detach-policy --policy-id <policy id> --target-id <OU id> --profile <management profile>
@@ -47,9 +47,9 @@ Output is recorded with account and organization IDs left out.
 
 | SCP | Proof |
 |---|---|
-| `deny-leave-organization` | **Never a real call**: if the SCP failed, the account would leave the Organization. `iam simulate-principal-policy` from a role inside the account, `OrganizationsDecisionDetail.AllowedByOrganizations` false, and `list-policies-for-target` for presence. Limit: `DenyLeaveAndCloseAccount` also denies this action, so the simulator cannot say which policy denied it. |
-| `deny-root-user` | The simulator with `aws:PrincipalArn` set to the account's root ARN (not allowed), and a normal SSO role (still allowed). Limit: no real root session is ever created, so the end-to-end effect on a real root user is not exercised. |
-| `deny-disable-cloudtrail` | A harmless real call: `aws cloudtrail stop-logging --name <a trail that does not exist>` in the allowed region. With the SCP the error says explicit deny in a service control policy; without it, `TrailNotFoundException`. The real trail is never named. |
+| `deny-leave-organization` | **Never a real call**: if the SCP failed, the account would leave the Organization. `aws iam simulate-principal-policy`, run **by a role inside the member account** (called from the management account it would report the management account's own SCP-free evaluation), `OrganizationsDecisionDetail.AllowedByOrganizations` false, and `list-policies-for-target` for presence. Limit: `DenyLeaveAndCloseAccount` also denies this action, so the simulator cannot say which policy denied it. |
+| `deny-root-user` | The simulator needs a user or role as its source, so the root cannot be simulated directly: the proof passes `aws:PrincipalArn` set to the account's root ARN with `--context-entries`, and compares with a normal SSO role (allowed). **Verify before relying on it** that the simulator honours the override for SCP evaluation; if it does not, the proof is only the policy content and its attachment. No real root session is ever created, so the end-to-end effect on a real root user is not exercised. |
+| `deny-disable-cloudtrail` | A harmless real call, `aws cloudtrail stop-logging --name no-such-trail-$(uuidgen)` in the allowed region, from an admin role in the account. The name must be random, **never a real trail name and never an ARN**: if the SCP were not yet effective, a real name would stop that trail. With the SCP the error says explicit deny in a service control policy; without it, `TrailNotFoundException`. A caller with no cloudtrail permission gets an implicit-deny message instead, which is not the proof. |
 | `deny-outside-allowed-region` | A harmless real call, `ec2 describe-regions` in another region, is denied; the same call in the allowed region, `iam get-account-summary` and `sts get-caller-identity` succeed. |
 
 For an OU with no account (`Environments`, `Operations`) there is no principal to call from: the proof is that the policies are attached, and the effect is unproven until the first account arrives, which is then checked at its creation.

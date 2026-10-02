@@ -20,6 +20,14 @@ data "aws_organizations_policy" "scp" {
   policy_id = each.value
 }
 
+# A clear failure when the hand-made policy is missing or renamed: otherwise the import id is null.
+check "hand_made_scp_found" {
+  assert {
+    condition     = length([for id, p in data.aws_organizations_policy.scp : id if p.name == "DenyLeaveAndCloseAccount"]) == 1
+    error_message = "Exactly one SCP named DenyLeaveAndCloseAccount must exist (it was created by hand and is imported here); none or several were found."
+  }
+}
+
 locals {
   hand_made_policy_id = one([for id, p in data.aws_organizations_policy.scp : id if p.name == "DenyLeaveAndCloseAccount"])
   root_id             = data.aws_organizations_organization.this.roots[0].id
