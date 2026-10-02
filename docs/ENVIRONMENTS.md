@@ -18,7 +18,7 @@ The workforce delivers through three environments, `test`, `quality` and `demo`,
 | `quality` | Environments | `qual` | Quality checks of main after every merge |
 | `demo` | Environments | `demo` | Release demo, needs the maintainer's approval |
 
-`scripts/ci-stacks.sh` reads the table on every run: it maps `live/environments/<name>` for the accounts of the Environments OU and refuses a table with a key that is not four lowercase letters, a duplicate key, an unknown OU, an empty description or no account in the Environments OU. The selftest covers each refusal and that neither `qa` nor the key `qual` maps to a stack. Existing resources keep their names (`github-infra-security`, `github-infra-workforce`); moving them to keyed names is a separate decision.
+`scripts/ci-stacks.sh` reads the table on every run: it maps `live/environments/<name>` for the accounts of the Environments OU and refuses a table with a key that is not four lowercase letters, a duplicate key, an unknown OU, an empty description or no account in the Environments OU. The selftest covers each refusal and that neither `qa` nor the key `qual` maps to a stack. Existing resources are renamed to the convention of `docs/ENVIRONMENT_PERMISSIONS.md` (`github-infra-security`, `github-infra-workforce` and the others), each in its own change.
 
 ## Decisions
 
@@ -59,7 +59,7 @@ Per deployable repo (today: `workforce-testbed`). Names match the AWS account, t
 
 - The `demo` policy is a **tag pattern**, not a branch pattern, because a `release` run has its ref at the tag.
 - "Prevent self-review" is off for `demo`: the maintainer is the only reviewer and also the author, so it would deadlock. The gate is a deliberate pause, not a separation of duties.
-- Each environment holds its own OIDC role reference, with no long-lived AWS keys. The roles narrow in privilege: `demo` is narrower than `quality`, which is narrower than `test`.
+- Each environment holds its own OIDC role reference, with no long-lived AWS keys. The roles narrow in privilege: `demo` is narrower than `quality`, which is narrower than `test` (`docs/ENVIRONMENT_PERMISSIONS.md`).
 - `agent-app`, `management` and `management-plan` are outside the `test`/`quality`/`demo` scheme and keep their names.
 
 ### 4. Stub period
