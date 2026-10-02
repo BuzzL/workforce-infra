@@ -9,7 +9,7 @@
 #   bootstrap             management          no (local)      management-plan
 #   live/management       management          yes             management-plan
 #   live/accounts/security|workforce  same name  no (local)  <acct>-plan, once <stack>/.ci-enabled exists
-#   live/environments/test|qual|demo  same name  yes  none
+#   live/environments/<name>  same name  yes  none  (environments of scripts/environment-keys.tsv)
 #
 # A stack name is used in JSON and in job names, so it is limited to [a-z0-9/_-], and only
 # the environments named below exist: a directory name cannot inject anything or select
@@ -17,14 +17,24 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# The deployable environments. Every name is exactly four lowercase letters (^[a-z]{4}$), so
-# AWS policies and role-name patterns can match it strictly (docs/ENVIRONMENTS.md). The same
-# name is used for the account, the live/environments/<env> stack, the GitHub Environment and
-# APP_ENV. management, security and workforce are not environments.
-environments="test qual demo"
-for e in $environments; do
-  [[ $e =~ ^[a-z]{4}$ ]] || { echo "environment name must match ^[a-z]{4}\$: $e" >&2; exit 1; }
-done
+# Names and keys (scripts/environment-keys.tsv, documented in docs/ENVIRONMENTS.md). The name
+# is explanatory and used for the account, the live/environments/<name> stack, the GitHub
+# Environment and APP_ENV; the key is exactly four lowercase letters, unique, and used in the
+# naming conventions of AWS resources so that strict regexps can check them. ENV_KEYS_FILE
+# exists for the selftest.
+keys_file=${ENV_KEYS_FILE:-scripts/environment-keys.tsv}
+environments=""
+seen_keys=" "
+while IFS=$'\t' read -r name kind key; do
+  case "$name" in "" | \#*) continue ;; esac
+  [[ $name =~ ^[a-z]+$ ]] || { echo "name must be lowercase letters: $name" >&2; exit 1; }
+  [[ $key =~ ^[a-z]{4}$ ]] || { echo "key of $name must be exactly four lowercase letters (^[a-z]{4}\$): $key" >&2; exit 1; }
+  case "$kind" in account | environment) ;; *) echo "kind of $name must be account or environment: $kind" >&2; exit 1 ;; esac
+  case "$seen_keys" in *" $key "*) echo "duplicate key: $key" >&2; exit 1 ;; esac
+  seen_keys+="$key "
+  if [ "$kind" = environment ]; then environments+="$name "; fi
+done < "$keys_file"
+[ -n "$environments" ] || { echo "no environment in $keys_file" >&2; exit 1; }
 
 mode=${1:-apply}
 case "$mode" in apply | plan) ;; *) echo "usage: $0 [apply|plan]" >&2; exit 2 ;; esac

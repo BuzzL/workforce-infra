@@ -7,7 +7,7 @@ Terraform monorepo for the AI Workforce on AWS:
 
 - the **AWS Organization** (OUs, SCPs, member accounts)
 - the **workforce** account, which runs the pipeline: Linear webhook → API Gateway → Lambda → SQS → ECS developer agents
-- the **environment** accounts, `test`, `qual` and `demo`, which the agents deploy into through least-privilege cross-account roles
+- the **environment** accounts, `test`, `quality` and `demo`, which the agents deploy into through least-privilege cross-account roles
 
 > **Status:** early skeleton. Nothing is applied yet. See the [commit history](https://github.com/BuzzL/workforce-infra/commits/main) for what exists so far.
 

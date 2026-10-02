@@ -1,0 +1,16 @@
+# The names and four-letter keys of the accounts and environments: the single source of truth.
+#
+# name   explanatory: account name, live/environments/<name> stack, GitHub Environment, APP_ENV, docs.
+# kind   account | environment. Only environments have a live/environments/<name> stack.
+# key    exactly four lowercase letters (^[a-z]{4}$) and unique. Used in the naming conventions of
+#        AWS resources (role names, policy and resource name patterns) so that they can be checked
+#        with strict regexps. A key is not a name: it is never accepted where a name is expected.
+#
+# Fields are separated by a tab. scripts/ci-stacks.sh validates this file on every run and the
+# selftest (scripts/test-tooling.sh) proves that a bad key or a duplicate is refused.
+management	account	root
+security	account	scrt
+workforce	account	wrkf
+test	environment	test
+quality	environment	qual
+demo	environment	demo
