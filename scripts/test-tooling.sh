@@ -300,6 +300,31 @@ expect fail:"not named in CLAUDE.md" "docs: an orphaned doc is refused" scripts/
 expect fail:"does not exist" "docs: a dead path is refused" scripts/check-docs.sh docs-dead
 expect fail:"no docs directory" "docs: a missing tree is an error, not a pass" scripts/check-docs.sh docs-missing
 
+docs_tree docs-iat-lower docs/GOOD_DOC.md 'done in iat-12'
+docs_tree docs-iat-space docs/GOOD_DOC.md 'see IAT 12'
+docs_tree docs-milestone-word docs/GOOD_DOC.md 'part of milestone 3'
+docs_tree docs-evil docs/GOOD_DOC.md 'mail a@example.com.evil.org'
+docs_tree docs-case docs/GOOD_DOC.md 'mail owner@Example.COM'
+docs_tree docs-anchor docs/GOOD_DOC.md 'see `docs/NOPE.md#section` and `docs/GOOD_DOC.md#top`'
+docs_tree docs-workflow docs/GOOD_DOC.md 'see `.github/workflows/nope.yml`'
+docs_tree docs-sub
+mkdir -p docs-sub/docs/sub && printf 'done in IAT-12\n' > docs-sub/docs/sub/DEEP.md && printf '%s\n' '- `docs/sub/DEEP.md`: x' >> docs-sub/CLAUDE.md
+docs_tree docs-noclaude && rm docs-noclaude/CLAUDE.md
+docs_tree docs-example-ticket && mkdir -p docs-example-ticket/live && echo '# IAT-12 sets this' > docs-example-ticket/live/a.tfvars.example
+docs_tree docs-readme && printf 'see IAT-12\n' > docs-readme/README.md
+expect pass "docs: any case of an example.com address is accepted" scripts/check-docs.sh docs-case
+expect pass "docs: an anchor on an existing doc is accepted" scripts/check-docs.sh docs-ok
+expect fail:"ticket ID" "docs: a lowercase ticket ID is refused" scripts/check-docs.sh docs-iat-lower
+expect fail:"ticket ID" "docs: a ticket ID with a space is refused" scripts/check-docs.sh docs-iat-space
+expect fail:"milestone" "docs: the word milestone with a number is refused" scripts/check-docs.sh docs-milestone-word
+expect fail:"email address" "docs: a look-alike example.com domain is refused" scripts/check-docs.sh docs-evil
+expect fail:"does not exist" "docs: a dead path with an anchor is refused" scripts/check-docs.sh docs-anchor
+expect fail:"does not exist" "docs: a dead workflow path is refused" scripts/check-docs.sh docs-workflow
+expect fail:"ticket ID" "docs: a doc in a subfolder is scanned" scripts/check-docs.sh docs-sub
+expect fail:"ticket ID" "docs: README.md is scanned" scripts/check-docs.sh docs-readme
+expect fail:"no CLAUDE.md" "docs: a tree without CLAUDE.md is an error" scripts/check-docs.sh docs-noclaude
+expect pass "docs: the status of a broken check (2) is not lowered to a failure (1)" bash -c 'scripts/check-docs.sh docs-noclaude; [ $? -eq 2 ]'
+
 # Structure of the workflow: it passes as written and each mutation is rejected.
 expect pass "workflow structure holds" scripts/check-workflow.sh "$work/wf/terraform.yml"
 python3 - "$work" "$root" <<'PY' || failed=1

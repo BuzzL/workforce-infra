@@ -87,8 +87,6 @@ AWS_PROFILE=workforce-management aws organizations list-delegated-administrators
   --service-principal sso.amazonaws.com --query 'DelegatedAdministrators[].Name' --output text
 ```
 
-Done when these are confirmed in chat for every account.
-
 ## Not covered
 
 - Groups and more than one user: out of scope, there is one maintainer.

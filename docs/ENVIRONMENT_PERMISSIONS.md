@@ -2,7 +2,7 @@
 
 ## Context
 
-Workforce reaches the `test`, `quality` and `demo` accounts through narrowly scoped cross-account roles. This document is the decision, taken before any code: which roles exist, who may assume them, what each may do and may not do, and how the permissions narrow along the promotion path (`docs/ENVIRONMENTS.md`). Later issues implement it and do not change it: a new need is a new decision record here.
+Workforce reaches the `test`, `quality` and `demo` accounts through narrowly scoped cross-account roles. This document is the decision, taken before any code: which roles exist, who may assume them, what each may do and may not do, and how the permissions narrow along the promotion path (`docs/ENVIRONMENTS.md`). The implementation follows it and does not change it: a new need adds a section here, and only the application registry and its Stacks column are edited in place.
 
 Scope of the decision:
 
@@ -29,7 +29,7 @@ A key is never accepted where a name is expected (`docs/ENVIRONMENTS.md`).
 
 ### Scope
 
-The strict regexps and the IAM guarantees below apply to the **environment accounts** (`test`, `qual`, `demo`). Other accounts use the same form with their own key and the same word list, and are not covered by these guarantees: `wrkf-<project>-<name>-<resource>` in `workforce`, `scrt-...` in `security`. A resource that lives in `workforce` but serves an environment carries that environment as a name segment, for example the ExternalId secret of `qual`, so the slot always means the account where the resource lives.
+The strict regexps and the IAM guarantees below apply to the **environment accounts** (`test`, `qual`, `demo`). Other accounts use the same form with their own key and the same word list, and are not covered by these guarantees: `wrkf-<project>-<name>-<resource>` in `workforce`, `scrt-...` in `security`. A resource that lives in `workforce` but serves an environment carries that environment's four-letter **key** as a name segment (a name segment is a key-style slot, while the `Target` tag holds the name), for example the ExternalId secret of `qual`, so the slot always means the account where the resource lives.
 
 Exempt, because the name is not ours to choose: Organizations resources (OUs, accounts, SCPs), Identity Center permission sets (32 characters), and names a service generates. **Existing resources are renamed** to this convention, see "Renaming what exists" below. Nothing keeps its old name by exception.
 
@@ -297,7 +297,7 @@ The matrix is a table on purpose: the module tests assert the inclusion with `te
 
 ## Open items
 
-- The artifact location (the bucket and prefix named above) is created with the first deployable and written down then, as a placeholder in this document until it exists.
+- The artifact location (the artifact prefix named in the tables) is created with the first deployable and written down then, as a placeholder in this document until it exists.
 - SAM is not part of the `lambda` archetype (transform). It would be a new archetype or a new decision.
 - `cloudwatch:DescribeAlarms` is resource-level in the reference, but a query by alarm-name prefix or without names may still need `*` in practice. The matrix script proves the exact call the canary makes with a real call, and the tables change only if it fails.
 - The function's environment variables carry no secret: a lint rule, like the trust of application roles.

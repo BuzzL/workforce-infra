@@ -39,7 +39,7 @@ Notes:
 **Why:** AWS requires a unique email per account, and a plus-address delivers to the same mailbox, so there is nothing to administer per account. Root recovery and alerts all land in one place that the maintainer controls.
 
 **Storage and use:**
-- The base address is the **secret** `ACCOUNT_EMAIL_BASE` of the `management` GitHub Environment. It is never a variable, never committed, and never put in a log, a PR comment or Linear.
+- The base address is the **secret** `ACCOUNT_EMAIL_BASE` of the `management` and `management-plan` GitHub Environments. It is never a variable, never committed, and never put in a log, a PR comment or Linear.
 - Terraform receives it as a sensitive variable through `TF_VAR_account_email_base`, set from the secret in the job `env:` (no `${{ }}` in a `run:` block), and builds each address with `format("%s+%s@%s", local_part, account, domain)`. The variable is `sensitive = true` and has a validation for the `local@domain` shape and for the absence of a `+`.
 - Emails are redacted from logs and plan comments by `scripts/redact.sh`.
 - The Organization stack sets `email` on each account and ignores later changes to it in `lifecycle`, since the Organizations API cannot change the email of a member account.
@@ -50,6 +50,6 @@ Notes:
 |---|---|---|---|
 | Region | variable | `AWS_REGION` in `management` and `management-plan` | workflow, as `TF_VAR_region` |
 | Global-service exceptions | code | SCP module, with a literal test | Terraform |
-| Account email base | secret | `ACCOUNT_EMAIL_BASE` in `management` | apply job, as `TF_VAR_account_email_base` |
+| Account email base | secret | `ACCOUNT_EMAIL_BASE` in `management` and `management-plan` | apply job, as `TF_VAR_account_email_base` |
 | Organization root ID | secret | `ORGANIZATION_ROOT_ID` in `management` and `management-plan` | plan and apply jobs, as `TF_VAR_root_id` |
-| Role ARNs, state bucket | secret | `AWS_ROLE_ARN`, `AWS_ROLE_ID`, `STATE_BUCKET` | workflow (see `BOOTSTRAP.md`) |
+| Role ARNs, state bucket | secret | `AWS_ROLE_ARN`, `AWS_ROLE_ID`, `STATE_BUCKET` | workflow (see `docs/BOOTSTRAP.md`) |

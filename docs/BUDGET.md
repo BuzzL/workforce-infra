@@ -32,7 +32,7 @@ The budget was created by hand. `live/management/budget.tf` has an `import` bloc
 
 ## Limits of the plan output
 
-- The alert addresses are sensitive, so Terraform masks every whole `notification` block in a plan: a change to a threshold or a comparison operator does **not** show in the PR comment. The thresholds are guarded by the literal assertions in `modules/budget/tests/budget.tftest.hcl`, so such a change must edit that test, which does show in the diff. The first plan after the import cannot show the notifications either: the match was checked with a local plan against the account, from the plan JSON, before this PR.
+- The alert addresses are sensitive, so Terraform masks every whole `notification` block in a plan: a change to a threshold or a comparison operator does **not** show in the PR comment. The thresholds are guarded by the literal assertions in `modules/budget/tests/budget.tftest.hcl`, so such a change must edit that test, which does show in the diff. The first plan after the import cannot show the notifications either: the match was checked with a local plan against the account, from the plan JSON, before the first apply.
 - `BUDGET_ALERT_EMAIL` is a secret of `management-plan` like the other secrets, so a same-repository branch job can read it (forks are skipped). It is a personal mailbox: the environment's branch policy is the guard.
 - The import itself is only proven by a real plan: with a mock provider the resource is overridden, so `live/management/tests/budget.tftest.hcl` proves the wiring (name, limit, address), not the import.
 - `budget_name` has a default in `bootstrap/` (the IAM ARN) and in `live/management/`. If they differ the plan fails closed with AccessDenied.
