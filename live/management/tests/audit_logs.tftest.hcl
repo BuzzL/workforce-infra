@@ -45,4 +45,10 @@ run "an_empty_bucket_name_keeps_it_off" {
     condition     = length(module.organization_trail) == 0
     error_message = "An unset secret arrives as an empty string and must keep the trail off."
   }
+
+  # The switch is not a secret: it must not carry the sensitivity of the bucket name.
+  assert {
+    condition     = !issensitive(local.audit_logging)
+    error_message = "The on/off switch must not be sensitive while the trail is off."
+  }
 }
