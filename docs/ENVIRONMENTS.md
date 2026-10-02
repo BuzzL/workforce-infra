@@ -59,7 +59,7 @@ Per deployable repo (today: `workforce-testbed`). Names match the AWS account, t
 
 - The `demo` policy is a **tag pattern**, not a branch pattern, because a `release` run has its ref at the tag.
 - "Prevent self-review" is off for `demo`: the maintainer is the only reviewer and also the author, so it would deadlock. The gate is a deliberate pause, not a separation of duties.
-- Each environment holds its own OIDC role reference, with no long-lived AWS keys. The roles narrow in privilege: `demo` is narrower than `quality`, which is narrower than `test`.
+- Each environment holds its own OIDC role reference, with no long-lived AWS keys. The roles narrow in privilege: `demo` is narrower than `quality`, which is narrower than `test` (`docs/ENVIRONMENT_PERMISSIONS.md`).
 - `agent-app`, `management` and `management-plan` are outside the `test`/`quality`/`demo` scheme and keep their names.
 
 ### 4. Stub period

@@ -247,6 +247,17 @@ want_redacted=$(printf '%s\n' \
   '  ~ resource "aws_iam_role" "x" {')
 if [ "$redacted" = "$want_redacted" ]; then echo "ok   redact hides account IDs, unique IDs, bucket names, Organization IDs and emails only"; else echo "FAIL redact"; echo "$redacted"; failed=1; fi
 
+# The public-docs gate passes on placeholders and refuses an account ID, an ARN with an ID and an email.
+mkdir -p docs-ok docs-id docs-arn docs-mail
+echo 'role arn:aws:iam::<account-id>:role/test-agent in <workforce-account-id>' > docs-ok/A.md
+echo 'account 123456789012 here' > docs-id/A.md
+echo 'arn:aws:iam::123456789012:role/x' > docs-arn/A.md
+echo 'mail someone@example.com' > docs-mail/A.md
+expect pass "docs: placeholders are accepted" scripts/check-docs-public.sh docs-ok
+expect fail:"12-digit" "docs: an account ID is refused" scripts/check-docs-public.sh docs-id
+expect fail:"ARN with an account ID" "docs: an ARN with an ID is refused" scripts/check-docs-public.sh docs-arn
+expect fail:"email address" "docs: an email is refused" scripts/check-docs-public.sh docs-mail
+
 # Structure of the workflow: it passes as written and each mutation is rejected.
 expect pass "workflow structure holds" scripts/check-workflow.sh "$work/wf/terraform.yml"
 python3 - "$work" "$root" <<'PY' || failed=1
