@@ -4,11 +4,17 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 dir=${1:-docs}
+[ -d "$dir" ] || { echo "check-docs-public.sh: no such directory: $dir" >&2; exit 2; }
 status=0
 scan() { # <description> <extended regexp>
-  if grep -rnE --include='*.md' -- "$2" "$dir"; then
+  local rc=0
+  grep -rnE --include='*.md' -- "$2" "$dir" || rc=$?
+  if [ "$rc" -eq 0 ]; then
     echo "^ $1" >&2
     status=1
+  elif [ "$rc" -ne 1 ]; then
+    echo "check-docs-public.sh: grep failed ($rc)" >&2
+    status=2
   fi
 }
 scan "a 12-digit AWS account ID" '(^|[^0-9])[0-9]{12}([^0-9]|$)'

@@ -263,6 +263,7 @@ expect fail:"ARN with an account ID" "docs: an ARN with an ID is refused" script
 expect fail:"email address" "docs: an email is refused" scripts/check-docs-public.sh docs-mail
 expect fail:"separators" "docs: an ID with separators is refused" scripts/check-docs-public.sh docs-sep
 expect fail:"12-digit" "docs: an ID next to letters is refused" scripts/check-docs-public.sh docs-letters
+expect fail:"no such directory" "docs: a missing directory is an error, not a pass" scripts/check-docs-public.sh docs-missing
 expect pass "docs: a 13-digit number is not an account ID" scripts/check-docs-public.sh docs-13
 expect fail:"ARN with an account ID" "docs: an ARN of another partition is refused" scripts/check-docs-public.sh docs-gov
 

@@ -23,7 +23,7 @@ Keys are PascalCase, a single word, case-sensitive, and never start with `aws:` 
 | `Environment` | yes | the **name** of the account the resource lives in: `management`, `security`, `workforce`, `test`, `quality`, `demo` | one of the names in `scripts/environment-keys.tsv` | where it runs. The name, not the four-letter key: a key is never accepted where a name is expected (`docs/ENVIRONMENTS.md`) |
 | `App` | yes | `agent`, `platform`, or a registered application (`testbed`) | `^[a-z0-9]{1,16}$` | what the resource belongs to. Matches the application segment of its resource name where it has one; `platform` is for shared infrastructure that belongs to no application |
 | `Repository` | yes | the repository that holds that code, without owner | `^workforce-[a-z]+$` | where to change it. Together with `ManagedBy` and `Stack` it is the full pointer: repository, technology, unit of deployment |
-| `ManagedBy` | yes | the **technology** whose code is the source of truth: `terraform`, `cdk`, `sam`, `cloudformation` (a hand-written template) or `manual` | closed list | what to run to change it. It names the tool the code is written in, not the engine: a CDK or SAM stack is deployed by CloudFormation but is `cdk` or `sam`. `manual` is for break-glass and bootstrap and needs a note in the Linear issue |
+| `ManagedBy` | yes | the **technology** whose code is the source of truth: `terraform`, `cdk`, `cloudformation` (a hand-written template) or `manual`; `sam` is reserved (the `lambda` archetype has no transform, `docs/ENVIRONMENT_PERMISSIONS.md`) | closed list | what to run to change it. It names the tool the code is written in, not the engine: a CDK or SAM stack is deployed by CloudFormation but is `cdk` or `sam`. `manual` is for break-glass and bootstrap and needs a note in the Linear issue |
 | `Stack` | yes | the Terraform root stack path (`live/management`) or the CloudFormation stack name | `^[A-Za-z0-9/_-]{1,128}$` | which unit of deployment owns it |
 | `Archetype` | for applications | `lambda`, and later `ecs-service`, `ecs-task` | closed list | the workload archetype of the application |
 | `Target` | when different from `Environment` | the **name** of the environment the resource serves, for resources that live in another account | same as `Environment` | for example the ExternalId secret of `quality`, which lives in `workforce`: `Environment=workforce`, `Target=quality` |
@@ -43,19 +43,19 @@ Not used on purpose: a ticket or PR number (it changes and invites drift), an ow
 | Where | Mechanism |
 |---|---|
 | Terraform stacks | `default_tags` of every AWS provider block, fed by the `tags` variable. Modules also take `tags` for the resources the provider cannot default-tag (`aws_iam_role_policies_exclusive`, resources created by services). One provider block per stack, so one place |
-| CDK / SAM / CloudFormation (application repositories) | stack tags, which CloudFormation propagates to the stack's resources, with `ManagedBy` set to `cdk`, `sam` or `cloudformation`. The deploy role is allowed to set them at `CreateStack`, and the stack's tags are fixed by the pipeline, not the template |
+| CDK / SAM / CloudFormation (application repositories) | stack tags, which CloudFormation propagates to the stack's resources, with `ManagedBy` set to `cdk` or `cloudformation`. The deploy role may set only these keys (`aws:TagKeys`) and must set `App` and `Environment` to their literals at `CreateStack` (`docs/ENVIRONMENT_PERMISSIONS.md`), and the stack's tags are fixed by the pipeline, not the template |
 | Manual (break-glass, bootstrap) | the same tags, `ManagedBy=manual`, added before the issue is closed |
 | Resources a service creates itself (CloudTrail log delivery, auto-created log groups) | not tagged. They are declared explicitly where it matters (`docs/ENVIRONMENT_PERMISSIONS.md`, explicit names) so that they can be tagged |
 
 ## Exceptions
 
-A resource that does not support tags is not tagged and is covered by its name and by the stack that declares it. The list is short and kept here: IAM OIDC providers support tags and are tagged; there are no other known exceptions today. A new exception is a line in this document with the reason.
+A resource that does not support tags is not tagged and is covered by its name and by the stack that declares it. The list is kept here: Lambda aliases and versions, log streams and change sets (so `Archetype` is moot for them, the function carries it). IAM OIDC providers support tags and are tagged. A new exception is a line in this document with the reason.
 
 GitHub resources have no tags. The equivalent is the repository **topic** `ai-workforce` (`workforce-github`), plus the `workforce-<role>` name.
 
 ## Using tags
 
-- **Cost.** `Project`, `Environment` and `App` are activated as cost allocation tags in the management account, which takes effect for charges from the activation date. This is a billing setting of the management account and is made together with the budget (`docs/BUDGET.md`).
+- **Cost.** `Project`, `Environment` and `App` are activated as cost allocation tags in the management account, which takes effect for charges from the activation date. A tag must exist on a resource before it can be activated, so the activation follows the migration PR. This is a billing setting of the management account and is made together with the budget (`docs/BUDGET.md`).
 - **IAM.** Application roles may be created only with a literal tag where this adds a second control, for example `aws:RequestTag/App` equal to the application on `CreateRole` and `CreateFunction`. A tag condition never replaces the name and path conditions.
 - **Operations.** Find everything an application owns with `Project` plus `App`, or everything a stack owns with `Stack`, for review, for drift and for cleanup.
 
@@ -75,7 +75,7 @@ Existing stacks already tag `Project`, `ManagedBy` and `Stack`.
 | add `Environment`, `App` and `Repository` to every stack | required keys. For the current stacks `App=platform`, `Repository=workforce-infra`, and `Environment` is the name of the account |
 | add `Archetype` and `Target` where they apply | optional keys |
 
-Each is one in-place tag update per stack, applied through the gated CI like any other change. It is its own PR after this decision is approved, and it needs no new CI permissions beyond the tagging actions the stacks already hold.
+Each is one in-place tag update per stack, applied through the gated CI like any other change. It is its own PR after this decision is approved, and it may need tagging actions the CI roles do not hold yet (for example `organizations:TagResource` for OUs and accounts, and the budget): check this first and, if so, update the CI role in its own earlier PR (the CI-permissions-first rule).
 
 ## Open items
 
