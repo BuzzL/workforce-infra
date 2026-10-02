@@ -19,7 +19,7 @@ Keys are PascalCase, a single word, case-sensitive, and never start with `aws:` 
 
 | Key | Required | Value | Pattern | Meaning |
 |---|---|---|---|---|
-| `Project` | yes | `workforce` | `^workforce$` | the project, the same word as in resource names |
+| `Project` | yes | the short name of the project, as registered in `docs/ENVIRONMENT_PERMISSIONS.md` and defined by the Linear project (today `workforce`) | `^[a-z0-9]{1,10}$` | the project, the same word as in resource names. Other projects are not excluded |
 | `Environment` | yes | the **name** of the account the resource lives in: `management`, `security`, `workforce`, `test`, `quality`, `demo` | one of the names in `scripts/environment-keys.tsv` | where it runs. The name, not the four-letter key: a key is never accepted where a name is expected (`docs/ENVIRONMENTS.md`) |
 | `App` | yes | `agent`, `platform`, or a registered application (`testbed`) | `^[a-z0-9]{1,16}$` | what the resource belongs to. Matches the application segment of its resource name where it has one; `platform` is for shared infrastructure that belongs to no application |
 | `Repository` | yes | the repository that holds that code, without owner | `^workforce-[a-z]+$` | where to change it. Together with `ManagedBy` and `Stack` it is the full pointer: repository, technology, unit of deployment |
@@ -62,7 +62,7 @@ GitHub resources have no tags. The equivalent is the repository **topic** `ai-wo
 ## Enforcement
 
 - **Terraform:** a gate in `make check` (follow-up) checks that every `provider "aws"` block has `default_tags`, and that the default of the `tags` variable of each stack contains the required keys with values matching the patterns above. `terraform test` asserts the tags of a representative resource per module.
-- **CloudFormation:** the application pipeline passes the tags as stack tags, and the allowed/denied matrix (IAT-46) proves that the deploy role cannot create a stack without them or retag a resource outside its application.
+- **CloudFormation:** the application pipeline passes the tags as stack tags, and the allowed/denied matrix script proves that the deploy role cannot create a stack without them or retag a resource outside its application.
 - **Drift:** tags are managed by their tool. A manual retag shows as a Terraform plan difference.
 
 ## Migration of what exists
@@ -71,7 +71,7 @@ Existing stacks already tag `Project`, `ManagedBy` and `Stack`.
 
 | Change | Reason |
 |---|---|
-| `Project`: `ai-workforce` → `workforce` | one word for the project in names and tags. `ai-workforce` stays as the GitHub topic |
+| `Project`: `ai-workforce` → `workforce` | the project word of the names and tags, the short name of the Linear project. `ai-workforce` stays as the GitHub topic |
 | add `Environment`, `App` and `Repository` to every stack | required keys. For the current stacks `App=platform`, `Repository=workforce-infra`, and `Environment` is the name of the account |
 | add `Archetype` and `Target` where they apply | optional keys |
 
@@ -79,5 +79,5 @@ Each is one in-place tag update per stack, applied through the gated CI like any
 
 ## Open items
 
-- Whether `Project` changes to `workforce` (above) or the project word in resource names changes to `ai-workforce`. This record chooses `workforce`, to keep names short (IAM and Lambda names are limited to 64 characters).
+- Resources and tags created before this convention are migrated to it, not exempted: the renames are listed in `docs/ENVIRONMENT_PERMISSIONS.md` ("Renaming what exists").
 - A `DataClassification` tag is not defined: no resource holds data other than state and logs today. Add it with the first resource that does.
