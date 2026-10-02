@@ -6,7 +6,7 @@ Workforce reaches the `test`, `quality` and `demo` accounts through narrowly sco
 
 Scope of the decision:
 
-- **The environment accounts hold applications, not infrastructure that Terraform owns.** A deployable repository (the testbed first) creates and updates its own resources through CloudFormation (SAM or CDK, chosen in M7), in its own pipeline. `workforce-infra` provides only the *access*: the roles below. It never owns an application's function, queue or service.
+- **The environment accounts hold applications, not infrastructure that Terraform owns.** A deployable repository (the testbed first) creates and updates its own resources through CloudFormation (a template written by hand or synthesized by CDK, with no transform, see "Templates" below), in its own pipeline. `workforce-infra` provides only the *access*: the roles below. It never owns an application's function, queue or service.
 - **The first workload is serverless, Lambda with an alias,** because it costs nothing to maintain. The model is a catalogue of **archetypes** so that another repository with the same kind of workload is enabled by instantiating a template, not by writing a policy. Further archetypes (`ecs-service`, `ecs-task`) are future sections of this document.
 - Placeholders only. No account IDs, emails or ARNs are written here (`scripts/check-docs-public.sh` enforces it).
 
@@ -14,49 +14,101 @@ Scope of the decision:
 
 Every resource these roles create or may touch is named
 
-> `<env>-<project>-<name>-<resource>`
+> `<acct>-<project>-<name>-<resource>`
 
 in this order, with hyphens between the parts:
 
 | Part | Content | Rule |
 |---|---|---|
-| `<env>` | the four-letter **key** of the environment (`test`, `qual`, `demo`, from `scripts/environment-keys.tsv`) | always the first four characters |
+| `<acct>` | the four-letter **key** of the account the resource lives in (`test`, `qual`, `demo`, from `scripts/environment-keys.tsv`) | always the first four characters |
 | `<project>` | `workforce` | fixed for everything this repository owns |
-| `<name>` | what the resource belongs to or does: `agent`, `platform`, or a registered application (`testbed`), optionally followed by a qualifier (`testbed-deploy`, `testbed-main`) | lowercase letters and digits, hyphens between segments |
-| `<resource>` | the type of the resource, last | one word from a closed list: `role`, `policy`, `boundary`, `stack`, `function`, `alias`, `alarm` |
+| `<name>` | what the resource belongs to or does: `agent`, or a registered application (`testbed`) followed by a qualifier (`testbed-main`) | lowercase letters and digits, hyphens between segments |
+| `<resource>` | the type of the resource, last | one word from a closed list: `role`, `policy`, `boundary`, `stack`, `function`, `alarm` |
 
-A name therefore reads from the broadest to the most specific part and can be checked with one strict regexp anchored on four characters, `^(test|qual|demo)-workforce-[a-z0-9]+(-[a-z0-9]+)*-(role|policy|boundary|stack|function|alias|alarm)$`. A key is never accepted where a name is expected (`docs/ENVIRONMENTS.md`).
+A key is never accepted where a name is expected (`docs/ENVIRONMENTS.md`).
 
-An application's `<name>` starts with its **application name**, one segment registered below. `agent` and `platform` are reserved, so no application name can match a platform name.
+### Scope
+
+The strict regexps and the IAM guarantees below apply to the **environment accounts** (`test`, `qual`, `demo`). Other accounts use the same form with their own key and the same word list, and are not covered by these guarantees: `wrkf-workforce-<name>-<resource>` in `workforce`, `scrt-...` in `security`. A resource that lives in `workforce` but serves an environment carries that environment as a name segment, for example the ExternalId secret of `qual`, so the slot always means the account where the resource lives.
+
+Exempt, because the name is not ours to choose: Organizations resources (OUs, accounts, SCPs), Identity Center permission sets (32 characters), and names a service generates. Existing resources keep their names (`docs/ENVIRONMENTS.md`). The CI roles of the baselines are a second, documented family, `github-infra-<account name>[-plan]` (so `github-infra-quality` in the account `quality`, by name and not by key, on purpose). They have no `/apps/` path and do not start with a key, so no pattern here can match them.
+
+**One region.** IAM names are global, so this convention holds for one region, as decided in `docs/ORGANIZATION_INPUTS.md`. A second region is a new decision that puts the region in the global names.
+
+### Applications and qualifiers
+
+An application name is one segment, `^[a-z0-9]{1,16}$`, registered in the table below, unique, and never `agent`. The `<qualifier>` is one or more segments that tell resources of the same type apart (`main`, `api`), at least one is required, and `<app>-<qualifier>` is at most 40 characters. With the 15-character prefix `qual-workforce-` and the longest suffix `-function`, a function name is then at most 64 characters, which is the limit of IAM role and Lambda function names. A future application whose name would contain a hyphen (`testbed-api`) is a qualifier, never an application.
 
 | Application | Repository | Archetype |
 |---|---|---|
 | `testbed` | `workforce-testbed` | `lambda` |
 
-Adding an application is one row here plus one instantiation per environment. IAT-46 asserts that every name in a policy matches the regexp and that its application is registered.
+Adding an application is one row here plus one instantiation per environment.
 
-| Resource | Name | Path |
+### Two regexps
+
+Resources the application creates, with its qualifier (PCRE, because the last rule needs a lookahead):
+
+```
+^(test|qual|demo)-workforce-[a-z0-9]{1,16}(-[a-z0-9]+)+-(role|policy|stack|function|alarm)$
+```
+with the extra rules that `<app>-<qualifier>` is at most 40 characters and that no name ends in `-deploy-role` or `-exec-role`.
+
+Platform resources, enumerated exactly:
+
+```
+^(test|qual|demo)-workforce-(agent-role|[a-z0-9]{1,16}-(deploy-role|exec-role|boundary))$
+```
+
+The Lambda alias is the one resource with a fixed name, `live`: it is scoped by its function, so a prefix adds nothing. The log group of a function is named after it, `/aws/lambda/<function name>`.
+
+IAT-46 asserts that every name in a policy matches one of the two regexps, that its application is registered, and the length limits. The word of a name is not proof of its type: a policy pattern also names the service in the ARN, so a function called `...-role` is not reachable through a role pattern.
+
+### Platform resources and paths
+
+| Resource | Name | IAM path |
 |---|---|---|
-| Agent role (one per environment, shared) | `<env>-workforce-agent-role` | `/platform/` |
-| Permissions boundary (one per environment, shared) | `<env>-workforce-platform-boundary` | `/platform/` |
-| Deploy role (one per application) | `<env>-workforce-<app>-deploy-role` | `/platform/` |
-| CloudFormation execution role (one per application) | `<env>-workforce-<app>-exec-role` | `/platform/` |
-| Stack of an application | `<env>-workforce-<app>-<qualifier>-stack` | |
-| Function, alias, alarm of an application | `<env>-workforce-<app>-<qualifier>-function`, `-alias`, `-alarm` | |
-| IAM role an application creates | `<env>-workforce-<app>-<qualifier>-role` | `/apps/` |
+| Agent role (one per environment, shared) | `<acct>-workforce-agent-role` | `/platform/` |
+| Permissions boundary (one per application) | `<acct>-workforce-<app>-boundary` | `/platform/` |
+| Deploy role (one per application) | `<acct>-workforce-<app>-deploy-role` | `/platform/` |
+| CloudFormation execution role (one per application) | `<acct>-workforce-<app>-exec-role` | `/platform/` |
+| IAM role an application creates | `<acct>-workforce-<app>-<qualifier>-role` | `/apps/<app>/` |
 
-`<qualifier>` is one or more segments that tell resources of the same type apart (`main`, `api`). The log group of a function is named by Lambda after the function: `/aws/lambda/<function name>`.
+**Platform and application roles are told apart by the IAM path,** and each application has a path of its own. The execution role may create and pass roles only under `/apps/<app>/` with the application's prefix, so it can never reach `/platform/` roles (the deploy role, itself, the agent role, the boundary) or another application's roles, and a `*` in a pattern cannot be used to put a role on another path. Role names are unique per account whatever the path, so an application cannot create a role named like a platform role: the call fails with `EntityAlreadyExists`.
 
-**Platform and application roles are told apart by the IAM path,** not by the name: the execution role may create and pass roles under `/apps/<env>-workforce-<app>-*-role` only, so it can never match `/platform/` roles (the deploy role, itself, the agent role, the boundary), whatever an application names its resources. A key is never accepted where a name is expected (`docs/ENVIRONMENTS.md`).
+Each application has **its own deploy role, execution role and boundary**: the deploy role of one application can pass only its own execution role, whose policy covers only its own resources, so one repository cannot reach another's.
 
-Each application has **its own deploy and execution roles**: the deploy role of one application can pass only its own execution role, whose policy covers only its own `<env>-workforce-<app>-*` resources, so one repository cannot reach another's.
+### ARN shapes
+
+Policy patterns are full ARNs, because that is what IAM matches. The shapes the `lambda` archetype uses (`<region>` and `<account>` are the environment's, written as placeholders):
+
+| Resource | ARN resource part |
+|---|---|
+| Stack | `stack/<acct>-workforce-<app>-*-stack/*` (the trailing part is a GUID) |
+| Function | `function:<acct>-workforce-<app>-*-function` and, for aliases and versions, `function:<acct>-workforce-<app>-*-function:*` |
+| Alarm | `alarm:<acct>-workforce-<app>-*-alarm` |
+| Log group | `log-group:/aws/lambda/<acct>-workforce-<app>-*-function` and `...:*` for streams |
+| Application role | `role/apps/<app>/<acct>-workforce-<app>-*-role` |
+| Platform role, boundary, policy | `policy/platform/<acct>-workforce-<app>-boundary` and `role/platform/<name>` with the exact names above |
+
+Tags are a complement and never a control on their own: `docs/TAG_CONVENTION.md`.
+
+## Templates
+
+CloudFormation names an unnamed resource `<stack>-<LogicalId>-<RANDOM>`, in mixed case, which no pattern above matches, and a policy that fails closed turns that into `AccessDenied` at the first deploy. So the `lambda` archetype requires, and a template lint in the application's CI (cfn-lint or cfn-guard, a required check) enforces:
+
+- every named resource sets its **explicit name**, an IAM role also its **path** `/apps/<app>/` and its **permissions boundary**, and the stack is deployed with `CAPABILITY_NAMED_IAM`;
+- the function declares its own **log group**, with retention, rather than leaving Lambda to create it. The execution role may create the log group and the function's role may not (it only writes streams);
+- **no `Transform`**. A SAM template needs the transform resource in every change set and creates default-named resources, so SAM is a new decision, not an option of this archetype;
+- no nested stacks and no custom resources (the CDK log-retention helper, for one), which create resources named outside the rule;
+- the CDK default bootstrap (`cdk-*` roles, bucket and SSM parameter) is not used: the deployment is the artifact built once in CI, the pre-created execution role and the stack tags of `docs/TAG_CONVENTION.md`.
 
 ## Roles and trust
 
 | Role | Used by | Trust |
 |---|---|---|
-| `<env>-workforce-agent-role` | the developer agent (ECS task in `workforce`) | `sts:AssumeRole` |
-| `<env>-workforce-<app>-deploy-role` | the deploy job of the application repository | `sts:AssumeRoleWithWebIdentity` (GitHub OIDC) |
+| `<acct>-workforce-agent-role` | the developer agent (ECS task in `workforce`) | `sts:AssumeRole` |
+| `<acct>-workforce-<app>-deploy-role` | the deploy job of the application repository | `sts:AssumeRoleWithWebIdentity` (GitHub OIDC) |
 
 ### Agent role: `sts:AssumeRole` from `workforce`
 
@@ -82,9 +134,9 @@ The trust policy is the pattern of `modules/account-ci-baseline`: the account's 
 
 An **archetype** is a named permission template: the actions allowed with the resource-name patterns they apply to, the narrowing per environment, and the reason for each. Enabling a repository to deploy a kind of workload into an environment is one instantiation of the role module with that archetype and that repository's subject. An archetype is only ever added, never edited: a change in its permissions is a new decision.
 
-- The **deploy role** may do only what is needed to start a CloudFormation deployment: act on stacks named `<env>-workforce-<app>-*-stack`, read the artifact, and pass **one** role, its own `<env>-workforce-<app>-exec-role`, to CloudFormation.
+- The **deploy role** may do only what is needed to start a CloudFormation deployment: act on stacks named `<acct>-workforce-<app>-*-stack`, read the artifact, and pass **one** role, its own `<acct>-workforce-<app>-exec-role`, to CloudFormation.
 - The **execution role** creates the resources. Its policy is the archetype's real permission set. The OIDC identity therefore never holds create rights over application resources.
-- The **permissions boundary** `<env>-workforce-platform-boundary` caps every role a stack creates for the application, so the application cannot grant itself more than the archetype allows.
+- The **permissions boundary** `<acct>-workforce-<app>-boundary`, one per application, caps every role a stack creates for that application, so it cannot grant itself more than the archetype allows and cannot touch another application's logs.
 - The **agent role** only reads.
 
 All platform roles and the boundary are created by the environment account's stack in `workforce-infra`, applied through the gated CI (order of changes: the CI-permissions-first rule in `CLAUDE.md`). The application's resources are created by its pipeline.
@@ -99,13 +151,13 @@ The reason column is part of the decision: a statement without one is not allowe
 
 **No secrets in function configuration.** Environment variables of a function carry names and endpoints, never secrets (a secret is referenced by its Secrets Manager name and read at runtime). This is what lets the agent read configuration.
 
-### `<env>-workforce-agent-role` (identical in all environments)
+### `<acct>-workforce-agent-role` (identical in all environments)
 
 | Allowed | Resource | Reason |
 |---|---|---|
-| `lambda:GetFunctionConfiguration`, `lambda:GetAlias`, `lambda:ListVersionsByFunction`, `lambda:ListAliases` | functions `<env>-workforce-<app>-*-function` | the agent checks what is deployed. `GetFunction` is left out: it returns a pre-signed URL to the code package |
-| `cloudformation:DescribeStacks`, `DescribeStackEvents` | stacks `<env>-workforce-<app>-*-stack` | the agent reads a failed deployment. `GetTemplate` is left out: templates may name internal resources |
-| `logs:GetLogEvents`, `logs:FilterLogEvents`, `logs:DescribeLogStreams` | log groups `/aws/lambda/<env>-workforce-<app>-*-function` | the agent reads the logs of the code it changed |
+| `lambda:GetFunctionConfiguration`, `lambda:GetAlias`, `lambda:ListVersionsByFunction`, `lambda:ListAliases` | functions (and their aliases) `<acct>-workforce-<app>-*-function` | the agent checks what is deployed. `GetFunction` is left out: it returns a pre-signed URL to the code package |
+| `cloudformation:DescribeStacks`, `DescribeStackEvents` | stacks `<acct>-workforce-<app>-*-stack` | the agent reads a failed deployment. `GetTemplate` is left out: templates may name internal resources |
+| `logs:GetLogEvents`, `logs:FilterLogEvents`, `logs:DescribeLogStreams` | log groups `/aws/lambda/<acct>-workforce-<app>-*-function` | the agent reads the logs of the code it changed |
 | `cloudwatch:DescribeAlarms` (resource `*`) | | the agent reads the canary and health state |
 
 Opening a release is a GitHub operation and needs nothing in AWS, so the agent role has no write action of any kind.
@@ -116,38 +168,38 @@ Opening a release is a GitHub operation and needs nothing in AWS, so the agent r
 | `iam:*`, `sts:AssumeRole` | no privilege escalation, no role chaining |
 | `secretsmanager:*`, `kms:*`, `s3:*`, `lambda:GetFunction` | the agent needs no secret, no data and no code download |
 
-### `<env>-workforce-<app>-deploy-role`
+### `<acct>-workforce-<app>-deploy-role`
 
 | Capability | Resource | `test` | `quality` | `demo` | Reason |
 |---|---|---|---|---|---|
-| `cloudformation:CreateStack`, `DeleteStack` | stacks `<env>-workforce-<app>-*-stack` | yes | no | no | `test` deploys every pull request, so it creates and deletes ephemeral stacks |
+| `cloudformation:CreateStack`, `DeleteStack` | stacks `<acct>-workforce-<app>-*-stack` | yes | no | no | `test` deploys every pull request, so it creates and deletes ephemeral stacks |
 | `cloudformation:CreateChangeSet` with `cloudformation:ChangeSetType` `UPDATE` | same | yes | yes | yes | the update path. A `CREATE` change set would create a stack, so it is allowed in `test` only |
 | `cloudformation:CreateChangeSet` with `ChangeSetType` `CREATE` | same | yes | no | no | as above |
 | `cloudformation:ExecuteChangeSet`, `DeleteChangeSet`, `UpdateStack`, `DescribeStacks`, `DescribeStackEvents`, `DescribeChangeSet`, `GetTemplate` | same | yes | yes | yes | follow and finish a deployment of this application only |
 | `cloudformation:GetTemplateSummary` (resource `*`) | | yes | yes | yes | reads the template before a change set |
-| `iam:PassRole` of `<env>-workforce-<app>-exec-role`, condition `iam:PassedToService` = `cloudformation.amazonaws.com` | that one role | yes | yes | yes | CloudFormation needs the execution role, and only that one |
+| `iam:PassRole` of `<acct>-workforce-<app>-exec-role`, condition `iam:PassedToService` = `cloudformation.amazonaws.com` | that one role | yes | yes | yes | CloudFormation needs the execution role, and only that one |
 | `s3:GetObject` | the artifact prefix of the repository | yes | yes | yes | the deployment reads the artifact built once in CI (`docs/ENVIRONMENTS.md`) |
-| `lambda:GetFunctionConfiguration`, `lambda:GetAlias` | functions `<env>-workforce-<app>-*-function` | yes | yes | yes | the post-deploy health check |
+| `lambda:GetFunctionConfiguration`, `lambda:GetAlias` | functions `<acct>-workforce-<app>-*-function` | yes | yes | yes | the post-deploy health check |
 | `cloudwatch:DescribeAlarms` (resource `*`) | | yes | yes | yes | the canary reads the alarm that triggers a rollback |
 
 | Not allowed | Reason |
 |---|---|
-| a stack not named `<env>-workforce-<app>-*-stack` | a repository cannot touch another application or the environment's own resources |
+| a stack not named `<acct>-workforce-<app>-*-stack` | a repository cannot touch another application or the environment's own resources |
 | any `iam` action other than the one `PassRole` above | the deploy identity cannot create or change a role, a policy or a user |
 | `iam:PassRole` of any other role, including another application's | no way around the execution role |
 | `lambda:*` write actions, directly | resources change only through the stack, so every change is in a template and a change set |
 | `organizations:*`, `account:*`, `sts:AssumeRole` | no organization access, no chaining |
 
-### `<env>-workforce-<app>-exec-role` (the real permission set)
+### `<acct>-workforce-<app>-exec-role` (the real permission set)
 
-Resources are the application's, `<env>-workforce-<app>-*-<resource>`. Roles are `role/apps/<env>-workforce-<app>-*-role`.
+Resources are the application's, `<acct>-workforce-<app>-*-<resource>`. Roles are `role/apps/<app>/<acct>-workforce-<app>-*-role`, and the boundary is `<acct>-workforce-<app>-boundary`.
 
 | Capability | `test` | `quality` | `demo` | Reason |
 |---|---|---|---|---|
 | `lambda:UpdateFunctionCode`, `UpdateFunctionConfiguration`, `PublishVersion`, `UpdateAlias`, `GetFunction`, `GetFunctionConfiguration`, `GetAlias`, `TagResource`, `UntagResource` | yes | yes | yes | releasing a version and moving the alias, which is what a canary shifts weights on |
 | `lambda:CreateFunction`, `CreateAlias`, `AddPermission` | yes | yes | no | a resource new to the template is created in `quality` first. `demo` does not create resources: a missing one means a maintainer bootstrap |
 | `lambda:DeleteFunction`, `DeleteAlias`, `RemovePermission` | yes | no | no | `quality` and `demo` never destroy |
-| `logs:CreateLogGroup`, `PutRetentionPolicy`, `TagResource` | yes | yes | no | retention is set by the stack, so logs do not grow without bound |
+| `logs:CreateLogGroup`, `PutRetentionPolicy`, `TagResource` | yes | yes | no | the log group is declared by the template, with retention, so logs do not grow without bound |
 | `logs:DeleteLogGroup` | yes | no | no | never destroy |
 | `cloudwatch:PutMetricAlarm` | yes | yes | no | the health and rollback alarms (`demo` changes none) |
 | `cloudwatch:DeleteAlarms` | yes | no | no | never destroy |
@@ -157,19 +209,19 @@ Resources are the application's, `<env>-workforce-<app>-*-<resource>`. Roles are
 | `s3:GetObject` on the artifact prefix | yes | yes | yes | `UpdateFunctionCode` reads the package |
 | `logs:DescribeLogGroups` (resource `*`) | yes | yes | yes | CloudFormation checks for an existing log group |
 
-Conditions on the `iam` rows, all of them (not only create and attach): the role must be under `role/apps/<env>-workforce-<app>-*-role`, and for `CreateRole`, `AttachRolePolicy`, `PutRolePolicy` the role must have the boundary, compared by its **full ARN** (`iam:PermissionsBoundary`), so an existing unbounded role under the pattern cannot be edited. The trust policy of an application role names only `lambda.amazonaws.com` (`iam:UpdateAssumeRolePolicy` is not allowed, so the trust is set at creation and a change to it is a new decision).
+Conditions on the `iam` rows, all of them (not only create and attach): the role must be under `role/apps/<app>/<acct>-workforce-<app>-*-role`, and for `CreateRole`, `AttachRolePolicy`, `PutRolePolicy` the role must have the boundary, compared by its **full ARN** (`iam:PermissionsBoundary`), so an existing unbounded role under the pattern cannot be edited. The trust policy of an application role names only `lambda.amazonaws.com` (`iam:UpdateAssumeRolePolicy` is not allowed, so the trust is set at creation and a change to it is a new decision).
 
 | Not allowed | Reason |
 |---|---|
 | `iam:PutRolePermissionsBoundary`, `DeleteRolePermissionsBoundary`, `UpdateAssumeRolePolicy` | the application cannot remove or swap its cap, or open its trust |
-| a role without the boundary, any role outside `role/apps/<env>-workforce-<app>-*-role` | no way to create an unbounded role. The `/platform/` roles, the boundary and the execution role itself are out of reach because of the path (and the name: an application's `<qualifier>` cannot end in `deploy` or `exec`, `agent` and `platform` are reserved) |
+| a role without the boundary, any role outside `role/apps/<app>/<acct>-workforce-<app>-*-role` | no way to create an unbounded role. The `/platform/` roles, the boundary and the execution role itself are out of reach because of the path, and another application's roles because of its own path |
 | any `iam` action on users or groups | not part of the archetype |
 | any resource outside the patterns above | there is no `*` resource in an Allow except the exception above |
 | VPC, EC2, data stores, CodeDeploy | not part of the `lambda` archetype. A workload that needs them, or canary through CodeDeploy, is a new archetype. This one shifts weight on the alias through `UpdateAlias` |
 
-### `<env>-workforce-platform-boundary`
+### `<acct>-workforce-<app>-boundary`
 
-The permissions boundary lists the actions an application role may ever have: writing its own logs (`logs:CreateLogStream`, `logs:PutLogEvents` on `/aws/lambda/<env>-workforce-<app>-*-function`) and what the workload needs at runtime, none at first. A role that needs more means a new decision here.
+The permissions boundary lists the actions an application role may ever have: writing the streams of its own function's log group (`logs:CreateLogStream`, `logs:PutLogEvents` on `/aws/lambda/<acct>-workforce-<app>-*-function`) and what the workload needs at runtime, none at first. It has no `logs:CreateLogGroup`: the group is declared by the template. A role that needs more means a new decision here. The execution role compares `iam:PermissionsBoundary` with the full ARN of this application's boundary.
 
 ## Narrowing rule: `demo` ⊂ `quality` ⊂ `test`
 
@@ -190,19 +242,28 @@ The matrix is a table on purpose: IAT-44 and IAT-45 assert the inclusion with `t
 
 - The M2 SCPs apply to the Environments OU. Nothing here loosens them and no SCP is added.
 - No `*` principal, no `*` or `service:*` action, no `NotAction`, `NotPrincipal` or `NotResource` in an Allow, as in `CLAUDE.md`.
-- The permissions boundary `<env>-workforce-platform-boundary` can lock a role out. It, the `Resource: "*"` exception above, and any `Deny` added by the implementation, need the maintainer's explicit approval in review. This decision introduces no `Deny` statement. A `Deny` may use a wildcard only when it is narrowed by a `Condition` or by specific resources, and it is asserted literally in a test.
+- The permissions boundary `<acct>-workforce-<app>-boundary` can lock a role out. It, the `Resource: "*"` exception above, and any `Deny` added by the implementation, need the maintainer's explicit approval in review. This decision introduces no `Deny` statement. A `Deny` may use a wildcard only when it is narrowed by a `Condition` or by specific resources, and it is asserted literally in a test.
 
 ## How later issues use this
 
 | Issue | Takes from this document |
 |---|---|
-| IAT-43 cross-account role module | the two trust modes, the invariants (no `*` principal, no `*` action, no `NotAction`, ExternalId required on `AssumeRole`), the naming regexps and the IAM paths |
+| IAT-43 cross-account role module | the two trust modes, the invariants (no `*` principal, no `*` action, no `NotAction`, ExternalId required on `AssumeRole`), the two naming regexps, the length limits and the IAM paths |
 | IAT-44 agent role per environment | the agent table, the principal and the ExternalId scheme |
-| IAT-45 deploy role per environment | the deploy and execution tables (per application), `<env>-workforce-platform-boundary`, the narrowing steps |
+| IAT-45 deploy role per environment | the deploy and execution tables (per application), the per-application boundary, the narrowing steps, the template rules |
 | IAT-46 allowed/denied matrix | every Allowed cell as a call that succeeds, every denied row as a call that fails, and every name checked against the regexps |
 | IAT-42, IAT-79 CI baselines and GitHub Environments | the OIDC subjects of the deploy roles and the branch and tag restrictions of the GitHub Environments |
 
 ## Open items
 
-- The deploy tool (SAM or CDK) is decided in M7. This model assumes CloudFormation only, and the tool must work with a pre-created execution role and boundary.
 - The artifact location (the bucket and prefix named above) is created with the first deployable and written down then, as a placeholder in this document until it exists.
+- SAM is not part of the `lambda` archetype (transform). It would be a new archetype or a new decision.
+
+## Next decisions
+
+Decided when the first resource of the kind exists, not guessed now. Each is a new section here, never an edit above.
+
+- **More resource types:** the S3 artifact bucket (global names, 63 characters, a name that cannot be guessed in a public repository), Secrets Manager and SSM parameters (hierarchical names, `<acct>/workforce/<app>/<key>`), KMS aliases, SQS (`.fifo` ends a name), EventBridge, ECS (task definition ARNs end in `:*`). Each with its ARN shape, length limit and word, kept in a table next to `scripts/environment-keys.tsv`, which IAT-46 also reads.
+- `iam:PolicyARN` on `AttachRolePolicy`, so that an application role can only be given policies from a list.
+- Whether `aws:PrincipalArn` carries the IAM path for the agent task role in `workforce`: prove it with one real call, or give that role no path, before IAT-44.
+- Policy size: the agent role grows with every application, and the trust policy holds two ExternalIds during a rotation. Check against the IAM limits when the second application is added.
