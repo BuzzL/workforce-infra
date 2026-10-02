@@ -9,13 +9,22 @@
 #   bootstrap             management          no (local)      management-plan
 #   live/management       management          yes             management-plan
 #   live/accounts/security|workforce  same name  no (local)  <acct>-plan, once <stack>/.ci-enabled exists
-#   live/environments/test|qa|demo  same name  yes  none
+#   live/environments/test|qual|demo  same name  yes  none
 #
 # A stack name is used in JSON and in job names, so it is limited to [a-z0-9/_-], and only
 # the environments named below exist: a directory name cannot inject anything or select
 # another environment.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+# The deployable environments. Every name is exactly four lowercase letters (^[a-z]{4}$), so
+# AWS policies and role-name patterns can match it strictly (docs/ENVIRONMENTS.md). The same
+# name is used for the account, the live/environments/<env> stack, the GitHub Environment and
+# APP_ENV. management, security and workforce are not environments.
+environments="test qual demo"
+for e in $environments; do
+  [[ $e =~ ^[a-z]{4}$ ]] || { echo "environment name must match ^[a-z]{4}\$: $e" >&2; exit 1; }
+done
 
 mode=${1:-apply}
 case "$mode" in apply | plan) ;; *) echo "usage: $0 [apply|plan]" >&2; exit 2 ;; esac
@@ -35,8 +44,10 @@ while IFS= read -r stack; do
     live/accounts/security | live/accounts/workforce)
       [ -f "$stack/.ci-enabled" ] || continue
       env=${stack#live/accounts/} apply=false plan_env=${stack#live/accounts/}-plan ;;
-    live/environments/test | live/environments/qa | live/environments/demo)
-      env=${stack#live/environments/} apply=true ;;
+    live/environments/*)
+      env=${stack#live/environments/}
+      case " $environments " in *" $env "*) ;; *) echo "unmapped stack: $stack" >&2; exit 1 ;; esac
+      apply=true ;;
     *)                     echo "unmapped stack: $stack" >&2; exit 1 ;;
   esac
   if [ "$mode" = plan ]; then

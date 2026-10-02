@@ -145,10 +145,10 @@ write_stack live/management
 write_stack live/accounts/security
 write_stack live/accounts/workforce
 write_stack live/environments/test
-write_stack live/environments/qa
+write_stack live/environments/qual
 write_stack live/environments/demo
 got=$(scripts/ci-stacks.sh apply)
-want='[{"stack":"bootstrap","environment":"management","apply":false},{"stack":"live/environments/demo","environment":"demo","apply":true},{"stack":"live/environments/qa","environment":"qa","apply":true},{"stack":"live/environments/test","environment":"test","apply":true},{"stack":"live/management","environment":"management","apply":true}]'
+want='[{"stack":"bootstrap","environment":"management","apply":false},{"stack":"live/environments/demo","environment":"demo","apply":true},{"stack":"live/environments/qual","environment":"qual","apply":true},{"stack":"live/environments/test","environment":"test","apply":true},{"stack":"live/management","environment":"management","apply":true}]'
 if [ "$got" = "$want" ]; then echo "ok   ci-stacks apply maps paths to environments"; else echo "FAIL ci-stacks apply mapping"; echo "$got"; failed=1; fi
 got=$(scripts/ci-stacks.sh plan)
 want='[{"stack":"bootstrap","environment":"management-plan"},{"stack":"live/management","environment":"management-plan"}]'
@@ -157,13 +157,22 @@ if [ "$got" = "$want" ]; then echo "ok   ci-stacks plan lists only stacks with a
 # then are only planned (apply false), under their own <account>-plan environment.
 touch live/accounts/security/.ci-enabled
 got=$(scripts/ci-stacks.sh apply)
-want='[{"stack":"bootstrap","environment":"management","apply":false},{"stack":"live/accounts/security","environment":"security","apply":false},{"stack":"live/environments/demo","environment":"demo","apply":true},{"stack":"live/environments/qa","environment":"qa","apply":true},{"stack":"live/environments/test","environment":"test","apply":true},{"stack":"live/management","environment":"management","apply":true}]'
+want='[{"stack":"bootstrap","environment":"management","apply":false},{"stack":"live/accounts/security","environment":"security","apply":false},{"stack":"live/environments/demo","environment":"demo","apply":true},{"stack":"live/environments/qual","environment":"qual","apply":true},{"stack":"live/environments/test","environment":"test","apply":true},{"stack":"live/management","environment":"management","apply":true}]'
 if [ "$got" = "$want" ]; then echo "ok   ci-stacks enables an account baseline with its marker, without apply"; else echo "FAIL ci-stacks account apply mapping"; echo "$got"; failed=1; fi
 got=$(scripts/ci-stacks.sh plan)
 want='[{"stack":"bootstrap","environment":"management-plan"},{"stack":"live/accounts/security","environment":"security-plan"},{"stack":"live/management","environment":"management-plan"}]'
 if [ "$got" = "$want" ]; then echo "ok   ci-stacks plans an enabled account baseline in <account>-plan"; else echo "FAIL ci-stacks account plan mapping"; echo "$got"; failed=1; fi
 rm live/accounts/security/.ci-enabled
 expect fail:usage "ci-stacks rejects an unknown mode" scripts/ci-stacks.sh nonsense
+# An environment is exactly four lowercase letters: a mapped name that is not (the old qa) fails.
+sed 's/^environments="test qual demo"/environments="test qa demo"/' scripts/ci-stacks.sh > scripts/ci-stacks-badname.sh
+chmod +x scripts/ci-stacks-badname.sh
+expect fail:"must match" "ci-stacks refuses an environment name that is not four letters" scripts/ci-stacks-badname.sh
+rm scripts/ci-stacks-badname.sh
+rm -rf live/environments/qa
+mkdir -p live/environments/qa && printf 'terraform {}\n' > live/environments/qa/main.tf
+expect fail:unmapped "ci-stacks does not map the old qa environment" scripts/ci-stacks.sh
+rm -rf live/environments/qa
 expect fail:usage "account secrets script rejects a missing account" scripts/set-account-environment-secrets.sh
 expect fail:usage "account secrets script rejects an unknown account" scripts/set-account-environment-secrets.sh management
 expect fail:usage "account secrets script rejects an unknown option" scripts/set-account-environment-secrets.sh security --nonsense
