@@ -7,3 +7,8 @@ assignment_account_ids = { security = "<12 digits>", workforce = "<12 digits>" }
 
 # Only for the one-time bootstrap, never in CI: the security account ID.
 # break_glass_account_id = "<12 digits>"
+
+# Audit log archive (docs/AUDIT_LOGGING.md). Leave unset to keep it off.
+# audit_log_bucket_name = "<unique-bucket-name>"
+# organization_id       = "o-xxxxxxxxxx"
+# management_account_id = "<12 digits>"

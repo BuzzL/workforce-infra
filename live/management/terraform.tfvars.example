@@ -3,3 +3,6 @@ region  = "<region>"
 root_id = "r-xxxx"
 account_email_base = "local@example.com"
 budget_alert_email = "alerts@example.com"
+
+# Organization trail (docs/AUDIT_LOGGING.md). Leave unset to keep it off.
+# audit_log_bucket_name = "<unique-bucket-name>"
