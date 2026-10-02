@@ -1,16 +1,21 @@
-# The names and four-letter keys of the accounts and environments: the single source of truth.
+# The names and four-letter keys of the AWS accounts: the single source of truth.
 #
-# name   explanatory: account name, live/environments/<name> stack, GitHub Environment, APP_ENV, docs.
-# kind   account | environment. Only environments have a live/environments/<name> stack.
-# key    exactly four lowercase letters (^[a-z]{4}$) and unique. Used in the naming conventions of
-#        AWS resources (role names, policy and resource name patterns) so that they can be checked
-#        with strict regexps. A key is not a name: it is never accepted where a name is expected.
+# name         explanatory: account name, and where it is also an environment, the
+#              live/environments/<name> stack, GitHub Environment and APP_ENV, and docs.
+# ou           the organizational unit the account lives in (Management, Development,
+#              Environments, Operations). The accounts of the Environments OU are the deployable
+#              environments and are the only ones with a live/environments/<name> stack.
+# key          exactly four lowercase letters (^[a-z]{4}$) and unique. Used in the naming
+#              conventions of AWS resources (role names, policy and resource name patterns) so that
+#              they can be checked with strict regexps. A key is not a name: it is never accepted
+#              where a name is expected.
+# description  a short sentence, for people.
 #
 # Fields are separated by a tab. scripts/ci-stacks.sh validates this file on every run and the
-# selftest (scripts/test-tooling.sh) proves that a bad key or a duplicate is refused.
-management	account	root
-security	account	scrt
-workforce	account	wrkf
-test	environment	test
-quality	environment	qual
-demo	environment	demo
+# selftest (scripts/test-tooling.sh) proves that a bad key, a duplicate or an unknown OU is refused.
+management	Management	root	Organization management account: billing, Organizations, SSO home
+security	Management	scrt	Identity and access administration, audit log archive
+workforce	Development	wrkf	Runs the developer agents: webhook, queue, ECS tasks
+test	Environments	test	First environment: every pull request deploys here
+quality	Environments	qual	Quality checks of main after every merge
+demo	Environments	demo	Release demo, needs the maintainer's approval

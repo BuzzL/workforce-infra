@@ -166,18 +166,20 @@ rm live/accounts/security/.ci-enabled
 expect fail:usage "ci-stacks rejects an unknown mode" scripts/ci-stacks.sh nonsense
 # Names are explanatory, keys are four lowercase letters, unique (scripts/environment-keys.tsv).
 # The shipped table passes (every mapping above), and each way of breaking it is refused.
-printf 'quality\tenvironment\tqa\n' > bad-keys.tsv
+printf 'quality\tEnvironments\tqa\tx\n' > bad-keys.tsv
 expect fail:"four lowercase letters" "ci-stacks refuses a key that is not four letters" env ENV_KEYS_FILE=bad-keys.tsv scripts/ci-stacks.sh
-printf 'quality\tenvironment\tQUAL\n' > bad-keys.tsv
+printf 'quality\tEnvironments\tQUAL\tx\n' > bad-keys.tsv
 expect fail:"four lowercase letters" "ci-stacks refuses an uppercase key" env ENV_KEYS_FILE=bad-keys.tsv scripts/ci-stacks.sh
-printf 'quality\tenvironment\tqualx\n' > bad-keys.tsv
+printf 'quality\tEnvironments\tqualx\tx\n' > bad-keys.tsv
 expect fail:"four lowercase letters" "ci-stacks refuses a five letter key" env ENV_KEYS_FILE=bad-keys.tsv scripts/ci-stacks.sh
-printf 'test\tenvironment\ttest\ndemo\tenvironment\ttest\n' > bad-keys.tsv
+printf 'test\tEnvironments\ttest\tx\ndemo\tEnvironments\ttest\tx\n' > bad-keys.tsv
 expect fail:"duplicate key" "ci-stacks refuses a duplicate key" env ENV_KEYS_FILE=bad-keys.tsv scripts/ci-stacks.sh
-printf 'quality\tstage\tqual\n' > bad-keys.tsv
-expect fail:"account or environment" "ci-stacks refuses an unknown kind" env ENV_KEYS_FILE=bad-keys.tsv scripts/ci-stacks.sh
-printf 'security\taccount\tscrt\n' > bad-keys.tsv
-expect fail:"no environment" "ci-stacks refuses a table without an environment" env ENV_KEYS_FILE=bad-keys.tsv scripts/ci-stacks.sh
+printf 'quality\tStaging\tqual\tx\n' > bad-keys.tsv
+expect fail:"unknown OU" "ci-stacks refuses an unknown OU" env ENV_KEYS_FILE=bad-keys.tsv scripts/ci-stacks.sh
+printf 'quality\tEnvironments\tqual\t\n' > bad-keys.tsv
+expect fail:"description" "ci-stacks refuses an empty description" env ENV_KEYS_FILE=bad-keys.tsv scripts/ci-stacks.sh
+printf 'security\tManagement\tscrt\tx\n' > bad-keys.tsv
+expect fail:"Environments OU" "ci-stacks refuses a table without an account in the Environments OU" env ENV_KEYS_FILE=bad-keys.tsv scripts/ci-stacks.sh
 rm bad-keys.tsv
 # The key is not the name: neither the retired qa nor the key qual maps to a stack.
 for old in qa qual; do

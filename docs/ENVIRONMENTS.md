@@ -4,21 +4,21 @@
 
 The workforce delivers through three environments, `test`, `quality` and `demo`, each in its own AWS account. The production release happens outside this system, from releases.
 
-**Names and keys.** Every account and environment has two identifiers, kept in one table, `scripts/environment-keys.tsv`:
+**Names and keys.** Every account has two identifiers, kept in one table, `scripts/environment-keys.tsv`:
 
-- the **name** is explanatory. It is used for the AWS account, the `live/environments/<name>` stack, the GitHub Environment, the `APP_ENV` value and in docs.
+- the **name** is explanatory. It is the AWS account name; for the accounts of the Environments OU it is also the `live/environments/<name>` stack, the GitHub Environment and the `APP_ENV` value. It is used in docs.
 - the **key** is exactly four lowercase letters (`^[a-z]{4}$`) and unique. It is used in the naming conventions of AWS resources (role names, policy and resource name patterns), so that they can be checked with strict regexps. A key is never accepted where a name is expected.
 
-| Name | Kind | Key |
-|---|---|---|
-| `management` | account | `root` |
-| `security` | account | `scrt` |
-| `workforce` | account | `wrkf` |
-| `test` | environment | `test` |
-| `quality` | environment | `qual` |
-| `demo` | environment | `demo` |
+| Name | OU | Key | Description |
+|---|---|---|---|
+| `management` | Management | `root` | Organization management account: billing, Organizations, SSO home |
+| `security` | Management | `scrt` | Identity and access administration, audit log archive |
+| `workforce` | Development | `wrkf` | Runs the developer agents: webhook, queue, ECS tasks |
+| `test` | Environments | `test` | First environment: every pull request deploys here |
+| `quality` | Environments | `qual` | Quality checks of main after every merge |
+| `demo` | Environments | `demo` | Release demo, needs the maintainer's approval |
 
-`scripts/ci-stacks.sh` reads the table on every run: it maps `live/environments/<name>` for the environments of the table and refuses a table with a key that is not four lowercase letters, a duplicate key or an unknown kind. The selftest covers each refusal and that neither `qa` nor the key `qual` maps to a stack. Existing resources keep their names (`github-infra-security`, `github-infra-workforce`); moving them to keyed names is a separate decision.
+`scripts/ci-stacks.sh` reads the table on every run: it maps `live/environments/<name>` for the accounts of the Environments OU and refuses a table with a key that is not four lowercase letters, a duplicate key, an unknown OU, an empty description or no account in the Environments OU. The selftest covers each refusal and that neither `qa` nor the key `qual` maps to a stack. Existing resources keep their names (`github-infra-security`, `github-infra-workforce`); moving them to keyed names is a separate decision.
 
 ## Decisions
 

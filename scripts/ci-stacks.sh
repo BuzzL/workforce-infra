@@ -9,7 +9,7 @@
 #   bootstrap             management          no (local)      management-plan
 #   live/management       management          yes             management-plan
 #   live/accounts/security|workforce  same name  no (local)  <acct>-plan, once <stack>/.ci-enabled exists
-#   live/environments/<name>  same name  yes  none  (environments of scripts/environment-keys.tsv)
+#   live/environments/<name>  same name  yes  none  (accounts of the Environments OU in scripts/environment-keys.tsv)
 #
 # A stack name is used in JSON and in job names, so it is limited to [a-z0-9/_-], and only
 # the environments named below exist: a directory name cannot inject anything or select
@@ -25,16 +25,17 @@ cd "$(dirname "$0")/.."
 keys_file=${ENV_KEYS_FILE:-scripts/environment-keys.tsv}
 environments=""
 seen_keys=" "
-while IFS=$'\t' read -r name kind key; do
+while IFS=$'\t' read -r name ou key description; do
   case "$name" in "" | \#*) continue ;; esac
   [[ $name =~ ^[a-z]+$ ]] || { echo "name must be lowercase letters: $name" >&2; exit 1; }
   [[ $key =~ ^[a-z]{4}$ ]] || { echo "key of $name must be exactly four lowercase letters (^[a-z]{4}\$): $key" >&2; exit 1; }
-  case "$kind" in account | environment) ;; *) echo "kind of $name must be account or environment: $kind" >&2; exit 1 ;; esac
+  case "$ou" in Management | Development | Environments | Operations) ;; *) echo "unknown OU for $name: $ou" >&2; exit 1 ;; esac
+  [ -n "$description" ] || { echo "description of $name is empty" >&2; exit 1; }
   case "$seen_keys" in *" $key "*) echo "duplicate key: $key" >&2; exit 1 ;; esac
   seen_keys+="$key "
-  if [ "$kind" = environment ]; then environments+="$name "; fi
+  if [ "$ou" = Environments ]; then environments+="$name "; fi
 done < "$keys_file"
-[ -n "$environments" ] || { echo "no environment in $keys_file" >&2; exit 1; }
+[ -n "$environments" ] || { echo "no account in the Environments OU in $keys_file" >&2; exit 1; }
 
 mode=${1:-apply}
 case "$mode" in apply | plan) ;; *) echo "usage: $0 [apply|plan]" >&2; exit 2 ;; esac
