@@ -5,6 +5,10 @@ override_resource {
   target = module.budget.aws_budgets_budget.this
 }
 
+override_resource {
+  target = aws_iam_service_linked_role.cloudtrail
+}
+
 variables {
   region             = "eu-west-1"
   root_id            = "r-ab12"
