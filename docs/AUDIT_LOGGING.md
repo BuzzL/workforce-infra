@@ -11,6 +11,11 @@ Every API call in every account is recorded by one organization trail and kept i
 
 Both stacks keep the feature **off** while `audit_log_bucket_name` is unset or empty, so merging the code creates nothing. Creating the trail needs trusted access for `cloudtrail.amazonaws.com` in the Organization, enabled once by hand. The apply role may repeat it for that one service principal only (`organizations:EnableAWSServiceAccess` with a `organizations:ServicePrincipal` condition), because AWS documents that the principal creating an organization trail needs this permission.
 
+## Prerequisites in the management account
+
+- Trusted access for `cloudtrail.amazonaws.com` in the Organization, enabled once by hand.
+- The service-linked role `AWSServiceRoleForCloudTrail`, managed by `live/management/service_linked_role.tf` (imported, `prevent_destroy`). The first apply of the trail failed until it existed; why CloudTrail could not create it itself under the CI role was not identified. In a rebuilt account, create it first (`aws iam create-service-linked-role --aws-service-name cloudtrail.amazonaws.com`), then apply.
+
 ## Decisions
 
 - **Single region.** The region-deny SCP leaves one region in use (`docs/ORGANIZATION_INPUTS.md`), so a multi-region trail would only add cost. Global service events (IAM, STS) are recorded in the home region.
