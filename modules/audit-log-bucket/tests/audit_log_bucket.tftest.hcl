@@ -121,3 +121,23 @@ run "malformed_organization_id_is_refused" {
 
   expect_failures = [var.organization_id]
 }
+
+run "empty_bucket_name_is_refused" {
+  command = plan
+
+  variables {
+    bucket_name = ""
+  }
+
+  expect_failures = [var.bucket_name]
+}
+
+run "noncurrent_retention_below_one_day_is_refused" {
+  command = plan
+
+  variables {
+    noncurrent_version_days = 0
+  }
+
+  expect_failures = [var.noncurrent_version_days]
+}

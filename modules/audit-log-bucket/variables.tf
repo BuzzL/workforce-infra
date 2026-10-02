@@ -1,6 +1,11 @@
 variable "bucket_name" {
   description = "Name of the log bucket. Globally unique."
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$", var.bucket_name))
+    error_message = "The bucket name must be 3 to 63 lowercase letters, digits, dots or hyphens."
+  }
 }
 
 variable "organization_id" {
@@ -56,6 +61,11 @@ variable "noncurrent_version_days" {
   description = "Days after which noncurrent object versions expire."
   type        = number
   default     = 90
+
+  validation {
+    condition     = var.noncurrent_version_days >= 1
+    error_message = "Noncurrent versions must be kept for at least one day."
+  }
 }
 
 variable "tags" {

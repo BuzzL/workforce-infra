@@ -77,3 +77,15 @@ run "enabling_without_the_management_account_is_refused" {
 
   expect_failures = [var.management_account_id]
 }
+
+run "malformed_management_account_is_refused" {
+  command = plan
+
+  variables {
+    audit_log_bucket_name = "workforce-audit-logs-example"
+    organization_id       = "o-abcdef1234"
+    management_account_id = "1234"
+  }
+
+  expect_failures = [var.management_account_id]
+}

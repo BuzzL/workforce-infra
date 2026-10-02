@@ -65,7 +65,7 @@ variable "budget_alert_email" {
 }
 
 variable "audit_log_bucket_name" {
-  description = "Name of the log bucket in the security account. Null keeps the organization trail off. Set by CI from the secret AUDIT_LOG_BUCKET (TF_VAR_audit_log_bucket_name); never committed."
+  description = "Name of the log bucket in the security account. Null keeps the organization trail off. To be set by CI from the secret AUDIT_LOG_BUCKET (TF_VAR_audit_log_bucket_name) once the workflow is wired, see docs/AUDIT_LOGGING.md; never committed."
   type        = string
   default     = null
   sensitive   = true
