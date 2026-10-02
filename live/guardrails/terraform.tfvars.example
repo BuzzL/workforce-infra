@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars (gitignored). This stack is applied only locally.
+region = "<region>"
+
+# Stages of the rollout (docs/GUARDRAILS_ROLLOUT.md): OU name to the baseline SCPs attached to it.
+# Empty attaches nothing. Edit one stage at a time, with the plan shown first.
+attachments = {}
+# attachments = {
+#   Development = ["deny-leave-organization", "deny-root-user", "deny-disable-cloudtrail", "deny-outside-allowed-region"]
+# }

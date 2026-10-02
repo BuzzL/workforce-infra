@@ -18,6 +18,7 @@ updates:
     directories:
       - /bootstrap
       - /live/management
+      - /live/guardrails
       - /live/accounts/security
       - /live/accounts/workforce
     schedule:

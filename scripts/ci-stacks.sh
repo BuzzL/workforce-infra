@@ -60,6 +60,12 @@ while IFS= read -r stack; do
     live/accounts/security | live/accounts/workforce)
       [ -f "$stack/.ci-enabled" ] || continue
       env=${stack#live/accounts/} apply=false plan_env=${stack#live/accounts/}-plan ;;
+    # Guardrails (SCP attachments) are applied only locally with the management admin session: a wrong
+    # SCP can lock principals out, so CI never applies them. They join the CI plan only when
+    # .ci-enabled is committed, once the CI roles can read what they manage (docs/GUARDRAILS_ROLLOUT.md).
+    live/guardrails)
+      [ -f "$stack/.ci-enabled" ] || continue
+      env=management apply=false plan_env=management-plan ;;
     live/environments/*)
       env=${stack#live/environments/}
       case " $environments " in *" $env "*) ;; *) echo "unmapped stack: $stack" >&2; exit 1 ;; esac

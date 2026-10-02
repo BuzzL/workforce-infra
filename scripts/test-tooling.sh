@@ -144,6 +144,7 @@ write_stack bootstrap
 write_stack live/management
 write_stack live/accounts/security
 write_stack live/accounts/workforce
+write_stack live/guardrails
 write_stack live/environments/test
 write_stack live/environments/quality
 write_stack live/environments/demo
@@ -163,6 +164,16 @@ got=$(scripts/ci-stacks.sh plan)
 want='[{"stack":"bootstrap","environment":"management-plan"},{"stack":"live/accounts/security","environment":"security-plan"},{"stack":"live/management","environment":"management-plan"}]'
 if [ "$got" = "$want" ]; then echo "ok   ci-stacks plans an enabled account baseline in <account>-plan"; else echo "FAIL ci-stacks account plan mapping"; echo "$got"; failed=1; fi
 rm live/accounts/security/.ci-enabled
+# Guardrails are applied only locally: absent from both modes without the marker (checked above),
+# and with it only planned (apply false) in management-plan, never applied by CI.
+touch live/guardrails/.ci-enabled
+got=$(scripts/ci-stacks.sh apply)
+want='[{"stack":"bootstrap","environment":"management","apply":false},{"stack":"live/environments/demo","environment":"demo","apply":true},{"stack":"live/environments/quality","environment":"quality","apply":true},{"stack":"live/environments/test","environment":"test","apply":true},{"stack":"live/guardrails","environment":"management","apply":false},{"stack":"live/management","environment":"management","apply":true}]'
+if [ "$got" = "$want" ]; then echo "ok   ci-stacks enables the guardrails with their marker, without apply"; else echo "FAIL ci-stacks guardrails apply mapping"; echo "$got"; failed=1; fi
+got=$(scripts/ci-stacks.sh plan)
+want='[{"stack":"bootstrap","environment":"management-plan"},{"stack":"live/guardrails","environment":"management-plan"},{"stack":"live/management","environment":"management-plan"}]'
+if [ "$got" = "$want" ]; then echo "ok   ci-stacks plans enabled guardrails in management-plan"; else echo "FAIL ci-stacks guardrails plan mapping"; echo "$got"; failed=1; fi
+rm live/guardrails/.ci-enabled
 expect fail:usage "ci-stacks rejects an unknown mode" scripts/ci-stacks.sh nonsense
 # Names are explanatory, keys are four lowercase letters, unique (scripts/environment-keys.tsv).
 # The shipped table passes (every mapping above), and each way of breaking it is refused.
