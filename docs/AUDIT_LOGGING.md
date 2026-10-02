@@ -22,12 +22,13 @@ Both stacks keep the feature **off** while `audit_log_bucket_name` is unset, so 
 
 ## Order of rollout
 
-The trail cannot exist before its bucket accepts it, so the steps are ordered. Every step that creates a billable resource needs the maintainer's explicit yes.
+CI plans the `security` stack and never applies it (`docs/IDENTITY_CENTER.md`, section 5), so the bucket is created locally; the trail is created by the gated CI apply of `live/management`. The steps are ordered so that no plan runs before its permissions exist. Every step that creates a billable resource needs the maintainer's explicit yes.
 
 1. Enable trusted access for CloudTrail in the Organization, once, from the management SSO admin session: `aws organizations enable-aws-service-access --service-principal cloudtrail.amazonaws.com`.
-2. Set the secrets `AUDIT_LOG_BUCKET` (a globally unique bucket name), `ORGANIZATION_ID` and `MANAGEMENT_ACCOUNT_ID` on the `security` and `security-plan` GitHub Environments, and `AUDIT_LOG_BUCKET` on `management` and `management-plan`. They are secrets because the repository is public. **The workflow does not pass them to Terraform yet** (see "Not done yet"): until it does, setting them has no effect.
-3. Apply `live/accounts/security` (gated CI): creates the bucket.
-4. Apply `live/management` (gated CI): creates the trail.
+2. `bootstrap/`, locally with the management SSO admin session: set `audit_trail_enabled = true` and apply. It gives the management CI roles the CloudTrail permissions on the one trail (`bootstrap/audit_trail.tf`).
+3. Set the secrets with the scripts, from the environment: `AUDIT_LOG_BUCKET=<globally unique name> scripts/set-environment-secrets.sh` for `management` and `management-plan`, and `AUDIT_LOG_BUCKET=... ORGANIZATION_ID=o-... MANAGEMENT_ACCOUNT_ID=<12 digits> scripts/set-account-environment-secrets.sh security`. They are secrets because the repository is public, and unset ones keep the feature off.
+4. Right after step 3, apply `live/accounts/security` locally, as for the identity stack: set the same three values in `terraform.tfvars` (see the `.example`), review that the plan creates only the bucket and its settings and adds the bucket reads to the two CI roles, then apply. Until then the CI drift check of `security` fails by design, since it sees the bucket as missing.
+5. Merge to `main`: the gated CI apply of `live/management` creates the trail. Check with `aws cloudtrail get-trail-status`, then look for a test event in the bucket.
 
 ## Behaviour to know
 
@@ -35,10 +36,6 @@ The trail cannot exist before its bucket accepts it, so the steps are ordered. E
 - **Region and trail name must agree between the two stacks.** The bucket policy names the trail ARN built from the security stack's region and the module's default trail name; the trail is created with the management stack's region and the other module's default name. A mismatch fails loudly at trail creation (`InsufficientS3BucketPolicy`).
 - **Retention is cost-driven, not a compliance period.** Logs and their validation digests expire after 365 days, noncurrent versions after 90.
 
-## Not done yet
+## Unverified until the first real plan
 
-The workflow secrets (`AUDIT_LOG_BUCKET`, `ORGANIZATION_ID`, `MANAGEMENT_ACCOUNT_ID`) are not yet passed as `TF_VAR_*`, the workflow allowlist and the redaction do not know them, and the apply roles lack the permissions below. Until a follow-up lands, the feature cannot be switched on through CI.
-
-## Not decided yet
-
-- **CI permissions to create these resources.** The apply roles of `security` and `management` do not yet allow S3 bucket or CloudTrail management; adding them is a separate, reviewed change.
+The list of S3 read actions of the CI roles on the log bucket (`live/accounts/security/audit_logs.tf`) is the set the AWS provider calls when it refreshes a bucket, written from its documentation and not yet exercised against a real bucket. A missing action shows up as `AccessDenied` in the plan of step 4 or in the next drift check, and is fixed by adding that one read action there and in its literal test.

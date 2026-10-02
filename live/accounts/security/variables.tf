@@ -54,14 +54,14 @@ variable "tags" {
 }
 
 variable "audit_log_bucket_name" {
-  description = "Name of the organization trail's log bucket. Null or empty keeps audit logging off. To be set by CI from the secret AUDIT_LOG_BUCKET (TF_VAR_audit_log_bucket_name) once the workflow is wired, see docs/AUDIT_LOGGING.md; never committed."
+  description = "Name of the organization trail's log bucket. Null or empty keeps audit logging off. Set by CI from the secret AUDIT_LOG_BUCKET (TF_VAR_audit_log_bucket_name); never committed. See docs/AUDIT_LOGGING.md."
   type        = string
   default     = null
   sensitive   = true
 }
 
 variable "organization_id" {
-  description = "ID of the Organization (o-xxxx), for the log bucket policy. To be set by CI from the secret ORGANIZATION_ID (TF_VAR_organization_id) once the workflow is wired; required with audit_log_bucket_name."
+  description = "ID of the Organization (o-xxxx), for the log bucket policy. Set by CI from the secret ORGANIZATION_ID (TF_VAR_organization_id); required with audit_log_bucket_name."
   type        = string
   default     = null
   sensitive   = true
@@ -73,7 +73,7 @@ variable "organization_id" {
 }
 
 variable "management_account_id" {
-  description = "ID of the management account, which owns the trail. To be set by CI from the secret MANAGEMENT_ACCOUNT_ID (TF_VAR_management_account_id) once the workflow is wired; required with audit_log_bucket_name."
+  description = "ID of the management account, which owns the trail. Set by CI from the secret MANAGEMENT_ACCOUNT_ID (TF_VAR_management_account_id); required with audit_log_bucket_name."
   type        = string
   default     = null
   sensitive   = true

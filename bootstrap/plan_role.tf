@@ -33,12 +33,12 @@ resource "aws_iam_role" "github_infra_management_plan" {
 
 resource "aws_iam_role_policies_exclusive" "github_infra_management_plan" {
   role_name = aws_iam_role.github_infra_management_plan.name
-  policy_names = [
+  policy_names = concat([
     aws_iam_role_policy.plan_state_read.name,
     aws_iam_role_policy.plan_bootstrap_read.name,
     aws_iam_role_policy.plan_organization_units.name,
     aws_iam_role_policy.plan_budget.name,
-  ]
+  ], [for p in aws_iam_role_policy.plan_audit_trail : p.name])
 }
 
 resource "aws_iam_role_policy_attachments_exclusive" "github_infra_management_plan" {

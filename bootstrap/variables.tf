@@ -87,3 +87,9 @@ variable "budget_name" {
   type        = string
   default     = "Workforce Budget"
 }
+
+variable "audit_trail_enabled" {
+  description = "Grant the management CI roles what the organization trail needs (docs/AUDIT_LOGGING.md). Set locally, at the rollout step that creates the trail; false until then."
+  type        = bool
+  default     = false
+}
