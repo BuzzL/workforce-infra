@@ -472,7 +472,7 @@ run "no_wildcards_in_any_allow" {
         !contains(flatten([for p in values(try(s.Principal, {})) : p]), "*")
       )
     ])
-    error_message = "Allow statements must not use * as principal, action or resource (the one resourceless read ReadDelegatedAdministrators is asserted literally above)."
+    error_message = "Allow statements must not use * as principal, action or resource (the one resourceless read ReadDelegatedAdministrators is asserted literally above). The audit trail policies exist only with audit_trail_enabled, and their read-only resourceless statements are asserted literally in audit_trail_grants_are_exactly_the_documented_ones."
   }
 }
 
@@ -845,5 +845,94 @@ run "ci_roles_cannot_register_delegated_administrators" {
       anytrue([for s in jsondecode(p).Statement : anytrue([for a in flatten([s.Action]) : contains(["organizations:RegisterDelegatedAdministrator", "organizations:DeregisterDelegatedAdministrator", "organizations:EnableAWSServiceAccess", "organizations:DisableAWSServiceAccess"], a)])])
     ])
     error_message = "A CI role must not be able to change who administers Identity Center."
+  }
+}
+
+run "audit_trail_grants_are_absent_until_enabled" {
+  command = apply
+
+  assert {
+    condition     = length(aws_iam_role_policy.audit_trail) == 0 && length(aws_iam_role_policy.plan_audit_trail) == 0
+    error_message = "The roles must gain no CloudTrail permission before audit_trail_enabled is set."
+  }
+}
+
+run "audit_trail_grants_are_exactly_the_documented_ones" {
+  command = apply
+
+  variables {
+    audit_trail_enabled = true
+  }
+
+  # The whole policy, literally. There is no DeleteTrail and no StopLogging on purpose.
+  assert {
+    condition = jsondecode(aws_iam_role_policy.audit_trail[0].policy) == {
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Sid      = "ReadOrganizationTrail"
+          Effect   = "Allow"
+          Action   = ["cloudtrail:GetTrail", "cloudtrail:GetTrailStatus", "cloudtrail:GetEventSelectors", "cloudtrail:GetInsightSelectors", "cloudtrail:ListTags"]
+          Resource = ["arn:aws:cloudtrail:eu-west-1:111122223333:trail/workforce-organization"]
+        },
+        {
+          Sid      = "DescribeTrails"
+          Effect   = "Allow"
+          Action   = ["cloudtrail:DescribeTrails"]
+          Resource = ["*"]
+        },
+        {
+          Sid      = "ManageOrganizationTrail"
+          Effect   = "Allow"
+          Action   = ["cloudtrail:CreateTrail", "cloudtrail:UpdateTrail", "cloudtrail:StartLogging", "cloudtrail:AddTags", "cloudtrail:RemoveTags"]
+          Resource = ["arn:aws:cloudtrail:eu-west-1:111122223333:trail/workforce-organization"]
+        },
+        {
+          Sid      = "ReadOrganizationForTheTrail"
+          Effect   = "Allow"
+          Action   = ["organizations:DescribeOrganization", "organizations:ListAWSServiceAccessForOrganization"]
+          Resource = ["*"]
+        },
+        {
+          Sid       = "CreateTheCloudTrailServiceLinkedRole"
+          Effect    = "Allow"
+          Action    = ["iam:CreateServiceLinkedRole"]
+          Resource  = ["arn:aws:iam::111122223333:role/aws-service-role/cloudtrail.amazonaws.com/AWSServiceRoleForCloudTrail"]
+          Condition = { StringEquals = { "iam:AWSServiceName" = "cloudtrail.amazonaws.com" } }
+        },
+      ]
+    }
+    error_message = "The apply role may manage the one trail and nothing more."
+  }
+
+  assert {
+    condition     = !anytrue([for a in flatten([for s in jsondecode(aws_iam_role_policy.audit_trail[0].policy).Statement : s.Action]) : contains(["cloudtrail:DeleteTrail", "cloudtrail:StopLogging"], a) || a == "*" || endswith(a, ":*")])
+    error_message = "CI must not be able to delete the trail or stop logging, and no action may be a wildcard."
+  }
+
+  assert {
+    condition = jsondecode(aws_iam_role_policy.plan_audit_trail[0].policy) == {
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Sid      = "ReadOrganizationTrail"
+          Effect   = "Allow"
+          Action   = ["cloudtrail:GetTrail", "cloudtrail:GetTrailStatus", "cloudtrail:GetEventSelectors", "cloudtrail:GetInsightSelectors", "cloudtrail:ListTags"]
+          Resource = ["arn:aws:cloudtrail:eu-west-1:111122223333:trail/workforce-organization"]
+        },
+        {
+          Sid      = "DescribeTrails"
+          Effect   = "Allow"
+          Action   = ["cloudtrail:DescribeTrails"]
+          Resource = ["*"]
+        },
+      ]
+    }
+    error_message = "The plan role may only read the trail."
+  }
+
+  assert {
+    condition     = aws_iam_role_policies_exclusive.github_infra_management.policy_names == toset(["terraform-state", "plan-bootstrap-stack", "organization-units", "budget", "audit-trail"]) && aws_iam_role_policies_exclusive.github_infra_management_plan.policy_names == toset(["terraform-state-read", "plan-bootstrap-stack", "plan-organization-units", "plan-budget", "plan-audit-trail"])
+    error_message = "The new policies must be owned by the exclusive resources, so nothing else can be attached."
   }
 }

@@ -52,3 +52,39 @@ variable "tags" {
     Stack     = "live/accounts/security"
   }
 }
+
+variable "audit_log_bucket_name" {
+  description = "Name of the organization trail's log bucket. Null or empty keeps audit logging off. Set by CI from the secret AUDIT_LOG_BUCKET (TF_VAR_audit_log_bucket_name); never committed. See docs/AUDIT_LOGGING.md."
+  type        = string
+  default     = null
+  sensitive   = true
+}
+
+variable "organization_id" {
+  description = "ID of the Organization (o-xxxx), for the log bucket policy. Set by CI from the secret ORGANIZATION_ID (TF_VAR_organization_id); required with audit_log_bucket_name."
+  type        = string
+  default     = null
+  sensitive   = true
+
+  validation {
+    condition     = !try(length(var.audit_log_bucket_name) > 0, false) || try(length(var.organization_id) > 0, false)
+    error_message = "organization_id is required when audit_log_bucket_name is set."
+  }
+}
+
+variable "management_account_id" {
+  description = "ID of the management account, which owns the trail. Set by CI from the secret MANAGEMENT_ACCOUNT_ID (TF_VAR_management_account_id); required with audit_log_bucket_name."
+  type        = string
+  default     = null
+  sensitive   = true
+
+  validation {
+    condition     = !try(length(var.audit_log_bucket_name) > 0, false) || try(length(var.management_account_id) > 0, false)
+    error_message = "management_account_id is required when audit_log_bucket_name is set."
+  }
+
+  validation {
+    condition     = !try(length(var.management_account_id) > 0, false) || can(regex("^[0-9]{12}$", var.management_account_id))
+    error_message = "The management account ID must be 12 digits."
+  }
+}

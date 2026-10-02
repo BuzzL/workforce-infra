@@ -1,4 +1,11 @@
 #!/usr/bin/env bash
+# WHICH SCRIPT? This one is for ONE MEMBER account (security or workforce), run once per account
+# after its local bootstrap. Its sibling set-environment-secrets.sh is for the MANAGEMENT account
+# (environments `management` and `management-plan`, the Organization-wide values, management SSO
+# admin session needed); see the header of that script for the full comparison. This script also
+# CREATES the two environments of the account and protects the apply one, which the management
+# script does not.
+#
 # Creates the GitHub Environments <account> and <account>-plan of a member account and sets
 # their SECRETS AWS_ROLE_ARN, AWS_ROLE_ID and STATE_BUCKET and the variable AWS_REGION (copied
 # from the stack's backend.hcl). A secret is masked everywhere in a public repository's
@@ -76,6 +83,19 @@ if [ "$account" = security ]; then
   expected_secrets="ASSIGNMENT_ACCOUNT_IDS AWS_ROLE_ARN AWS_ROLE_ID MAINTAINER_USERNAME STATE_BUCKET" # sorted, as gh lists them
 fi
 
+# The security stack also holds the audit log bucket (docs/AUDIT_LOGGING.md). Optional: set
+# AUDIT_LOG_BUCKET, ORGANIZATION_ID and MANAGEMENT_ACCOUNT_ID together to switch it on; none of
+# them leaves it off. They are read from the environment, never from a file.
+audit_bucket=${AUDIT_LOG_BUCKET:-}
+if [ "$account" = security ] && [ -n "$audit_bucket" ]; then
+  audit_bucket=$(read_value "AUDIT_LOG_BUCKET" '^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$' printenv AUDIT_LOG_BUCKET)
+  organization_id=$(read_value "ORGANIZATION_ID (set it in the environment)" '^o-[a-z0-9]{10,32}$' printenv ORGANIZATION_ID)
+  management_account_id=$(read_value "MANAGEMENT_ACCOUNT_ID (set it in the environment)" '^[0-9]{12}$' printenv MANAGEMENT_ACCOUNT_ID)
+  expected_secrets="ASSIGNMENT_ACCOUNT_IDS AUDIT_LOG_BUCKET AWS_ROLE_ARN AWS_ROLE_ID MAINTAINER_USERNAME MANAGEMENT_ACCOUNT_ID ORGANIZATION_ID STATE_BUCKET" # sorted
+else
+  audit_bucket=""
+fi
+
 set_secret() { # set_secret <env> <name> <value>
   printf '%s' "$3" | gh secret set "$2" --repo "$repo" --env "$1"
 }
@@ -114,6 +134,11 @@ set_environment() { # set_environment <env> <role arn> <role id>
   if [ "$account" = security ]; then
     set_secret "$1" MAINTAINER_USERNAME "$maintainer"
     set_secret "$1" ASSIGNMENT_ACCOUNT_IDS "$assignments"
+    if [ -n "$audit_bucket" ]; then
+      set_secret "$1" AUDIT_LOG_BUCKET "$audit_bucket"
+      set_secret "$1" ORGANIZATION_ID "$organization_id"
+      set_secret "$1" MANAGEMENT_ACCOUNT_ID "$management_account_id"
+    fi
   fi
 }
 
@@ -123,6 +148,13 @@ set_environment "${account}-plan" "$arn_plan" "$id_plan"
 status=0
 for e in $environments; do
   list "$e"
-  [ "$(names secret "$e")" = "$expected_secrets" ] || { echo "unexpected secrets in $e" >&2; status=1; }
+  want=$expected_secrets
+  # Already set by an earlier run: accepted, as in set-environment-secrets.sh.
+  if [ "$account" = security ] && [ -z "$audit_bucket" ]; then
+    case " $(names secret "$e") " in
+      *" AUDIT_LOG_BUCKET "*) want="ASSIGNMENT_ACCOUNT_IDS AUDIT_LOG_BUCKET AWS_ROLE_ARN AWS_ROLE_ID MAINTAINER_USERNAME MANAGEMENT_ACCOUNT_ID ORGANIZATION_ID STATE_BUCKET" ;;
+    esac
+  fi
+  [ "$(names secret "$e")" = "$want" ] || { echo "unexpected secrets in $e" >&2; status=1; }
 done
 exit "$status"

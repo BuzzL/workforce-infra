@@ -85,8 +85,12 @@ jobs:
       TF_VAR_budget_alert_email: ${{ secrets.BUDGET_ALERT_EMAIL }}
       TF_VAR_maintainer_username: ${{ secrets.MAINTAINER_USERNAME }}
       TF_VAR_assignment_account_ids: ${{ secrets.ASSIGNMENT_ACCOUNT_IDS || '{}' }}
+      TF_VAR_audit_log_bucket_name: ${{ secrets.AUDIT_LOG_BUCKET }}
+      TF_VAR_organization_id: ${{ secrets.ORGANIZATION_ID }}
+      TF_VAR_management_account_id: ${{ secrets.MANAGEMENT_ACCOUNT_ID }}
       AWS_REGION_NAME: ${{ vars.AWS_REGION }}
       STATE_BUCKET: ${{ secrets.STATE_BUCKET }}
+      AUDIT_LOG_BUCKET: ${{ secrets.AUDIT_LOG_BUCKET }}
       # Registered as a secret only to be masked: the credentials action prints the role's
       # unique ID, which decodes to the account ID.
       AWS_ROLE_ID: ${{ secrets.AWS_ROLE_ID }}
@@ -232,8 +236,12 @@ jobs:
       TF_VAR_budget_alert_email: ${{ secrets.BUDGET_ALERT_EMAIL }}
       TF_VAR_maintainer_username: ${{ secrets.MAINTAINER_USERNAME }}
       TF_VAR_assignment_account_ids: ${{ secrets.ASSIGNMENT_ACCOUNT_IDS || '{}' }}
+      TF_VAR_audit_log_bucket_name: ${{ secrets.AUDIT_LOG_BUCKET }}
+      TF_VAR_organization_id: ${{ secrets.ORGANIZATION_ID }}
+      TF_VAR_management_account_id: ${{ secrets.MANAGEMENT_ACCOUNT_ID }}
       AWS_REGION_NAME: ${{ vars.AWS_REGION }}
       STATE_BUCKET: ${{ secrets.STATE_BUCKET }}
+      AUDIT_LOG_BUCKET: ${{ secrets.AUDIT_LOG_BUCKET }}
       AWS_ROLE_ID: ${{ secrets.AWS_ROLE_ID }}
       STACK: ${{ matrix.stack }}
     defaults:

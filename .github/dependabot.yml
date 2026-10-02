@@ -28,7 +28,9 @@ updates:
     directories:
       - /modules/scp-baseline
       - /modules/account-ci-baseline
+      - /modules/audit-log-bucket
       - /modules/budget
+      - /modules/organization-trail
       - /modules/identity-center-access
     schedule:
       interval: weekly

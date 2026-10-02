@@ -63,3 +63,10 @@ variable "budget_alert_email" {
     error_message = "The budget alert address must look like local@domain."
   }
 }
+
+variable "audit_log_bucket_name" {
+  description = "Name of the log bucket in the security account. Null or empty keeps the organization trail off. Set by CI from the secret AUDIT_LOG_BUCKET (TF_VAR_audit_log_bucket_name); never committed. See docs/AUDIT_LOGGING.md."
+  type        = string
+  default     = null
+  sensitive   = true
+}

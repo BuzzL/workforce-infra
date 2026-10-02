@@ -1,4 +1,24 @@
 #!/usr/bin/env bash
+# WHICH SCRIPT? There are two, and they differ in scope, in what they read and in who runs them:
+#
+#   set-environment-secrets.sh          (this one) the MANAGEMENT account. One run, two GitHub
+#                                       Environments that already exist: `management` and
+#                                       `management-plan`. Holds the values the Organization stack
+#                                       needs (root ID, email base, budget address, member account
+#                                       IDs) and, optionally, the audit log bucket name. It reads
+#                                       from bootstrap/ outputs, IAM and Organizations, so it needs the
+#                                       management SSO admin session. It does not create environments.
+#   set-account-environment-secrets.sh  ONE MEMBER account (security or workforce), once per
+#                                       account, after that account's local bootstrap. It creates
+#                                       the environments `<account>` (protected) and `<account>-plan`
+#                                       and sets that account's role ARN and ID, the state bucket and
+#                                       AWS_REGION, plus the security-only values (Identity Center
+#                                       user, account IDs to assign, audit logging). It reads from
+#                                       that stack's own outputs and backend.hcl.
+#
+# Rule of thumb: a value of the Organization (management) goes through this script; a value of
+# one member account goes through the account script.
+#
 # Sets AWS_ROLE_ARN, AWS_ROLE_ID, STATE_BUCKET, ORGANIZATION_ROOT_ID, ACCOUNT_EMAIL_BASE, BUDGET_ALERT_EMAIL and MEMBER_ACCOUNT_IDS as SECRETS of the
 # `management` and `management-plan` GitHub Environments and deletes the variables of the
 # same names.
@@ -15,6 +35,9 @@
 #                         the environment variable of the same name ({} if unset). It is the CI side of
 #                         bootstrap's local var.member_account_ids: without it CI would plan the removal
 #                         of the member accounts' grants. Keep the two in sync.
+#   AUDIT_LOG_BUCKET      optional, read from the environment variable of the same name: the name of
+#                         the organization trail's log bucket (docs/AUDIT_LOGGING.md). Unset leaves
+#                         audit logging off; it is not removed if it is already set.
 # A secret is masked everywhere in a public repository's logs, a variable is not.
 #
 # Idempotent: running it again converges on the same state. Secrets are overwritten (the
@@ -81,6 +104,9 @@ email_base=$(read_value "ACCOUNT_EMAIL_BASE (set it in the environment)" '^[A-Za
 members=${MEMBER_ACCOUNT_IDS:-\{\}}
 [[ $members =~ ^\{(\"(security|workforce)\":\"[0-9]{12}\"(,\"(security|workforce)\":\"[0-9]{12}\")*)?\}$ ]] || { echo "MEMBER_ACCOUNT_IDS does not have the expected shape" >&2; exit 1; }
 
+audit_bucket=${AUDIT_LOG_BUCKET:-}
+[ -z "$audit_bucket" ] || [[ $audit_bucket =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]] || { echo "AUDIT_LOG_BUCKET does not have the expected shape" >&2; exit 1; }
+
 root_id=$(read_value "the Organization root ID" '^r-[a-z0-9]{4,32}$' aws organizations list-roots --query 'Roots[0].Id' --output text)
 
 set_secret() { # set_secret <env> <name> <value>
@@ -94,6 +120,10 @@ set_secret management ORGANIZATION_ROOT_ID "$root_id"
 set_secret management ACCOUNT_EMAIL_BASE "$email_base"
 set_secret management BUDGET_ALERT_EMAIL "$budget_email"
 set_secret management MEMBER_ACCOUNT_IDS "$members"
+if [ -n "$audit_bucket" ]; then
+  set_secret management AUDIT_LOG_BUCKET "$audit_bucket"
+  set_secret management-plan AUDIT_LOG_BUCKET "$audit_bucket"
+fi
 set_secret management-plan AWS_ROLE_ARN "$arn_plan"
 set_secret management-plan AWS_ROLE_ID "$id_plan"
 set_secret management-plan STATE_BUCKET "$bucket"
@@ -101,6 +131,10 @@ set_secret management-plan ORGANIZATION_ROOT_ID "$root_id"
 set_secret management-plan ACCOUNT_EMAIL_BASE "$email_base"
 set_secret management-plan BUDGET_ALERT_EMAIL "$budget_email"
 set_secret management-plan MEMBER_ACCOUNT_IDS "$members"
+
+# gh lists secrets sorted; the audit log bucket is optional.
+expected="ACCOUNT_EMAIL_BASE AWS_ROLE_ARN AWS_ROLE_ID BUDGET_ALERT_EMAIL MEMBER_ACCOUNT_IDS ORGANIZATION_ROOT_ID STATE_BUCKET"
+has_audit_bucket() { case " $(names secret "$1") " in *" AUDIT_LOG_BUCKET "*) return 0 ;; *) return 1 ;; esac; }
 
 status=0
 for e in $environments; do
@@ -110,7 +144,9 @@ for e in $environments; do
     esac
   done
   list "$e"
-  [ "$(names secret "$e")" = "ACCOUNT_EMAIL_BASE AWS_ROLE_ARN AWS_ROLE_ID BUDGET_ALERT_EMAIL MEMBER_ACCOUNT_IDS ORGANIZATION_ROOT_ID STATE_BUCKET" ] || { echo "unexpected secrets in $e" >&2; status=1; }
+  want=$expected
+  if has_audit_bucket "$e"; then want="ACCOUNT_EMAIL_BASE AUDIT_LOG_BUCKET${expected#ACCOUNT_EMAIL_BASE}"; fi
+  [ "$(names secret "$e")" = "$want" ] || { echo "unexpected secrets in $e" >&2; status=1; }
   case " $(names variable "$e") " in
     *" ACCOUNT_EMAIL_BASE "* | *" AWS_ROLE_ARN "* | *" AWS_ROLE_ID "* | *" BUDGET_ALERT_EMAIL "* | *" MEMBER_ACCOUNT_IDS "* | *" ORGANIZATION_ROOT_ID "* | *" STATE_BUCKET "*) echo "a variable of the same name is left in $e" >&2; status=1 ;;
   esac
