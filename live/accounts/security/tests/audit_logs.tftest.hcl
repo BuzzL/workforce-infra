@@ -103,6 +103,14 @@ run "an_empty_bucket_name_keeps_it_off" {
     condition     = length(module.audit_log_bucket) == 0
     error_message = "An unset secret arrives as an empty string and must keep the log bucket off."
   }
+
+  # The switch is not a secret. CI sends an unset secret as an empty string, which is a sensitive
+  # value: without nonsensitive() its sensitivity spreads to the statements and to the CI roles'
+  # policies, which then plan an in-place update (a false drift) while logging is off.
+  assert {
+    condition     = !issensitive(local.audit_logging) && !issensitive(local.audit_read_statements)
+    error_message = "The on/off switch and the statements it decides must not be sensitive while logging is off."
+  }
 }
 
 run "reads_of_the_log_bucket_are_exactly_the_documented_ones" {
@@ -152,12 +160,5 @@ run "no_log_bucket_reads_while_it_is_off" {
   assert {
     condition     = length(local.audit_read_statements) == 0
     error_message = "While audit logging is off the CI roles get no log bucket permission."
-  }
-
-  # The switch is not a secret. If it were sensitive, the CI roles' policies would be marked
-  # sensitive too and plan an in-place update (a false drift) while logging is off.
-  assert {
-    condition     = !issensitive(local.audit_logging) && !issensitive(local.audit_read_statements)
-    error_message = "The on/off switch and the statements it decides must not be sensitive while logging is off."
   }
 }
