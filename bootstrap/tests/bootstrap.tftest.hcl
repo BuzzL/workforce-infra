@@ -472,7 +472,7 @@ run "no_wildcards_in_any_allow" {
         !contains(flatten([for p in values(try(s.Principal, {})) : p]), "*")
       )
     ])
-    error_message = "Allow statements must not use * as principal, action or resource (the one resourceless read ReadDelegatedAdministrators is asserted literally above). The audit trail policies exist only with audit_trail_enabled, and their read-only resourceless statements are asserted literally in audit_trail_grants_are_exactly_the_documented_ones."
+    error_message = "Allow statements must not use * as principal, action or resource (the one resourceless read ReadDelegatedAdministrators is asserted literally above). The audit trail policies exist by default, and their read-only resourceless statements are asserted literally in audit_trail_grants_are_exactly_the_documented_ones."
   }
 }
 
