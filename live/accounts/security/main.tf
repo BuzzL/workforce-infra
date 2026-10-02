@@ -45,5 +45,5 @@ module "baseline" {
   state_key         = local.state_key
   tags              = var.tags
 
-  extra_read_statements = local.identity_read_statements
+  extra_read_statements = concat(local.identity_read_statements, local.audit_read_statements)
 }
