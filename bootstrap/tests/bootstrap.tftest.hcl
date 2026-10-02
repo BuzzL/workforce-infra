@@ -882,6 +882,12 @@ run "audit_trail_grants_are_exactly_the_documented_ones" {
           Resource = ["*"]
         },
         {
+          Sid      = "ReadTheCloudTrailServiceLinkedRole"
+          Effect   = "Allow"
+          Action   = ["iam:GetRole", "iam:ListRoleTags"]
+          Resource = ["arn:aws:iam::111122223333:role/aws-service-role/cloudtrail.amazonaws.com/AWSServiceRoleForCloudTrail"]
+        },
+        {
           Sid      = "ManageOrganizationTrail"
           Effect   = "Allow"
           Action   = ["cloudtrail:CreateTrail", "cloudtrail:UpdateTrail", "cloudtrail:StartLogging", "cloudtrail:AddTags", "cloudtrail:RemoveTags"]
@@ -941,6 +947,12 @@ run "audit_trail_grants_are_exactly_the_documented_ones" {
           Effect   = "Allow"
           Action   = ["cloudtrail:DescribeTrails"]
           Resource = ["*"]
+        },
+        {
+          Sid      = "ReadTheCloudTrailServiceLinkedRole"
+          Effect   = "Allow"
+          Action   = ["iam:GetRole", "iam:ListRoleTags"]
+          Resource = ["arn:aws:iam::111122223333:role/aws-service-role/cloudtrail.amazonaws.com/AWSServiceRoleForCloudTrail"]
         },
       ]
     }

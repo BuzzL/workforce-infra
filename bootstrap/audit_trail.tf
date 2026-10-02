@@ -21,6 +21,14 @@ locals {
       Action   = ["cloudtrail:DescribeTrails"]
       Resource = ["*"]
     },
+    # The CloudTrail service-linked role is managed by live/management (import, no delete): the
+    # plan and apply roles read it, by ARN, to see drift. IAT-83.
+    {
+      Sid      = "ReadTheCloudTrailServiceLinkedRole"
+      Effect   = "Allow"
+      Action   = ["iam:GetRole", "iam:ListRoleTags"]
+      Resource = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/cloudtrail.amazonaws.com/AWSServiceRoleForCloudTrail"]
+    },
   ]
 }
 
