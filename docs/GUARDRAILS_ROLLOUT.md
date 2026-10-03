@@ -44,10 +44,12 @@ Then revert the stage in a PR (restore the previous default of `scp_attachments`
 
 Output is recorded with account and organization IDs left out.
 
+**Every simulator call must pass `--context-entries ContextKeyName=aws:RequestedRegion,ContextKeyValues=<allowed region>,ContextKeyType=string`.** Without it the region SCP fires on any action outside its exception list (`StringNotEquals` on a missing key is true), so even a control such as `s3:ListAllMyBuckets` looks denied and the result proves nothing. At stage 1 the first run without it showed exactly that, and the controls were only valid once the key was supplied.
+
 | SCP | Proof |
 |---|---|
 | `deny-leave-organization` | **Never a real call**: if the SCP failed, the account would leave the Organization. `aws iam simulate-principal-policy`, run **by a role inside the member account** (called from the management account it would report an SCP-free evaluation), `OrganizationsDecisionDetail.AllowedByOrganizations` false, and `list-policies-for-target` for presence. Limit: `DenyLeaveAndCloseAccount` also denies this action, so the simulator cannot say which policy denied it. |
-| `deny-root-user` | The simulator needs a user or role as its source, so the root cannot be simulated directly: the proof passes `aws:PrincipalArn` set to the account's root ARN with `--context-entries`, and compares with a normal SSO role (allowed). **Verify before relying on it** that the simulator honours the override for SCP evaluation; if it does not, the proof is only the policy content and its attachment. No real root session is ever created, so the end-to-end effect on a real root user is not exercised. |
+| `deny-root-user` | The simulator needs a user or role as its source, so the root cannot be simulated directly: the proof passes `aws:PrincipalArn` set to the account's root ARN with `--context-entries`, and compares with a normal SSO role (allowed). The simulator honours the override (checked at stage 1: the root ARN is denied, a normal role is allowed). No real root session is ever created, so the end-to-end effect on a real root user is not exercised. |
 | `deny-disable-cloudtrail` | A harmless real call, `aws cloudtrail stop-logging --name no-such-trail-$(uuidgen)` in the allowed region, from an admin role in the account. The name must be random, **never a real trail name and never an ARN**: if the SCP were not yet effective, a real name would stop that trail. With the SCP the error says explicit deny in a service control policy; without it, `TrailNotFoundException`. A caller with no cloudtrail permission gets an implicit-deny message instead, which is not the proof. |
 | `deny-outside-allowed-region` | A harmless real call, `ec2 describe-regions` in another region, is denied; the same call in the allowed region, `iam get-account-summary` and `sts get-caller-identity` succeed. |
 
@@ -64,7 +66,18 @@ Filled in as the stages are applied.
 | Stage | OU | Applied | Proofs |
 |---|---|---|---|
 | 0 | none | 2026-10-03, by CI after the approval of the `management` environment | The four baseline policies exist with **no target** (`list-targets-for-policy`); `DenyLeaveAndCloseAccount` imported unchanged (content identical, now tagged) and still attached to the root with `FullAWSAccess`; no SCP attached to any OU (each OU has only `FullAWSAccess`); the run's drift checks of `bootstrap`, `security` and `workforce` passed. |
-| 1 | Development | this stage's PR; apply pending | pending |
+| 1 | Development | 2026-10-03, by CI after the approval of the `management` environment: plan `4 to add, 0 to change, 0 to destroy`, `Apply complete! 4 added`; every job of the run green | See the list below. |
 | 2 | Environments | pending | pending |
 | 3 | Operations | pending | pending |
 | 4 | Management | pending | pending |
+
+### Stage 1 (Development, account `workforce`), proofs of 2026-10-03
+
+- **Attachment.** Development has `FullAWSAccess` and the four baseline SCPs attached directly (five, the limit). Each baseline policy has exactly one target, Development. Management, Environments and Operations have only `FullAWSAccess`. The root has `DenyLeaveAndCloseAccount` and `FullAWSAccess`.
+- **Controls, from a `WorkforceAdministrator` session inside the account.** `sts get-caller-identity` works in `eu-south-1` and through the global endpoint (`us-east-1`); `iam get-account-summary` works; `ec2 describe-regions` in `eu-south-1` works.
+- **`deny-outside-allowed-region`.** `ec2 describe-regions --region us-west-2` fails with an explicit deny in a service control policy, and the policy named in the error is `deny-outside-allowed-region`.
+- **`deny-disable-cloudtrail`.** `cloudtrail stop-logging` with a random nonexistent name fails with an explicit deny in a service control policy naming `deny-disable-cloudtrail`. Control, management account (SCPs never apply), same call with another random name: `TrailNotFoundException`. The real organization trail kept logging with no delivery error.
+- **`deny-leave-organization`.** Never a real call. The simulator, run from the role inside the account with the region key supplied: `explicitDeny`, `AllowedByOrganizations` false. The controls `s3:ListAllMyBuckets` and `iam:GetAccountSummary` are allowed. Not attributable to this policy alone: the root SCP `DenyLeaveAndCloseAccount` also denies the action.
+- **`deny-root-user`.** The simulator with `aws:PrincipalArn` set to the account's root ARN: `explicitDeny`; a normal role: allowed. No real root session exists, so the effect on a real root user is not exercised.
+- **Before the stage.** The account had no tagged resource in `eu-south-1`; the only one reported in `us-east-1` was the global GitHub OIDC provider.
+- **Not yet proved.** The CI role of the account under the SCPs: the `workforce` drift check of the apply run ran with the SCPs not yet attached, so the first run after the attachment (the next merge that touches Terraform paths) is the proof. Bedrock cross-region inference was not tried (no model access in the account yet; left to the model provider story).
