@@ -8,7 +8,7 @@ The code is in `live/management` (`service_control_policies.tf`, `scp_attachment
 
 | Object | Source | Attached to |
 |---|---|---|
-| `deny-leave-organization`, `deny-root-user`, `deny-disable-cloudtrail`, `deny-outside-allowed-region` | `modules/scp-baseline` | the OUs of the current stage, set by the default of `var.scp_attachments` (stage 2: Development and Environments) |
+| `deny-leave-organization`, `deny-root-user`, `deny-disable-cloudtrail`, `deny-outside-allowed-region` | `modules/scp-baseline` | the OUs of the current stage, set by the default of `var.scp_attachments` (stage 3: Development, Environments and Operations) |
 | `DenyLeaveAndCloseAccount` | imported from a hand-made policy | the root, as it always was |
 
 - `var.scp_attachments` maps an OU name to the baseline SCPs attached to it. Only the OU names `Management`, `Environments`, `Development` and `Operations` and the four policy names are accepted. The root and accounts cannot be named. **The default is the current stage**, so a stage is a change of that default in `live/management/variables.tf`.
@@ -67,8 +67,8 @@ Filled in as the stages are applied.
 |---|---|---|---|
 | 0 | none | 2026-10-03, by CI after the approval of the `management` environment | The four baseline policies exist with **no target** (`list-targets-for-policy`); `DenyLeaveAndCloseAccount` imported unchanged (content identical, now tagged) and still attached to the root with `FullAWSAccess`; no SCP attached to any OU (each OU has only `FullAWSAccess`); the run's drift checks of `bootstrap`, `security` and `workforce` passed. |
 | 1 | Development | 2026-10-03, by CI after the approval of the `management` environment: plan `4 to add, 0 to change, 0 to destroy`, `Apply complete! 4 added`; every job of the run green | See the list below. |
-| 2 | Environments | this stage's PR; apply pending | pending |
-| 3 | Operations | pending | pending |
+| 2 | Environments | 2026-10-03, by CI after the approval of the `management` environment: plan `4 to add, 0 to change, 0 to destroy` | The four baseline policies attached to Environments (no account there, so the effect is unproven until the first account exists, IAT-41): `list-policies-for-target` on Environments shows `FullAWSAccess` plus the four; each baseline policy lists Development and Environments as targets; Management and Operations still only `FullAWSAccess`. |
+| 3 | Operations | this stage's PR; apply pending | pending |
 | 4 | Management | pending | pending |
 
 ### Stage 1 (Development, account `workforce`), proofs of 2026-10-03
@@ -80,4 +80,5 @@ Filled in as the stages are applied.
 - **`deny-leave-organization`.** Never a real call. The simulator, run from the role inside the account with the region key supplied: `explicitDeny`, `AllowedByOrganizations` false. The controls `s3:ListAllMyBuckets` and `iam:GetAccountSummary` are allowed. Not attributable to this policy alone: the root SCP `DenyLeaveAndCloseAccount` also denies the action.
 - **`deny-root-user`.** The simulator with `aws:PrincipalArn` set to the account's root ARN: `explicitDeny`; a normal role: allowed. No real root session exists, so the effect on a real root user is not exercised.
 - **Before the stage.** The account had no tagged resource in `eu-south-1`; the only one reported in `us-east-1` was the global GitHub OIDC provider.
-- **Not yet proved.** The CI role of the account under the SCPs: the `workforce` drift check of the apply run ran with the SCPs not yet attached, so the first run after the attachment (the next merge that touches Terraform paths) is the proof. Bedrock cross-region inference was not tried (no model access in the account yet; left to the model provider story).
+- **CI role under the SCPs, proved with the stage 2 run (2026-10-03).** That run started after the SCPs were attached to Development: the `workforce` job assumed its role through GitHub OIDC, authenticated and planned with `No changes`, so the CI role of the account works under the four SCPs.
+- **Not yet proved.** Bedrock cross-region inference was not tried (no model access in the account yet; left to the model provider story).
