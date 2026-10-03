@@ -150,3 +150,75 @@ run "extra_read_statements_reach_both_roles" {
     error_message = "The two baseline statements must stay, with the extra one added."
   }
 }
+
+# The baseline of an account has a stack of its own, applied locally. Only the plan role may read
+# its state, so that the plan of that stack runs in CI; the apply role never reaches it.
+run "baseline_state_is_read_by_both_roles_and_written_by_neither" {
+  command = apply
+
+  variables {
+    baseline_state_key = "bootstrap/accounts/workforce/terraform.tfstate"
+  }
+
+  assert {
+    condition = jsondecode(aws_iam_role_policy.plan_state_read.policy).Statement == [
+      {
+        Sid       = "ListStateBucket"
+        Effect    = "Allow"
+        Action    = ["s3:ListBucket"]
+        Resource  = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4"]
+        Condition = { StringEquals = { "s3:prefix" = ["env:/", "live/accounts/workforce/terraform.tfstate", "bootstrap/accounts/workforce/terraform.tfstate"] } }
+      },
+      {
+        Sid      = "ReadState"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4/live/accounts/workforce/terraform.tfstate"]
+      },
+      {
+        Sid      = "ReadBaselineState"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4/bootstrap/accounts/workforce/terraform.tfstate"]
+      },
+    ]
+    error_message = "The plan role must read the baseline state, with no write and no lock."
+  }
+
+  assert {
+    condition = jsondecode(aws_iam_role_policy.apply_state.policy).Statement == [
+      {
+        Sid       = "ListStateBucket"
+        Effect    = "Allow"
+        Action    = ["s3:ListBucket"]
+        Resource  = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4"]
+        Condition = { StringEquals = { "s3:prefix" = ["env:/", "live/accounts/workforce/terraform.tfstate", "live/accounts/workforce/terraform.tfstate.tflock", "bootstrap/accounts/workforce/terraform.tfstate", "bootstrap/accounts/workforce/terraform.tfstate.tflock"] } }
+      },
+      {
+        Sid      = "ReadAndWriteState"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject"]
+        Resource = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4/live/accounts/workforce/terraform.tfstate"]
+      },
+      {
+        Sid      = "LockState"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Resource = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4/live/accounts/workforce/terraform.tfstate.tflock"]
+      },
+      {
+        Sid      = "ReadBaselineState"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4/bootstrap/accounts/workforce/terraform.tfstate"]
+      },
+      {
+        Sid      = "LockBaselineState"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Resource = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4/bootstrap/accounts/workforce/terraform.tfstate.tflock"]
+      },
+    ]
+    error_message = "The apply role may read and lock the baseline state, to plan it after a merge, and must never write the state object: CI cannot change its own role."
+  }
+}

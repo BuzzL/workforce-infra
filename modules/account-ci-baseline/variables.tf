@@ -42,6 +42,12 @@ variable "state_key" {
   type        = string
 }
 
+variable "baseline_state_key" {
+  description = "Object key of the state of the stack that holds this baseline (bootstrap/accounts/<account>), which is applied locally. Both roles can read it and the apply role can take its lock, so the plan of that stack (a drift check) runs in CI; neither can write it. Null when the baseline has no stack of its own."
+  type        = string
+  default     = null
+}
+
 variable "tags" {
   description = "Tags applied to every resource."
   type        = map(string)

@@ -20,73 +20,14 @@ mock_provider "aws" {
 }
 
 variables {
-  region            = "eu-west-1"
-  state_bucket_name = "workforce-tfstate-a1b2c3d4"
+  region = "eu-west-1"
 
   maintainer_username    = "maintainer"
   assignment_account_ids = { security = "111122223333", workforce = "444455556666" }
 }
 
-run "wires_the_baseline" {
+run "identity_center_manages_exactly_the_documented_sets" {
   command = apply
-
-  assert {
-    condition     = local.state_key == "live/accounts/security/terraform.tfstate"
-    error_message = "The state key must match the backend key CI derives from the stack path."
-  }
-
-  assert {
-    condition     = module.baseline.apply_role_arn != module.baseline.plan_role_arn
-    error_message = "The apply and plan roles must be different roles."
-  }
-}
-
-run "bootstrap_account_id_must_be_12_digits" {
-  command = plan
-
-  variables {
-    break_glass_account_id = "not-an-id"
-  }
-
-  expect_failures = [var.break_glass_account_id]
-}
-
-run "identity_reads_are_exactly_the_documented_ones" {
-  command = apply
-
-  # The whole list, literally: a new action or resource must be a visible change here.
-  assert {
-    condition = jsonencode(local.identity_read_statements) == jsonencode([
-      {
-        Sid      = "ReadIdentityCenterInstances"
-        Effect   = "Allow"
-        Action   = ["sso:ListInstances"]
-        Resource = ["*"]
-      },
-      {
-        Sid    = "ReadIdentityCenterPermissionSets"
-        Effect = "Allow"
-        Action = [
-          "sso:DescribePermissionSet",
-          "sso:GetInlinePolicyForPermissionSet",
-          "sso:GetPermissionsBoundaryForPermissionSet",
-          "sso:ListAccountAssignments",
-          "sso:ListCustomerManagedPolicyReferencesInPermissionSet",
-          "sso:ListManagedPoliciesInPermissionSet",
-          "sso:ListPermissionSets",
-          "sso:ListTagsForResource",
-        ]
-        Resource = ["arn:aws:sso:::instance/ssoins-*", "arn:aws:sso:::permissionSet/ssoins-*/ps-*", "arn:aws:sso:::account/*"]
-      },
-      {
-        Sid      = "ReadMaintainerUser"
-        Effect   = "Allow"
-        Action   = ["identitystore:DescribeUser", "identitystore:GetUserId"]
-        Resource = ["*"]
-      },
-    ])
-    error_message = "The identity reads of the CI roles must be exactly the three documented read statements."
-  }
 
   assert {
     condition     = join(",", module.access.permission_set_names) == "WorkforceAdministrator,WorkforceReadOnly"

@@ -1,49 +1,15 @@
-locals {
-  # Same key as the backend: CI passes -backend-config=key=<stack>/terraform.tfstate.
-  state_key = "live/accounts/security/terraform.tfstate"
+# The security account's resources, applied by CI: Identity Center (identity.tf) and the audit
+# log bucket (audit_logs.tf).
+#
+# The baseline (OIDC provider and the two CI roles) used to live in this stack. It moved to
+# bootstrap/accounts/security, which is applied locally, so that the role CI applies with can
+# never change itself. This block drops it from this stack's state without destroying anything;
+# the other stack adopts the same resources (imports.tf there). After the first apply it has no
+# effect; a later change removes it.
+removed {
+  from = module.baseline
 
-  # What a plan of this stack reads beyond the baseline: Identity Center and the identity
-  # store. Read only. sso:ListInstances and the identity store reads have no resource to
-  # scope to; everything else is limited to Identity Center instances, permission sets and
-  # accounts, by pattern because their IDs are not known before the call.
-  identity_read_statements = [
-    {
-      Sid      = "ReadIdentityCenterInstances"
-      Effect   = "Allow"
-      Action   = ["sso:ListInstances"]
-      Resource = ["*"]
-    },
-    {
-      Sid    = "ReadIdentityCenterPermissionSets"
-      Effect = "Allow"
-      Action = [
-        "sso:DescribePermissionSet",
-        "sso:GetInlinePolicyForPermissionSet",
-        "sso:GetPermissionsBoundaryForPermissionSet",
-        "sso:ListAccountAssignments",
-        "sso:ListCustomerManagedPolicyReferencesInPermissionSet",
-        "sso:ListManagedPoliciesInPermissionSet",
-        "sso:ListPermissionSets",
-        "sso:ListTagsForResource",
-      ]
-      Resource = ["arn:aws:sso:::instance/ssoins-*", "arn:aws:sso:::permissionSet/ssoins-*/ps-*", "arn:aws:sso:::account/*"]
-    },
-    {
-      Sid      = "ReadMaintainerUser"
-      Effect   = "Allow"
-      Action   = ["identitystore:DescribeUser", "identitystore:GetUserId"]
-      Resource = ["*"]
-    },
-  ]
-}
-
-module "baseline" {
-  source = "../../../modules/account-ci-baseline"
-
-  account_name      = "security"
-  state_bucket_name = var.state_bucket_name
-  state_key         = local.state_key
-  tags              = var.tags
-
-  extra_read_statements = concat(local.identity_read_statements, local.audit_read_statements)
+  lifecycle {
+    destroy = false
+  }
 }

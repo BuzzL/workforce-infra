@@ -27,6 +27,6 @@ variable "tags" {
   default = {
     Project   = "ai-workforce"
     ManagedBy = "terraform"
-    Stack     = "live/accounts/workforce"
+    Stack     = "bootstrap/accounts/workforce"
   }
 }

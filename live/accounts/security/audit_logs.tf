@@ -19,35 +19,3 @@ module "audit_log_bucket" {
   trail_region     = var.region
   tags             = var.tags
 }
-
-locals {
-  # What a plan of this stack reads about the log bucket, once it exists. Read only, on
-  # exactly the bucket (never its objects): the CI roles cannot read, write or delete a log,
-  # and the bucket itself is created and changed locally, not by CI (docs/AUDIT_LOGGING.md).
-  audit_read_statements = local.audit_logging ? [
-    {
-      Sid    = "ReadAuditLogBucket"
-      Effect = "Allow"
-      Action = [
-        "s3:GetAccelerateConfiguration",
-        "s3:GetBucketAcl",
-        "s3:GetBucketCORS",
-        "s3:GetBucketLocation",
-        "s3:GetBucketLogging",
-        "s3:GetBucketObjectLockConfiguration",
-        "s3:GetBucketOwnershipControls",
-        "s3:GetBucketPolicy",
-        "s3:GetBucketPublicAccessBlock",
-        "s3:GetBucketRequestPayment",
-        "s3:GetBucketTagging",
-        "s3:GetBucketVersioning",
-        "s3:GetBucketWebsite",
-        "s3:GetEncryptionConfiguration",
-        "s3:GetLifecycleConfiguration",
-        "s3:GetReplicationConfiguration",
-        "s3:ListBucket",
-      ]
-      Resource = ["arn:aws:s3:::${var.audit_log_bucket_name}"]
-    },
-  ] : []
-}

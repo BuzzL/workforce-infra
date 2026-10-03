@@ -17,9 +17,10 @@ updates:
   - package-ecosystem: terraform
     directories:
       - /bootstrap
+      - /bootstrap/accounts/security
+      - /bootstrap/accounts/workforce
       - /live/management
       - /live/accounts/security
-      - /live/accounts/workforce
     schedule:
       interval: weekly
     commit-message:

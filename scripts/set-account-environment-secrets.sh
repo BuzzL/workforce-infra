@@ -14,7 +14,7 @@
 #   scripts/set-account-environment-secrets.sh security
 #   scripts/set-account-environment-secrets.sh workforce --check   list names only
 #
-# Run it after the local bootstrap of live/accounts/<account> (docs/ACCOUNT_CI_BASELINES.md):
+# Run it after the local bootstrap of bootstrap/accounts/<account> (docs/ACCOUNT_CI_BASELINES.md):
 # the values are read from that stack's Terraform outputs, so it must be initialised with its
 # backend.hcl. It needs a gh login that can administer the repository. Values are read into
 # memory, validated and passed to `gh` on stdin; nothing is printed except secret names.
@@ -30,7 +30,7 @@ case "${2:-}" in "" | --check) ;; *) echo "usage: $0 <security|workforce> [--che
 
 repo=BuzzL/workforce-infra
 environments="$account ${account}-plan"
-cd "$(dirname "$0")/../live/accounts/$account"
+cd "$(dirname "$0")/../bootstrap/accounts/$account"
 
 names() { # names <secret|variable> <env>: sorted, space separated
   local out

@@ -2,7 +2,7 @@
 
 ## Context
 
-CI manages the AWS accounts without long-lived keys: GitHub Actions presents an OIDC token and assumes a role. The management account has had this since `bootstrap/`. Every new member account (`security`, `workforce`) needs the same baseline before CI can touch it: a GitHub OIDC provider and the CI roles. The baseline is `modules/account-ci-baseline`, used by `live/accounts/security` and `live/accounts/workforce`.
+CI manages the AWS accounts without long-lived keys: GitHub Actions presents an OIDC token and assumes a role. The management account has had this since `bootstrap/`. Every new member account (`security`, `workforce`) needs the same baseline before CI can touch it: a GitHub OIDC provider and the CI roles. The baseline is `modules/account-ci-baseline`. It is its own stack per account, `bootstrap/accounts/security` and `bootstrap/accounts/workforce`, applied locally like `bootstrap/` is for the management account. Everything else in an account is the account's own stack, `live/accounts/<account>`. Two stacks, because the role CI applies with must not be defined in the stack it applies (decision 2).
 
 ## Decisions
 
@@ -19,19 +19,19 @@ Rejected: a single role that also plans pull requests. Code from any branch woul
 
 ### 2. CI cannot change the baseline
 
-The apply role has no IAM write permission. The baseline is applied locally, once, and changed locally, so CI cannot widen its own permissions. CI plans the stacks (drift check) and never applies them (`apply: false` in `scripts/ci-stacks.sh`). Account permissions that CI really needs are added to the module in a reviewed PR and applied locally.
+The apply role has no IAM write permission, and it does not need one: the baseline is its own stack under `bootstrap/accounts/`, applied locally, so whatever CI is allowed to write in the account's own stack, `live/accounts/<account>`, it cannot reach its own roles. CI plans the baseline stack (drift check) through the `-plan` role and never applies it (`apply: false` in `scripts/ci-stacks.sh`). Account permissions that CI needs are added to the module in a reviewed PR and applied locally from the baseline stack.
 
 Rejected: letting CI apply its own baseline. It needs `iam:PutRolePolicy` on its own role, which is a privilege-escalation path.
 
 ### 3. State stays in the management bucket
 
-One bucket, one key per stack: `live/accounts/<account>/terraform.tfstate`, the key CI derives from the stack path. Each role reaches its own key (and `.tflock` for the apply role) only. The bucket policy in `bootstrap/` names those roles, one exact ARN per Allow and no wildcard. It is driven by the local variable `member_account_ids`, empty until the account's stack exists: S3 rejects a policy that names a principal that is not there yet.
+One bucket, one key per stack: the key CI derives from the stack path. The apply role reaches `live/accounts/<account>/terraform.tfstate` (and its `.tflock`) only. Both roles read `bootstrap/accounts/<account>/terraform.tfstate`, the state of the baseline stack, and the apply role takes its lock (the job after a merge plans the stack as a drift check), but neither can write it: it is written locally with the maintainer's own credentials, so CI cannot change its own role. The bucket policy in `bootstrap/` names those roles, one exact ARN per Allow and no wildcard. It is driven by the local variable `member_account_ids`, empty until the account's stack exists: S3 rejects a policy that names a principal that is not there yet.
 
 Rejected: a bucket per account, which needs a second bootstrap for every account and splits the state.
 
 ### 4. A stack joins CI when it can pass
 
-`scripts/ci-stacks.sh` ignores `live/accounts/<account>` until `live/accounts/<account>/.ci-enabled` is committed. Commit it after steps 1 to 4 below: before that, a plan could only fail.
+`scripts/ci-stacks.sh` ignores `bootstrap/accounts/<account>` and `live/accounts/<account>` until the stack's own `.ci-enabled` is committed. Commit it after steps 1 to 4 below: before that, a plan could only fail.
 
 ## Bootstrap, once per account
 
@@ -44,11 +44,24 @@ Run by the maintainer, locally, with the management admin session. The account I
      --role-session-name check --query 'Credentials.Expiration' --output text   # prints a timestamp
    ```
 
-1. Fill `live/accounts/<account>/backend.hcl` and `terraform.tfvars` from the `.example` files, with `break_glass_account_id` set.
+1. Fill `bootstrap/accounts/<account>/backend.hcl` and `terraform.tfvars` from the `.example` files, with `break_glass_account_id` set.
 2. `terraform init -backend-config=backend.hcl && terraform plan`, review, then `terraform apply`. The provider assumes `OrganizationAccountAccessRole` in the account, the state is written with your own credentials.
-3. Remove `break_glass_account_id` from `terraform.tfvars`: from now on the stack is applied as the account's own role or not at all. Then add the account to `member_account_ids` in `bootstrap/terraform.tfvars` and in the secret `MEMBER_ACCOUNT_IDS` of `management` and `management-plan` (`MEMBER_ACCOUNT_IDS='{"security":"<id>"}' scripts/set-environment-secrets.sh`; CI plans `bootstrap/` too and would otherwise see the grants as drift), and apply `bootstrap/` locally: this opens the state bucket to the new roles and lets the management CI role assume the break-glass role there.
+3. Remove `break_glass_account_id` from `terraform.tfvars`: from now on the stack is applied locally with the maintainer's own administrator session in the account (the provider, `AWS_PROFILE=<account profile>`) and the state backend on the management session (`profile` in `backend.hcl`), never as the CI role. Then add the account to `member_account_ids` in `bootstrap/terraform.tfvars` and in the secret `MEMBER_ACCOUNT_IDS` of `management` and `management-plan` (`MEMBER_ACCOUNT_IDS='{"security":"<id>"}' scripts/set-environment-secrets.sh`; CI plans `bootstrap/` too and would otherwise see the grants as drift), and apply `bootstrap/` locally: this opens the state bucket to the new roles and lets the management CI role assume the break-glass role there.
 4. `scripts/set-account-environment-secrets.sh <account>` creates the GitHub Environments `<account>` (protected: the maintainer as required reviewer, no admin bypass, `main` only) and `<account>-plan` (no reviewer, any branch, read-only role) with the secrets `AWS_ROLE_ARN`, `AWS_ROLE_ID`, `STATE_BUCKET` and the variable `AWS_REGION`. The `security` environments also get `MAINTAINER_USERNAME` and `ASSIGNMENT_ACCOUNT_IDS` (`docs/IDENTITY_CENTER.md`). The role ARN and ID are secrets so that they are masked in public logs.
-5. Commit `live/accounts/<account>/.ci-enabled`. The next PR plans the stack through OIDC, which must be a no-op.
+5. Commit `bootstrap/accounts/<account>/.ci-enabled` and `live/accounts/<account>/.ci-enabled`. The next PR plans the stack through OIDC, which must be a no-op.
+
+## Moving an existing baseline, once
+
+`security` and `workforce` were bootstrapped when their baseline lived in `live/accounts/<account>`. The move to `bootstrap/accounts/<account>` adopts the same resources without recreating them: `bootstrap/accounts/<account>/imports.tf` has an `import` block per resource. `security` keeps a stack in `live/accounts/security` (Identity Center and the audit log bucket), which drops the baseline from its state with a `removed` block. `workforce` owns no resources of its own yet, so its `live/accounts/workforce` stack is deleted; its old state is emptied by hand. Run by the maintainer, locally, per account, **from the pull request branch, before the merge**, after the pull request is approved and with an explicit yes for each step:
+
+1. `bootstrap/`: apply, so that both roles may read the baseline state and the apply role may lock it (`bootstrap/state_bucket.tf`).
+2. `bootstrap/accounts/<account>`: fill `backend.hcl` and `terraform.tfvars`, `terraform init -backend-config=backend.hcl`, then `terraform plan`. It must read **11 to import, 0 to add, 0 to change, 0 to destroy** (the OIDC provider, the two roles, their four inline policies and the four exclusive-attachment resources). Anything else stops the move. Apply.
+3. `security`: in `live/accounts/security`, `terraform plan` must read only that the resources are removed from the state and **0 to destroy**. Apply.
+   `workforce`: from the checkout of `main`, where `live/accounts/workforce` still exists, `terraform state rm module.baseline`. The state is versioned, so the previous version is the way back.
+4. Both baseline stacks and `live/accounts/security` plan clean. Commit the `.ci-enabled` markers of `bootstrap/accounts/<account>`; the next pull request plans them through OIDC, which must be a no-op.
+5. In a later change, remove `imports.tf` and the `removed` block: they have no effect after the first apply. `live/accounts/workforce` returns when the account owns resources.
+
+If step 2 shows a destroy or an add, do not apply: the baseline in the account differs from the module, which is a finding to understand first.
 
 ## Break-glass
 
