@@ -31,7 +31,8 @@ data "aws_organizations_policy" "scp" {
   policy_id = each.value
 }
 
-# A clear failure when the hand-made policy is missing or renamed: otherwise the import id is null.
+# A warning that names the cause when the hand-made policy is missing or renamed. A check only warns:
+# the import itself then fails because its id is null, and this message says why.
 check "hand_made_scp_found" {
   assert {
     condition     = length([for id, p in data.aws_organizations_policy.scp : id if p.name == "DenyLeaveAndCloseAccount"]) == 1

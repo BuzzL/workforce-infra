@@ -4,7 +4,7 @@ The four baseline service control policies (`modules/scp-baseline`) are attached
 
 ## What it manages
 
-The code is in `live/management` (`service_control_policies.tf`, `scp_attachments.tf`), applied by CI like the rest of the stack. The management CI role may create, change, tag and delete the stack's SCPs and attach and detach them on organizational units only (`bootstrap/service_control_policies.tf`): by its ARN patterns it can not attach to the root or to an account, nor touch `FullAWSAccess`.
+The code is in `live/management` (`service_control_policies.tf`, `scp_attachments.tf`), applied by CI like the rest of the stack. The management CI role may create, change, tag and delete the stack's SCPs and attach and detach them on organizational units only (`bootstrap/service_control_policies.tf`): by the design of its ARN patterns (checked with the IAM policy simulator on the real ARN shapes: attach and detach allowed on the stack's own SCPs and on OUs, denied on the root, an account and `FullAWSAccess`) it should not attach to the root or to an account, nor touch `FullAWSAccess`. The guards that count are the validation of `scp_attachments`, the OU reference and the approval of the apply.
 
 | Object | Source | Attached to |
 |---|---|---|

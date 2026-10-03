@@ -8,18 +8,13 @@ locals {
 }
 
 # The target is always one of the organizational units this stack manages: never the root of the
-# Organization, never an account. A stage is a change of the default of var.scp_attachments, so it
-# is a reviewed PR, a plan in its comment and the approval of the `management` environment.
+# Organization, never an account. The lookup of an OU this stack does not manage is an error, and
+# var.scp_attachments only accepts the four OU names. A stage is a change of the default of
+# var.scp_attachments, so it is a reviewed PR, a plan in its comment and the approval of the
+# `management` environment.
 resource "aws_organizations_policy_attachment" "scp" {
   for_each = local.scp_attachment_pairs
 
   policy_id = module.scp_baseline.policy_ids[each.value.policy]
   target_id = aws_organizations_organizational_unit.this[each.value.ou].id
-
-  lifecycle {
-    precondition {
-      condition     = contains(keys(aws_organizations_organizational_unit.this), each.value.ou)
-      error_message = "The organizational unit ${each.value.ou} is not one this stack manages."
-    }
-  }
 }
