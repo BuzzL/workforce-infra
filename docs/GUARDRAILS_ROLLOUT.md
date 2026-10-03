@@ -8,7 +8,7 @@ The code is in `live/management` (`service_control_policies.tf`, `scp_attachment
 
 | Object | Source | Attached to |
 |---|---|---|
-| `deny-leave-organization`, `deny-root-user`, `deny-disable-cloudtrail`, `deny-outside-allowed-region` | `modules/scp-baseline` | the OUs named in `var.scp_attachments` (nothing by default) |
+| `deny-leave-organization`, `deny-root-user`, `deny-disable-cloudtrail`, `deny-outside-allowed-region` | `modules/scp-baseline` | the OUs of the current stage, set by the default of `var.scp_attachments` (stage 2: Development and Environments) |
 | `DenyLeaveAndCloseAccount` | imported from a hand-made policy | the root, as it always was |
 
 - `var.scp_attachments` maps an OU name to the baseline SCPs attached to it. Only the OU names `Management`, `Environments`, `Development` and `Operations` and the four policy names are accepted. The root and accounts cannot be named. **The default is the current stage**, so a stage is a change of that default in `live/management/variables.tf`.
@@ -17,11 +17,11 @@ The code is in `live/management` (`service_control_policies.tf`, `scp_attachment
 
 ## Stages
 
-Each stage is one PR that sets `scp_attachments` for one OU, with all four SCPs. The plan comment of the PR must contain only `+ aws_organizations_policy_attachment.scp[...]` for that OU. After the merge and the approval of the apply, the proofs below are run and recorded.
+Each stage is one PR that **adds** one OU, with all four SCPs, to the default of `scp_attachments` (the default is cumulative). The plan comment of the PR must contain only `+ aws_organizations_policy_attachment.scp[...]` for that OU. After the merge and the approval of the apply, the proofs below are run and recorded.
 
-| Stage | Default of `scp_attachments` | Accounts reached | Before the stage |
+| Stage | Adds to the default of `scp_attachments` | Accounts reached | Before the stage |
 |---|---|---|---|
-| 0 | `{}` | none | Creates the four policies and imports `DenyLeaveAndCloseAccount` and its root attachment (a plan of 2 to import, 4 to add, 2 to change, 0 to destroy: the changes are only the default tags of the imported policy and the sensitive flag of the root attachment's target, a state-only change). The four new policies have no target. |
+| 0 | nothing (`{}`) | none | Creates the four policies and imports `DenyLeaveAndCloseAccount` and its root attachment (a plan of 2 to import, 4 to add, 2 to change, 0 to destroy: the changes are only the default tags of the imported policy and the sensitive flag of the root attachment's target, a state-only change). The four new policies have no target. |
 | 1 | `Development` | `workforce` | `list-accounts-for-parent`, `list-policies-for-target` (`FullAWSAccess` still attached), the fallback path checked. |
 | 2 | `Environments` | none yet | Same checks. |
 | 3 | `Operations` | none yet | Same checks. |

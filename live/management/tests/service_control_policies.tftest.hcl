@@ -93,7 +93,7 @@ run "the_default_is_the_current_stage_and_only_that" {
 
   assert {
     condition     = toset([for a in values(aws_organizations_policy_attachment.scp) : a.target_id]) == toset(["ou-ab12-devl0001", "ou-ab12-envs0001"])
-    error_message = "The targets of stage two are exactly the Development and Environments units."
+    error_message = "The targets of stage two are exactly the Development and Environments units: no root, no account, no Management or Operations."
   }
 }
 
