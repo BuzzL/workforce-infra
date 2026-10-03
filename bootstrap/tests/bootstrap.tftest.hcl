@@ -544,7 +544,7 @@ run "member_roles_reach_only_their_own_state" {
         Principal = { AWS = ["arn:aws:iam::111122223333:role/github-infra-security", "arn:aws:iam::111122223333:role/github-infra-security-plan"] }
         Action    = "s3:ListBucket"
         Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4"
-        Condition = { StringEquals = { "s3:prefix" = ["env:/", "live/accounts/security/terraform.tfstate", "live/accounts/security/terraform.tfstate.tflock"] } }
+        Condition = { StringEquals = { "s3:prefix" = ["env:/", "live/accounts/security/terraform.tfstate", "live/accounts/security/terraform.tfstate.tflock", "live/ci-roles/security/terraform.tfstate", "live/ci-roles/security/terraform.tfstate.tflock"] } }
       },
       {
         Sid       = "ReadAndWriteSecurityState"
@@ -567,8 +567,29 @@ run "member_roles_reach_only_their_own_state" {
         Action    = "s3:GetObject"
         Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4/live/accounts/security/terraform.tfstate"
       },
+      {
+        Sid       = "ReadCiRolesSecurityState"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::111122223333:role/github-infra-security" }
+        Action    = "s3:GetObject"
+        Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4/live/ci-roles/security/terraform.tfstate"
+      },
+      {
+        Sid       = "LockCiRolesSecurityState"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::111122223333:role/github-infra-security" }
+        Action    = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4/live/ci-roles/security/terraform.tfstate.tflock"
+      },
+      {
+        Sid       = "ReadCiRolesSecurityStateForPlans"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::111122223333:role/github-infra-security-plan" }
+        Action    = "s3:GetObject"
+        Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4/live/ci-roles/security/terraform.tfstate"
+      },
     ]
-    error_message = "A member's roles must be named exactly and reach only their own state key, the plan role without write or lock."
+    error_message = "A member's roles must reach only their own account and roles state keys, the apply role never writing the roles key and the plan role never writing or locking."
   }
 
   # No wildcard in any Allow of the bucket policy: the only * is in the TLS Deny.
