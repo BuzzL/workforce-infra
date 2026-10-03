@@ -28,9 +28,9 @@ workflows:
 	actionlint
 	scripts/check-workflow.sh
 
-# Member accounts cannot be undone: prevent_destroy must stay (terraform test cannot plan a destroy).
+# What must not disappear carries prevent_destroy (terraform test cannot plan a destroy).
 lifecycle:
-	scripts/check-account-lifecycle.sh
+	scripts/check-prevent-destroy.sh
 
 # The repo is public: no account IDs, ARNs with IDs or emails in docs.
 docs:

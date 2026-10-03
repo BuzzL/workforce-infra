@@ -31,6 +31,12 @@ resource "aws_ssoadmin_permission_set" "this" {
   instance_arn     = local.instance_arn
   session_duration = each.value.session_duration
   tags             = var.tags
+
+  # Deleting a permission set removes the maintainer's access through it. A deliberate removal
+  # is a reviewed change that deletes this line first.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_ssoadmin_managed_policy_attachment" "this" {
@@ -39,6 +45,11 @@ resource "aws_ssoadmin_managed_policy_attachment" "this" {
   instance_arn       = local.instance_arn
   managed_policy_arn = each.value.managed_policy_arn
   permission_set_arn = aws_ssoadmin_permission_set.this[each.key].arn
+
+  # Detaching the policy strips the set of its only permissions.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_ssoadmin_account_assignment" "maintainer" {
@@ -55,4 +66,11 @@ resource "aws_ssoadmin_account_assignment" "maintainer" {
 
   # Provisioning an assignment creates the role in the account; keep the order explicit.
   depends_on = [aws_ssoadmin_managed_policy_attachment.this]
+
+  # Deleting an assignment locks the maintainer out of that account: the lockout this guard
+  # exists for. Removing an account from the assigned list is a reviewed change that deletes
+  # this line first.
+  lifecycle {
+    prevent_destroy = true
+  }
 }

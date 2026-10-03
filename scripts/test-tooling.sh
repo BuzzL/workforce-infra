@@ -326,4 +326,49 @@ for desc, a, b, pattern in CASES:
 sys.exit(bad)
 PY
 
+# prevent_destroy guard: each resource block is judged on its own.
+pd_tree() { mkdir -p "$1/live/a"; printf '%s\n' "$2" > "$1/live/a/main.tf"; }
+pd_tree pd-ok 'resource "aws_organizations_account" "this" {
+  name = "${var.name}-{x}"
+  lifecycle {
+    prevent_destroy = true
+  }
+}'
+pd_tree pd-missing 'resource "aws_organizations_account" "this" {
+  name = "x"
+}'
+pd_tree pd-second 'resource "aws_organizations_account" "first" {
+  name = "x"
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "aws_ssoadmin_account_assignment" "second" {
+  instance_arn = "x"
+}'
+pd_tree pd-other 'resource "aws_iam_role" "ci" {
+  name = "x"
+}'
+pd_tree pd-false 'resource "aws_s3_bucket" "logs" {
+  bucket = "x"
+  lifecycle {
+    prevent_destroy = false
+  }
+}'
+pd_tree pd-comment 'resource "aws_organizational_unit_x" "y" {
+}
+resource "aws_ssoadmin_permission_set" "this" {
+  name = "x"
+  # prevent_destroy = true
+}'
+mkdir -p pd-tests/live/a/tests && printf 'resource "aws_organizations_account" "t" {\n}\n' > pd-tests/live/a/tests/x.tf
+expect pass "prevent_destroy: a guarded resource passes, braces in strings do not confuse it" scripts/check-prevent-destroy.sh pd-ok
+expect pass "prevent_destroy: a type that is not listed (the local baseline roles) passes" scripts/check-prevent-destroy.sh pd-other
+expect pass "prevent_destroy: test fixtures are not stacks" scripts/check-prevent-destroy.sh pd-tests
+expect fail:"aws_organizations_account.this must carry" "prevent_destroy: an unguarded account is refused" scripts/check-prevent-destroy.sh pd-missing
+expect fail:"aws_ssoadmin_account_assignment.second must carry" "prevent_destroy: a guarded resource does not cover the next one in the file" scripts/check-prevent-destroy.sh pd-second
+expect fail:"aws_s3_bucket.logs must carry" "prevent_destroy: = false is not a guard" scripts/check-prevent-destroy.sh pd-false
+expect fail:"aws_ssoadmin_permission_set.this must carry" "prevent_destroy: a commented line is not a guard" scripts/check-prevent-destroy.sh pd-comment
+
 exit "$failed"
