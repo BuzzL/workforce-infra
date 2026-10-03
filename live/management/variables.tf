@@ -74,7 +74,11 @@ variable "audit_log_bucket_name" {
 variable "scp_attachments" {
   description = "The current rollout stage of the baseline SCPs: organizational unit name to the SCPs attached to it. The default is the stage, changed by a PR (docs/GUARDRAILS_ROLLOUT.md). The root and accounts cannot be named: the only targets are the OUs of this stack."
   type        = map(list(string))
-  default     = {}
+
+  # Stage 1 of docs/GUARDRAILS_ROLLOUT.md: the four baseline SCPs on Development (the workforce account).
+  default = {
+    Development = ["deny-leave-organization", "deny-root-user", "deny-disable-cloudtrail", "deny-outside-allowed-region"]
+  }
 
   validation {
     condition     = alltrue([for ou in keys(var.scp_attachments) : contains(["Management", "Environments", "Development", "Operations"], ou)])

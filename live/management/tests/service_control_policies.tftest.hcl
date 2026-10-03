@@ -74,12 +74,30 @@ variables {
   budget_alert_email = "alerts@example.com"
 }
 
-run "nothing_is_attached_by_default" {
+run "the_default_is_the_current_stage_and_only_that" {
   command = apply
 
   assert {
+    condition = toset(keys(aws_organizations_policy_attachment.scp)) == toset([
+      "Development/deny-disable-cloudtrail",
+      "Development/deny-leave-organization",
+      "Development/deny-outside-allowed-region",
+      "Development/deny-root-user",
+    ])
+    error_message = "The default is stage one: exactly the four baseline policies on Development, nothing on any other unit."
+  }
+}
+
+run "nothing_is_attached_when_the_stage_is_emptied" {
+  command = apply
+
+  variables {
+    scp_attachments = {}
+  }
+
+  assert {
     condition     = length(aws_organizations_policy_attachment.scp) == 0
-    error_message = "With no stage set the stack must attach no baseline SCP."
+    error_message = "An empty stage must attach no baseline SCP."
   }
 }
 
@@ -228,6 +246,10 @@ run "the_imported_policy_is_the_one_that_exists_in_the_account" {
 run "it_is_the_only_attachment_to_the_root" {
   command = plan
 
+  variables {
+    scp_attachments = {}
+  }
+
   assert {
     condition     = aws_organizations_policy_attachment.root_deny_leave_and_close_account.target_id == "r-ab12"
     error_message = "The hand-made policy stays attached to the root."
@@ -235,6 +257,6 @@ run "it_is_the_only_attachment_to_the_root" {
 
   assert {
     condition     = length(aws_organizations_policy_attachment.scp) == 0
-    error_message = "The baseline SCPs are attached to no unit by default, and never to the root."
+    error_message = "With an empty stage no baseline SCP is attached, and never to the root."
   }
 }
