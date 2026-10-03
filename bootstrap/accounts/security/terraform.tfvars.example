@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars (gitignored) for a local run.
+region            = "<region>"
+state_bucket_name = "<state-bucket-name>"
+
+# Only for the first local run: the security account ID, to assume OrganizationAccountAccessRole.
+# break_glass_account_id = "<12 digits>"
+
+# Audit log archive (docs/AUDIT_LOGGING.md): the roles read the bucket once it exists. Leave unset while it is off.
+# audit_log_bucket_name = "<unique-bucket-name>"

@@ -16,7 +16,7 @@ locals {
         Principal = { AWS = ["arn:aws:iam::${id}:role/github-infra-${name}", "arn:aws:iam::${id}:role/github-infra-${name}-plan"] }
         Action    = "s3:ListBucket"
         Resource  = local.state_bucket_arn
-        Condition = { StringEquals = { "s3:prefix" = ["env:/", "live/accounts/${name}/terraform.tfstate", "live/accounts/${name}/terraform.tfstate.tflock"] } }
+        Condition = { StringEquals = { "s3:prefix" = ["env:/", "live/accounts/${name}/terraform.tfstate", "live/accounts/${name}/terraform.tfstate.tflock", "bootstrap/accounts/${name}/terraform.tfstate", "bootstrap/accounts/${name}/terraform.tfstate.tflock"] } }
       },
       {
         Sid       = "ReadAndWrite${title(name)}State"
@@ -38,6 +38,24 @@ locals {
         Principal = { AWS = "arn:aws:iam::${id}:role/github-infra-${name}-plan" }
         Action    = "s3:GetObject"
         Resource  = "${local.state_bucket_arn}/live/accounts/${name}/terraform.tfstate"
+      },
+      {
+        # The baseline of the account (OIDC provider and the two CI roles) has a stack of its own,
+        # applied locally with the maintainer's credentials. Both roles read its state and the
+        # apply role takes its lock, so the stack is planned in CI (a drift check). Neither writes
+        # the state object: CI cannot change its own role.
+        Sid       = "Read${title(name)}BaselineState"
+        Effect    = "Allow"
+        Principal = { AWS = ["arn:aws:iam::${id}:role/github-infra-${name}", "arn:aws:iam::${id}:role/github-infra-${name}-plan"] }
+        Action    = "s3:GetObject"
+        Resource  = "${local.state_bucket_arn}/bootstrap/accounts/${name}/terraform.tfstate"
+      },
+      {
+        Sid       = "Lock${title(name)}BaselineState"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::${id}:role/github-infra-${name}" }
+        Action    = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Resource  = "${local.state_bucket_arn}/bootstrap/accounts/${name}/terraform.tfstate.tflock"
       },
     ]
   ])

@@ -544,7 +544,7 @@ run "member_roles_reach_only_their_own_state" {
         Principal = { AWS = ["arn:aws:iam::111122223333:role/github-infra-security", "arn:aws:iam::111122223333:role/github-infra-security-plan"] }
         Action    = "s3:ListBucket"
         Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4"
-        Condition = { StringEquals = { "s3:prefix" = ["env:/", "live/accounts/security/terraform.tfstate", "live/accounts/security/terraform.tfstate.tflock"] } }
+        Condition = { StringEquals = { "s3:prefix" = ["env:/", "live/accounts/security/terraform.tfstate", "live/accounts/security/terraform.tfstate.tflock", "bootstrap/accounts/security/terraform.tfstate", "bootstrap/accounts/security/terraform.tfstate.tflock"] } }
       },
       {
         Sid       = "ReadAndWriteSecurityState"
@@ -567,8 +567,22 @@ run "member_roles_reach_only_their_own_state" {
         Action    = "s3:GetObject"
         Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4/live/accounts/security/terraform.tfstate"
       },
+      {
+        Sid       = "ReadSecurityBaselineState"
+        Effect    = "Allow"
+        Principal = { AWS = ["arn:aws:iam::111122223333:role/github-infra-security", "arn:aws:iam::111122223333:role/github-infra-security-plan"] }
+        Action    = "s3:GetObject"
+        Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4/bootstrap/accounts/security/terraform.tfstate"
+      },
+      {
+        Sid       = "LockSecurityBaselineState"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::111122223333:role/github-infra-security" }
+        Action    = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4/bootstrap/accounts/security/terraform.tfstate.tflock"
+      },
     ]
-    error_message = "A member's roles must be named exactly and reach only their own state key, the plan role without write or lock."
+    error_message = "A member's roles must be named exactly and reach only their own state key, the plan role without write or lock, and neither role writes the state object of the baseline stack, which only the apply role can lock."
   }
 
   # No wildcard in any Allow of the bucket policy: the only * is in the TLS Deny.

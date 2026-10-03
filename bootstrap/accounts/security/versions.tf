@@ -10,7 +10,7 @@ terraform {
 
   # Partial configuration: the bucket and region come from backend.hcl locally and from
   # -backend-config in CI (see .github/workflows/terraform.yml); the key is
-  # live/accounts/workforce/terraform.tfstate.
+  # bootstrap/accounts/security/terraform.tfstate.
   backend "s3" {
     use_lockfile = true
     encrypt      = true

@@ -35,7 +35,7 @@ Terraform has no resource for the sign-in MFA mode, and sessions that come from 
 
 ### 5. CI plans, humans apply
 
-As for every account baseline (`docs/ACCOUNT_CI_BASELINES.md`), CI plans the stack with a read-only role and never applies it: the CI apply role has no IAM or Identity Center write. The plan reads (`sso:List*`, `sso:Describe*`, `identitystore:Describe*`) are added to both roles through the module input `extra_read_statements` and asserted in `live/accounts/security/tests`.
+As for every account baseline (`docs/ACCOUNT_CI_BASELINES.md`), CI plans the stack with a read-only role and never applies it: the CI apply role has no IAM or Identity Center write. The plan reads (`sso:List*`, `sso:Describe*`, `identitystore:Describe*`) are added to both roles through the module input `extra_read_statements` and asserted in `bootstrap/accounts/security/tests`, the stack that defines the roles.
 
 The maintainer user name and the account IDs to assign are the secrets `MAINTAINER_USERNAME` and `ASSIGNMENT_ACCOUNT_IDS` of the `security` and `security-plan` environments (`scripts/set-account-environment-secrets.sh security`).
 
@@ -50,7 +50,7 @@ Run by the maintainer, locally, in this order. Before step 1, the Identity Cente
 **Why once.** After this the stack is stable: one user, two permission sets. A change (a new account in `ASSIGNMENT_ACCOUNT_IDS`, a new permission set) is the same local apply, done only when it is needed and reviewed in a PR first. The delegation in step 1 is registered once and never changes. Nothing here runs on a schedule or on merge; CI only plans it to detect drift.
 
 1. `bootstrap/`: with `security` in `member_account_ids`, `terraform plan` must show exactly one `aws_organizations_delegated_administrator`. Apply it with the management SSO admin session.
-2. `live/accounts/security`: add `maintainer_username` and `assignment_account_ids` to `terraform.tfvars` (see the `.example`; not the management account). The first run has no SSO access to `security` yet, so set `break_glass_account_id` as in `docs/ACCOUNT_CI_BASELINES.md` and remove it afterwards. There is nothing to import. `terraform plan` must show only creations: two permission sets, their two managed policy attachments and the assignments, and no change to the manual `AdministratorAccess` set. Review, then apply. A later apply is done from the maintainer's own `WorkforceAdministrator` session in `security`.
+2. `live/accounts/security`: add `maintainer_username` and `assignment_account_ids` to `terraform.tfvars` (see the `.example`; not the management account). The first run has no SSO access to `security` yet, so run with the maintainer's own administrator session in the account (the provider, `AWS_PROFILE=<account profile>`) and the state backend on the management session (`profile` in `backend.hcl`). There is nothing to import. `terraform plan` must show only creations: two permission sets, their two managed policy attachments and the assignments, and no change to the manual `AdministratorAccess` set. Review, then apply. A later apply is done from the maintainer's own `WorkforceAdministrator` session in `security`.
 3. `scripts/set-account-environment-secrets.sh security` with `MAINTAINER_USERNAME` and `ASSIGNMENT_ACCOUNT_IDS` in the environment, so the `security` plans can read the stack.
 
 Keep the working `AdministratorAccess` session on the management account while doing this; it is not touched. The root user is the break-glass if Identity Center is broken.

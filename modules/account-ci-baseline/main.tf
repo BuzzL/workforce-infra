@@ -86,14 +86,14 @@ resource "aws_iam_role_policy" "apply_state" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Sid      = "ListStateBucket"
         Effect   = "Allow"
         Action   = ["s3:ListBucket"]
         Resource = [local.state_bucket_arn]
         Condition = {
-          StringEquals = { "s3:prefix" = ["env:/", var.state_key, "${var.state_key}.tflock"] }
+          StringEquals = { "s3:prefix" = concat(["env:/", var.state_key, "${var.state_key}.tflock"], var.baseline_state_key == null ? [] : [var.baseline_state_key, "${var.baseline_state_key}.tflock"]) }
         }
       },
       {
@@ -108,7 +108,23 @@ resource "aws_iam_role_policy" "apply_state" {
         Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
         Resource = ["${local.state_bucket_arn}/${var.state_key}.tflock"]
       },
-    ]
+      ], var.baseline_state_key == null ? [] : [
+      # The job that runs after a merge plans the baseline stack with this role (a drift check) and
+      # CI never applies it. It reads the state and takes the lock, but cannot write the state
+      # object: this role cannot change itself.
+      {
+        Sid      = "ReadBaselineState"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = ["${local.state_bucket_arn}/${var.baseline_state_key}"]
+      },
+      {
+        Sid      = "LockBaselineState"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Resource = ["${local.state_bucket_arn}/${var.baseline_state_key}.tflock"]
+      },
+    ])
   })
 }
 
@@ -165,14 +181,14 @@ resource "aws_iam_role_policy" "plan_state_read" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Sid      = "ListStateBucket"
         Effect   = "Allow"
         Action   = ["s3:ListBucket"]
         Resource = [local.state_bucket_arn]
         Condition = {
-          StringEquals = { "s3:prefix" = ["env:/", var.state_key] }
+          StringEquals = { "s3:prefix" = concat(["env:/", var.state_key], var.baseline_state_key == null ? [] : [var.baseline_state_key]) }
         }
       },
       {
@@ -181,7 +197,14 @@ resource "aws_iam_role_policy" "plan_state_read" {
         Action   = ["s3:GetObject"]
         Resource = ["${local.state_bucket_arn}/${var.state_key}"]
       },
-    ]
+      ], var.baseline_state_key == null ? [] : [
+      {
+        Sid      = "ReadBaselineState"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = ["${local.state_bucket_arn}/${var.baseline_state_key}"]
+      },
+    ])
   })
 }
 
