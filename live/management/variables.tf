@@ -75,9 +75,11 @@ variable "scp_attachments" {
   description = "The current rollout stage of the baseline SCPs: organizational unit name to the SCPs attached to it. The default is the stage, changed by a PR (docs/GUARDRAILS_ROLLOUT.md). The root and accounts cannot be named: the only targets are the OUs of this stack."
   type        = map(list(string))
 
-  # Stage 1 of docs/GUARDRAILS_ROLLOUT.md: the four baseline SCPs on Development (the workforce account).
+  # Stages 1 and 2 of docs/GUARDRAILS_ROLLOUT.md: the four baseline SCPs on Development (the workforce
+  # account) and on Environments (no account yet).
   default = {
-    Development = ["deny-leave-organization", "deny-root-user", "deny-disable-cloudtrail", "deny-outside-allowed-region"]
+    Development  = ["deny-leave-organization", "deny-root-user", "deny-disable-cloudtrail", "deny-outside-allowed-region"]
+    Environments = ["deny-leave-organization", "deny-root-user", "deny-disable-cloudtrail", "deny-outside-allowed-region"]
   }
 
   validation {

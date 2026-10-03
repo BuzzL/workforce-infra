@@ -67,7 +67,7 @@ Filled in as the stages are applied.
 |---|---|---|---|
 | 0 | none | 2026-10-03, by CI after the approval of the `management` environment | The four baseline policies exist with **no target** (`list-targets-for-policy`); `DenyLeaveAndCloseAccount` imported unchanged (content identical, now tagged) and still attached to the root with `FullAWSAccess`; no SCP attached to any OU (each OU has only `FullAWSAccess`); the run's drift checks of `bootstrap`, `security` and `workforce` passed. |
 | 1 | Development | 2026-10-03, by CI after the approval of the `management` environment: plan `4 to add, 0 to change, 0 to destroy`, `Apply complete! 4 added`; every job of the run green | See the list below. |
-| 2 | Environments | pending | pending |
+| 2 | Environments | this stage's PR; apply pending | pending |
 | 3 | Operations | pending | pending |
 | 4 | Management | pending | pending |
 
