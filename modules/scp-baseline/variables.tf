@@ -9,7 +9,7 @@ variable "allowed_region" {
 }
 
 variable "global_service_prefixes" {
-  description = "Service prefixes that stay allowed in every region because the service is global or served from us-east-1. Add a prefix only in the PR that needs it, with its test. See docs/ORGANIZATION_INPUTS.md."
+  description = "Service prefixes that stay allowed in every region because the service is global or served from us-east-1. Add a prefix only in the PR that needs it, with its test. See docs/ORGANIZATIONS.md."
   type        = list(string)
   default = [
     "account",

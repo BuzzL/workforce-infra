@@ -2,7 +2,7 @@
 
 ## Context
 
-One door for human access: SSO with MFA into every account, administered from `security`. The instance lives in the management account (home region: see `docs/ORGANIZATION_INPUTS.md`) and was enabled by hand in `docs/BOOTSTRAP.md` step 2.6, with the maintainer user and a first `AdministratorAccess` permission set assigned on the management account.
+One door for human access: SSO with MFA into every account, administered from `security`. The instance lives in the management account (home region: see `docs/ORGANIZATIONS.md`) and was enabled by hand in `docs/BOOTSTRAP.md` step 2.6, with the maintainer user and a first `AdministratorAccess` permission set assigned on the management account.
 
 ## Decisions
 

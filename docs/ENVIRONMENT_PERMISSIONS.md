@@ -33,7 +33,7 @@ The strict regexps and the IAM guarantees below apply to the **environment accou
 
 Exempt, because the name is not ours to choose: Organizations resources (OUs, accounts, SCPs), Identity Center permission sets (32 characters), and names a service generates. **Existing resources are renamed** to this convention, see "Renaming what exists" below. Nothing keeps its old name by exception.
 
-**One region.** IAM names are global, so this convention holds for one region, as decided in `docs/ORGANIZATION_INPUTS.md`. A second region is a new decision that puts the region in the global names.
+**One region.** IAM names are global, so this convention holds for one region, as decided in `docs/ORGANIZATIONS.md`. A second region is a new decision that puts the region in the global names.
 
 ### Projects, applications and qualifiers
 
