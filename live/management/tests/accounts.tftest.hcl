@@ -37,6 +37,43 @@ override_resource {
   target = aws_iam_service_linked_role.cloudtrail
 }
 
+# The hand-made root SCP is imported (service_control_policies.tf): a mock provider cannot import,
+# so it is overridden, and the SCPs it is looked up among are faked.
+override_resource {
+  target = aws_organizations_policy.deny_leave_and_close_account
+}
+
+override_resource {
+  target = aws_organizations_policy_attachment.root_deny_leave_and_close_account
+}
+
+override_data {
+  target = data.aws_organizations_policies.scp
+  values = {
+    ids = ["p-aaaa1111", "p-bbbb2222"]
+  }
+}
+
+override_data {
+  target = data.aws_organizations_policy.scp["p-aaaa1111"]
+  values = {
+    name        = "FullAWSAccess"
+    description = "Allows access to every operation"
+    type        = "SERVICE_CONTROL_POLICY"
+    aws_managed = true
+  }
+}
+
+override_data {
+  target = data.aws_organizations_policy.scp["p-bbbb2222"]
+  values = {
+    name        = "DenyLeaveAndCloseAccount"
+    description = "Prevents member accounts from leaving the organization and self closure"
+    type        = "SERVICE_CONTROL_POLICY"
+    aws_managed = false
+  }
+}
+
 variables {
   region             = "eu-west-1"
   root_id            = "r-ab12"
