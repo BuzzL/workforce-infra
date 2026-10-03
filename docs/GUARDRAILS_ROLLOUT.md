@@ -35,6 +35,11 @@ aws organizations detach-policy --policy-id <policy id> --target-id <OU id> --pr
 
 Then revert the stage in a PR (restore the previous default of `scp_attachments`) so that Terraform agrees: until then the next plan wants to re-attach it.
 
+## Limits to know
+
+- AWS allows **five SCPs directly attached to an OU**. `FullAWSAccess` plus the four baseline SCPs is exactly five, so after a stage no further SCP can be attached to that OU without removing one (the same at every stage). The hand-made root SCP already denies `LeaveOrganization`, so `deny-leave-organization` is partly redundant with it: merging policies or dropping one is a later decision, not part of the rollout.
+- The region SCP exempts only the services of `global_service_prefixes`. Console panels that call services served from `us-east-1` only (Health, Trusted Advisor, parts of the console home) will show access-denied messages in a member account. They are explicit denies that change nothing; a prefix is added only in the PR that needs it (`docs/ORGANIZATION_INPUTS.md`).
+
 ## Proofs
 
 Output is recorded with account and organization IDs left out.
