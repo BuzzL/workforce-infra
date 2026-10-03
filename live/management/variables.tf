@@ -70,3 +70,27 @@ variable "audit_log_bucket_name" {
   default     = null
   sensitive   = true
 }
+
+variable "scp_attachments" {
+  description = "The current rollout stage of the baseline SCPs: organizational unit name to the SCPs attached to it. The default is the stage, changed by a PR (docs/GUARDRAILS_ROLLOUT.md). The root and accounts cannot be named: the only targets are the OUs of this stack."
+  type        = map(list(string))
+  default     = {}
+
+  validation {
+    condition     = alltrue([for ou in keys(var.scp_attachments) : contains(["Management", "Environments", "Development", "Operations"], ou)])
+    error_message = "The keys must be organizational unit names: Management, Environments, Development or Operations. The root and accounts are never targets."
+  }
+
+  validation {
+    condition = alltrue([
+      for policies in values(var.scp_attachments) :
+      alltrue([for p in policies : contains(["deny-leave-organization", "deny-root-user", "deny-disable-cloudtrail", "deny-outside-allowed-region"], p)])
+    ])
+    error_message = "Only the four baseline SCPs of modules/scp-baseline can be attached: deny-leave-organization, deny-root-user, deny-disable-cloudtrail, deny-outside-allowed-region."
+  }
+
+  validation {
+    condition     = alltrue([for policies in values(var.scp_attachments) : length(distinct(policies)) == length(policies)])
+    error_message = "A policy can be listed once per organizational unit."
+  }
+}
