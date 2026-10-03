@@ -83,8 +83,17 @@ run "the_default_is_the_current_stage_and_only_that" {
       "Development/deny-leave-organization",
       "Development/deny-outside-allowed-region",
       "Development/deny-root-user",
+      "Environments/deny-disable-cloudtrail",
+      "Environments/deny-leave-organization",
+      "Environments/deny-outside-allowed-region",
+      "Environments/deny-root-user",
     ])
-    error_message = "The default is stage one: exactly the four baseline policies on Development, nothing on any other unit."
+    error_message = "The default is stage two: the four baseline policies on Development and on Environments, nothing on Management or Operations."
+  }
+
+  assert {
+    condition     = toset([for a in values(aws_organizations_policy_attachment.scp) : a.target_id]) == toset(["ou-ab12-devl0001", "ou-ab12-envs0001"])
+    error_message = "The targets of stage two are exactly the Development and Environments units: no root, no account, no Management or Operations."
   }
 }
 
