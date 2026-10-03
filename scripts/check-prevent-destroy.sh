@@ -10,12 +10,21 @@
 # unguarded one in the same file is refused. The roles and the OIDC provider of the account
 # baselines are not listed: they are applied locally, and break-glass recovery must be able to
 # recreate them. Destroying a listed resource on purpose is a reviewed change that removes the
-# line first. Usage: check-prevent-destroy.sh [root]   (a test points root at a tree)
+# line first. Service control policies are not listed: their guard is the staged attachment and
+# the review of every change (docs/GUARDRAILS_ROLLOUT.md), and the module that defines them is
+# shared by stages that remove an attachment.
+#
+# Limits, so nobody over-trusts it: it is a net against forgetting the line, not against evasion.
+# It reads one resource at a time with a line parser, not HCL: the line must be exactly
+# `prevent_destroy = true`, a /* */ comment or a heredoc that holds braces can end a block early
+# (the check then fails closed or misses a later line), and the string stripping does not handle
+# nested quotes inside an interpolation.
+# Usage: check-prevent-destroy.sh [root]   (a test points root at a tree)
 set -euo pipefail
 root=${1:-$(cd "$(dirname "$0")/.." && pwd)}
 cd "$root"
 
-types="aws_organizations_organizational_unit aws_organizations_account aws_ssoadmin_permission_set aws_ssoadmin_managed_policy_attachment aws_ssoadmin_account_assignment aws_s3_bucket"
+types="aws_organizations_organizational_unit aws_organizations_account aws_ssoadmin_permission_set aws_ssoadmin_managed_policy_attachment aws_ssoadmin_account_assignment aws_s3_bucket aws_cloudtrail"
 
 status=0
 while IFS= read -r file; do
@@ -30,9 +39,9 @@ while IFS= read -r file; do
         type = p[2]; name = p[4]; start = NR; inres = 1; depth = 0; ok = 0
       }
       if (inres) {
-        if (line ~ /prevent_destroy[[:space:]]*=[[:space:]]*true/) ok = 1
         s = line
-        gsub(/"[^"]*"/, "", s)           # braces inside strings (interpolation) do not count
+        gsub(/"[^"]*"/, "", s)           # strings: braces and text inside them do not count
+        if (s ~ /^[[:space:]]*prevent_destroy[[:space:]]*=[[:space:]]*true[[:space:]]*$/) ok = 1
         o = gsub(/\{/, "{", s); c = gsub(/\}/, "}", s)
         depth += o - c
         if (depth <= 0 && (o > 0 || c > 0)) {

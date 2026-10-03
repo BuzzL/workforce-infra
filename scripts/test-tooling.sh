@@ -362,6 +362,17 @@ resource "aws_ssoadmin_permission_set" "this" {
   name = "x"
   # prevent_destroy = true
 }'
+pd_tree pd-string 'resource "aws_s3_bucket" "logs" {
+  tags = { note = "prevent_destroy = true" }
+}'
+pd_tree pd-trueish 'resource "aws_s3_bucket" "logs" {
+  lifecycle {
+    prevent_destroy = true && false
+  }
+}'
+pd_tree pd-trail 'resource "aws_cloudtrail" "this" {
+  name = "x"
+}'
 mkdir -p pd-tests/live/a/tests && printf 'resource "aws_organizations_account" "t" {\n}\n' > pd-tests/live/a/tests/x.tf
 expect pass "prevent_destroy: a guarded resource passes, braces in strings do not confuse it" scripts/check-prevent-destroy.sh pd-ok
 expect pass "prevent_destroy: a type that is not listed (the local baseline roles) passes" scripts/check-prevent-destroy.sh pd-other
@@ -370,5 +381,8 @@ expect fail:"aws_organizations_account.this must carry" "prevent_destroy: an ung
 expect fail:"aws_ssoadmin_account_assignment.second must carry" "prevent_destroy: a guarded resource does not cover the next one in the file" scripts/check-prevent-destroy.sh pd-second
 expect fail:"aws_s3_bucket.logs must carry" "prevent_destroy: = false is not a guard" scripts/check-prevent-destroy.sh pd-false
 expect fail:"aws_ssoadmin_permission_set.this must carry" "prevent_destroy: a commented line is not a guard" scripts/check-prevent-destroy.sh pd-comment
+expect fail:"aws_s3_bucket.logs must carry" "prevent_destroy: the text inside a string is not a guard" scripts/check-prevent-destroy.sh pd-string
+expect fail:"aws_s3_bucket.logs must carry" "prevent_destroy: = true && false is not a guard" scripts/check-prevent-destroy.sh pd-trueish
+expect fail:"aws_cloudtrail.this must carry" "prevent_destroy: the audit trail is listed" scripts/check-prevent-destroy.sh pd-trail
 
 exit "$failed"
