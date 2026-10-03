@@ -31,6 +31,13 @@ resource "aws_ssoadmin_permission_set" "this" {
   instance_arn     = local.instance_arn
   session_duration = each.value.session_duration
   tags             = var.tags
+
+  # A destroyed set takes its policy attachments and assignments with it: losing it is how the
+  # maintainer loses access. Guarded so a CI apply cannot delete it (checked by
+  # scripts/check-prevent-destroy.sh); a deliberate removal takes this line out first.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_ssoadmin_managed_policy_attachment" "this" {
@@ -39,6 +46,11 @@ resource "aws_ssoadmin_managed_policy_attachment" "this" {
   instance_arn       = local.instance_arn
   managed_policy_arn = each.value.managed_policy_arn
   permission_set_arn = aws_ssoadmin_permission_set.this[each.key].arn
+
+  # Detaching the managed policy strips the set of its only permissions (a lockout). Guarded.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_ssoadmin_account_assignment" "maintainer" {
@@ -55,4 +67,10 @@ resource "aws_ssoadmin_account_assignment" "maintainer" {
 
   # Provisioning an assignment creates the role in the account; keep the order explicit.
   depends_on = [aws_ssoadmin_managed_policy_attachment.this]
+
+  # Deleting an assignment removes the maintainer's access to that account: the lockout class
+  # this guard exists for. Guarded so a CI apply cannot delete it.
+  lifecycle {
+    prevent_destroy = true
+  }
 }

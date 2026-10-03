@@ -28,9 +28,11 @@ workflows:
 	actionlint
 	scripts/check-workflow.sh
 
-# Member accounts cannot be undone: prevent_destroy must stay (terraform test cannot plan a destroy).
+# Resources whose loss is unrecoverable or a lockout must keep prevent_destroy (terraform test
+# cannot plan a destroy): member accounts, the state and audit-log buckets, the Identity Center
+# sets, attachments and assignments. See scripts/check-prevent-destroy.sh.
 lifecycle:
-	scripts/check-account-lifecycle.sh
+	scripts/check-prevent-destroy.sh
 
 # The repo is public: no account IDs, ARNs with IDs or emails in docs.
 docs:

@@ -137,6 +137,69 @@ resource "aws_s3_bucket" "b" {
 TF
 expect fail:HIGH "sec      catches a bucket without a public access block" make sec
 
+# prevent_destroy: a guarded type must carry the guard, scored per resource block (a file can
+# hold several). prevent_destroy lives in a nested lifecycle block, so brace scoping matters.
+write_valid
+cat > "$last/guard.tf" <<'TF'
+resource "aws_s3_bucket" "b" {
+  bucket = "x"
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+TF
+expect pass "lifecycle accepts a guarded resource (prevent_destroy in a nested block)" make lifecycle
+
+write_valid
+cat > "$last/guard.tf" <<'TF'
+resource "aws_s3_bucket" "b" {
+  bucket = "x"
+}
+TF
+expect fail:"aws_s3_bucket.b without prevent_destroy" "lifecycle catches a guarded resource without the guard" make lifecycle
+
+# The case the old single-latch check passed by mistake: the first block is guarded, the
+# second is not. The guard on the first must not cover the second.
+write_valid
+cat > "$last/guard.tf" <<'TF'
+resource "aws_ssoadmin_permission_set" "good" {
+  name = "g"
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "aws_ssoadmin_permission_set" "bad" {
+  name = "b"
+}
+TF
+expect fail:"aws_ssoadmin_permission_set.bad without prevent_destroy" "lifecycle scores each block (guarded then unguarded)" make lifecycle
+
+# The mirror: first block unguarded, second guarded.
+write_valid
+cat > "$last/guard.tf" <<'TF'
+resource "aws_ssoadmin_account_assignment" "bad" {
+  principal_type = "USER"
+}
+
+resource "aws_ssoadmin_account_assignment" "good" {
+  principal_type = "USER"
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+TF
+expect fail:"aws_ssoadmin_account_assignment.bad without prevent_destroy" "lifecycle scores each block (unguarded then guarded)" make lifecycle
+
+# A type that is not in the curated list is ignored, guard or not.
+write_valid
+cat > "$last/guard.tf" <<'TF'
+resource "aws_iam_role" "r" {
+  name = "r"
+}
+TF
+expect pass "lifecycle ignores a type that is not guarded" make lifecycle
+
 # CI stack mapping: environments come from the path, unknown paths fail.
 write_valid
 rm -rf bootstrap live modules
