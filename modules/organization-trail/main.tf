@@ -20,4 +20,10 @@ resource "aws_cloudtrail" "this" {
   include_global_service_events = true
   enable_log_file_validation    = true
   enable_logging                = true
+
+  # The audit trail itself: a plan that would delete it fails. Turning audit logging off is a
+  # reviewed change that deletes this line first.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
