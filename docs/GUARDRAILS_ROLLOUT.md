@@ -58,8 +58,8 @@ Filled in as the stages are applied.
 
 | Stage | OU | Applied | Proofs |
 |---|---|---|---|
-| 0 | none | pending | pending |
-| 1 | Development | pending | pending |
+| 0 | none | 2026-10-03, by CI after the approval of the `management` environment | The four baseline policies exist with **no target** (`list-targets-for-policy`); `DenyLeaveAndCloseAccount` imported unchanged (content identical, now tagged) and still attached to the root with `FullAWSAccess`; no SCP attached to any OU (each OU has only `FullAWSAccess`); the run's drift checks of `bootstrap`, `security` and `workforce` passed. |
+| 1 | Development | this stage's PR; apply pending | pending |
 | 2 | Environments | pending | pending |
 | 3 | Operations | pending | pending |
 | 4 | Management | pending | pending |
