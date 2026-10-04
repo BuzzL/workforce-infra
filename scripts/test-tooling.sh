@@ -187,6 +187,16 @@ want='[{"stack":"bootstrap","environment":"management-plan"},{"stack":"bootstrap
 if [ "$got" = "$want" ]; then echo "ok   ci-stacks plans the environment accounts in <name>-plan"; else echo "FAIL ci-stacks environment plan mapping"; echo "$got"; failed=1; fi
 for e in test quality demo; do rm bootstrap/accounts/$e/.ci-enabled live/environments/$e/.ci-enabled; done
 expect fail:unmapped "ci-stacks does not map a baseline of an account outside the Environments OU" sh -c 'mkdir -p bootstrap/accounts/management && printf "terraform {}\n" > bootstrap/accounts/management/main.tf && scripts/ci-stacks.sh; rc=$?; rm -rf bootstrap/accounts/management; exit $rc'
+# One marker is not enough: each stack joins CI with its own.
+touch bootstrap/accounts/test/.ci-enabled
+got=$(scripts/ci-stacks.sh apply)
+case "$got" in *'"stack":"live/environments/test"'*) echo "FAIL ci-stacks: the baseline marker enabled the account's own stack"; failed=1 ;; *'"stack":"bootstrap/accounts/test"'*) echo "ok   ci-stacks: a baseline marker enables the baseline only" ;; *) echo "FAIL ci-stacks: the baseline marker did nothing"; failed=1 ;; esac
+rm bootstrap/accounts/test/.ci-enabled
+touch live/environments/test/.ci-enabled
+got=$(scripts/ci-stacks.sh apply)
+case "$got" in *'"stack":"bootstrap/accounts/test"'*) echo "FAIL ci-stacks: the stack marker enabled the baseline"; failed=1 ;; *'"stack":"live/environments/test"'*) echo "ok   ci-stacks: an account stack marker enables that stack only" ;; *) echo "FAIL ci-stacks: the stack marker did nothing"; failed=1 ;; esac
+rm live/environments/test/.ci-enabled
+expect fail:unmapped "ci-stacks does not map bootstrap/accounts/staging" sh -c 'mkdir -p bootstrap/accounts/staging && printf "terraform {}\n" > bootstrap/accounts/staging/main.tf && scripts/ci-stacks.sh; rc=$?; rm -rf bootstrap/accounts/staging; exit $rc'
 expect fail:usage "ci-stacks rejects an unknown mode" scripts/ci-stacks.sh nonsense
 # Names are explanatory, keys are four lowercase letters, unique (scripts/environment-keys.tsv).
 # The shipped table passes (every mapping above), and each way of breaking it is refused.

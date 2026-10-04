@@ -621,28 +621,28 @@ run "environment_roles_have_platform_names_and_reach_only_their_own_state" {
         Principal = { AWS = ["arn:aws:iam::111122223333:role/platform/qual-foundation-infra-role", "arn:aws:iam::111122223333:role/platform/qual-foundation-infra-plan-role"] }
         Action    = "s3:ListBucket"
         Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4"
-        Condition = { StringEquals = { "s3:prefix" = ["env:/", "live/accounts/quality/terraform.tfstate", "live/accounts/quality/terraform.tfstate.tflock", "bootstrap/accounts/quality/terraform.tfstate", "bootstrap/accounts/quality/terraform.tfstate.tflock"] } }
+        Condition = { StringEquals = { "s3:prefix" = ["env:/", "live/environments/quality/terraform.tfstate", "live/environments/quality/terraform.tfstate.tflock", "bootstrap/accounts/quality/terraform.tfstate", "bootstrap/accounts/quality/terraform.tfstate.tflock"] } }
       },
       {
         Sid       = "ReadAndWriteQualityState"
         Effect    = "Allow"
         Principal = { AWS = "arn:aws:iam::111122223333:role/platform/qual-foundation-infra-role" }
         Action    = ["s3:GetObject", "s3:PutObject"]
-        Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4/live/accounts/quality/terraform.tfstate"
+        Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4/live/environments/quality/terraform.tfstate"
       },
       {
         Sid       = "LockQualityState"
         Effect    = "Allow"
         Principal = { AWS = "arn:aws:iam::111122223333:role/platform/qual-foundation-infra-role" }
         Action    = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
-        Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4/live/accounts/quality/terraform.tfstate.tflock"
+        Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4/live/environments/quality/terraform.tfstate.tflock"
       },
       {
         Sid       = "ReadQualityStateForPlans"
         Effect    = "Allow"
         Principal = { AWS = "arn:aws:iam::111122223333:role/platform/qual-foundation-infra-plan-role" }
         Action    = "s3:GetObject"
-        Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4/live/accounts/quality/terraform.tfstate"
+        Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4/live/environments/quality/terraform.tfstate"
       },
       {
         Sid       = "ReadQualityBaselineState"
