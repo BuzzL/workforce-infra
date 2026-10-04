@@ -4,51 +4,6 @@ mock_provider "aws" {
   }
 }
 
-# A mock provider cannot import: every adopted resource (imports.tf) is overridden instead.
-override_resource {
-  target = module.baseline.aws_iam_openid_connect_provider.github
-}
-
-override_resource {
-  target = module.baseline.aws_iam_role.apply
-}
-
-override_resource {
-  target = module.baseline.aws_iam_role.plan
-}
-
-override_resource {
-  target = module.baseline.aws_iam_role_policy.apply_state
-}
-
-override_resource {
-  target = module.baseline.aws_iam_role_policy.apply_baseline_read
-}
-
-override_resource {
-  target = module.baseline.aws_iam_role_policy.plan_state_read
-}
-
-override_resource {
-  target = module.baseline.aws_iam_role_policy.plan_baseline_read
-}
-
-override_resource {
-  target = module.baseline.aws_iam_role_policies_exclusive.apply
-}
-
-override_resource {
-  target = module.baseline.aws_iam_role_policies_exclusive.plan
-}
-
-override_resource {
-  target = module.baseline.aws_iam_role_policy_attachments_exclusive.apply
-}
-
-override_resource {
-  target = module.baseline.aws_iam_role_policy_attachments_exclusive.plan
-}
-
 variables {
   region            = "eu-west-1"
   state_bucket_name = "workforce-tfstate-a1b2c3d4"
