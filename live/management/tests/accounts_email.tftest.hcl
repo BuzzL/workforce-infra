@@ -92,7 +92,10 @@ run "emails_follow_a_changed_base" {
   }
 
   assert {
-    condition     = aws_organizations_account.this["workforce"].email == "boss+workforce@mail.example.org"
+    condition = alltrue([
+      for name in ["security", "workforce", "test", "quality", "demo"] :
+      aws_organizations_account.this[name].email == "boss+${name}@mail.example.org"
+    ])
     error_message = "No email may be hardcoded: it must follow account_email_base."
   }
 }

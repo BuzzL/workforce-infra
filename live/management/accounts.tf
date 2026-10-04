@@ -1,9 +1,12 @@
 locals {
   # Member accounts and the top-level OU each one sits in. Accounts are created only when
-  # needed; the environment accounts (test, quality, demo) come later (M3).
+  # needed. The names are the ones of scripts/environment-keys.tsv.
   accounts = {
     security  = "Management"
     workforce = "Development"
+    test      = "Environments"
+    quality   = "Environments"
+    demo      = "Environments"
   }
 
   email_local  = split("@", var.account_email_base)[0]
