@@ -98,12 +98,13 @@ run "environment_naming_and_path" {
     error_message = "The subjects must stay the exact environment names quality and quality-plan."
   }
 
-  # A role under a path is read through its ARN with the path in it.
+  # A role under a path is read through its ARN with the path in it, by both roles.
   assert {
-    condition = contains(flatten([
-      for s in jsondecode(aws_iam_role_policy.apply_baseline_read.policy).Statement : s.Resource if s.Sid == "ReadBaselineRoles"
-    ]), "arn:aws:iam::111122223333:role/platform/qual-foundation-infra-role")
-    error_message = "The baseline read must name the roles with their path."
+    condition = alltrue([for r in [aws_iam_role_policy.apply_baseline_read, aws_iam_role_policy.plan_baseline_read] :
+      contains(flatten([for s in jsondecode(r.policy).Statement : s.Resource if s.Sid == "ReadBaselineRoles"]), "arn:aws:iam::111122223333:role/platform/qual-foundation-infra-role")
+      && contains(flatten([for s in jsondecode(r.policy).Statement : s.Resource if s.Sid == "ReadBaselineRoles"]), "arn:aws:iam::111122223333:role/platform/qual-foundation-infra-plan-role")
+    ])
+    error_message = "Both baseline reads must name both roles with their path."
   }
 }
 
@@ -111,8 +112,16 @@ run "legacy_names_are_unchanged" {
   command = apply
 
   assert {
-    condition     = aws_iam_role.apply.name == "github-infra-security" && aws_iam_role.apply.path == "/"
-    error_message = "Without the new inputs the roles keep their legacy name and path."
+    condition     = aws_iam_role.apply.name == "github-infra-security" && aws_iam_role.apply.path == "/" && aws_iam_role.plan.name == "github-infra-security-plan" && aws_iam_role.plan.path == "/"
+    error_message = "Without the new inputs the roles keep their legacy names and path."
+  }
+
+  assert {
+    condition = alltrue([for r in [aws_iam_role_policy.apply_baseline_read, aws_iam_role_policy.plan_baseline_read] :
+      contains(flatten([for s in jsondecode(r.policy).Statement : s.Resource if s.Sid == "ReadBaselineRoles"]), "arn:aws:iam::111122223333:role/github-infra-security")
+      && contains(flatten([for s in jsondecode(r.policy).Statement : s.Resource if s.Sid == "ReadBaselineRoles"]), "arn:aws:iam::111122223333:role/github-infra-security-plan")
+    ])
+    error_message = "Both baseline reads must keep naming the legacy role ARNs."
   }
 }
 
@@ -143,6 +152,41 @@ run "role_path_is_strict" {
 
   variables {
     role_path = "/other/"
+  }
+
+  expect_failures = [var.role_path]
+}
+
+run "key_must_match_the_account" {
+  command = plan
+
+  variables {
+    account_name    = "demo"
+    apply_role_name = "test-foundation-infra-role"
+    plan_role_name  = "demo-foundation-infra-plan-role"
+    role_path       = "/platform/"
+  }
+
+  expect_failures = [var.apply_role_name]
+}
+
+run "new_names_need_the_platform_path" {
+  command = plan
+
+  variables {
+    account_name    = "quality"
+    apply_role_name = "qual-foundation-infra-role"
+    plan_role_name  = "qual-foundation-infra-plan-role"
+  }
+
+  expect_failures = [var.role_path]
+}
+
+run "platform_path_needs_the_new_names" {
+  command = plan
+
+  variables {
+    role_path = "/platform/"
   }
 
   expect_failures = [var.role_path]

@@ -13,6 +13,8 @@ CI manages the AWS accounts without long-lived keys: GitHub Actions presents an 
 | `github-infra-<account>` | `<account>` | read and write the state of its own stack and its lockfile, read the baseline resources |
 | `github-infra-<account>-plan` | `<account>-plan` | read the state object of its own stack and the baseline resources, nothing else |
 
+The names above are the legacy ones, kept by `security` and `workforce` until their rename (`docs/ENVIRONMENT_PERMISSIONS.md`). The module inputs `apply_role_name`, `plan_role_name` and `role_path` give the environment accounts `<key>-foundation-infra-role` and `<key>-foundation-infra-plan-role` under `/platform/`: the key must be that of the account (`test`, `qual`, `demo`) and the new names and the path are set together. The trust follows the account name, not the role name. Changing a name or path replaces the role, which changes its ID and the state bucket policy.
+
 Both trust the provider of their account for one exact subject, `repo:<owner>@<owner id>/workforce-infra@<repo id>:environment:<environment>`, with `StringEquals` on `sub` and `aud`. The plan environment has no reviewer and accepts any branch, so its role is read-only and cannot take the lock (plans run with `-lock=false`), like `management-plan`.
 
 Rejected: a single role that also plans pull requests. Code from any branch would then run with write access.
