@@ -140,3 +140,83 @@ run "no_log_bucket_reads_while_it_is_off" {
     error_message = "While audit logging is off the CI roles get no log bucket permission."
   }
 }
+
+run "identity_center_writes_are_exactly_the_documented_ones" {
+  command = apply
+
+  # The whole list, literally: a new action or resource must be a visible change here. No delete,
+  # no detach and nothing on IAM: removals are guarded by prevent_destroy, and CI cannot widen
+  # its own role.
+  assert {
+    condition = jsonencode(local.identity_write_statements) == jsonencode([
+      {
+        Sid    = "ManageIdentityCenterPermissionSets"
+        Effect = "Allow"
+        Action = [
+          "sso:AttachManagedPolicyToPermissionSet",
+          "sso:CreatePermissionSet",
+          "sso:TagResource",
+          "sso:UntagResource",
+          "sso:UpdatePermissionSet",
+        ]
+        Resource = ["arn:aws:sso:::instance/ssoins-*", "arn:aws:sso:::permissionSet/ssoins-*/ps-*"]
+      },
+      {
+        Sid      = "ProvisionAndAssignIdentityCenter"
+        Effect   = "Allow"
+        Action   = ["sso:CreateAccountAssignment", "sso:ProvisionPermissionSet"]
+        Resource = ["arn:aws:sso:::instance/ssoins-*", "arn:aws:sso:::permissionSet/ssoins-*/ps-*", "arn:aws:sso:::account/*"]
+      },
+      {
+        Sid      = "FollowIdentityCenterRequests"
+        Effect   = "Allow"
+        Action   = ["sso:DescribeAccountAssignmentCreationStatus", "sso:DescribePermissionSetProvisioningStatus"]
+        Resource = ["arn:aws:sso:::instance/ssoins-*"]
+      },
+    ])
+    error_message = "The identity writes of the apply role must be exactly the three documented statements."
+  }
+
+  assert {
+    condition     = alltrue([for s in local.identity_write_statements : alltrue([for a in s.Action : !strcontains(a, "Delete") && !strcontains(a, "Detach") && !startswith(a, "iam:")])])
+    error_message = "The apply role must not delete, detach or touch IAM."
+  }
+}
+
+run "audit_log_bucket_writes_are_exactly_the_documented_ones" {
+  command = plan
+
+  variables {
+    audit_log_bucket_name = "workforce-audit-logs-example"
+  }
+
+  assert {
+    condition = jsonencode(nonsensitive(local.audit_write_statements)) == jsonencode([
+      {
+        Sid    = "ConfigureAuditLogBucket"
+        Effect = "Allow"
+        Action = [
+          "s3:CreateBucket",
+          "s3:PutBucketOwnershipControls",
+          "s3:PutBucketPolicy",
+          "s3:PutBucketPublicAccessBlock",
+          "s3:PutBucketTagging",
+          "s3:PutBucketVersioning",
+          "s3:PutEncryptionConfiguration",
+          "s3:PutLifecycleConfiguration",
+        ]
+        Resource = ["arn:aws:s3:::workforce-audit-logs-example"]
+      },
+    ])
+    error_message = "The apply role may create and configure the log bucket and nothing else: no object access, no DeleteBucket."
+  }
+}
+
+run "no_log_bucket_writes_while_it_is_off" {
+  command = plan
+
+  assert {
+    condition     = length(local.audit_write_statements) == 0
+    error_message = "While audit logging is off the apply role gets no log bucket permission."
+  }
+}

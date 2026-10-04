@@ -67,12 +67,28 @@ resource "aws_iam_role" "apply" {
 # resources is removed on the next apply.
 resource "aws_iam_role_policies_exclusive" "apply" {
   role_name    = aws_iam_role.apply.name
-  policy_names = [aws_iam_role_policy.apply_state.name, aws_iam_role_policy.apply_baseline_read.name]
+  policy_names = concat([aws_iam_role_policy.apply_state.name, aws_iam_role_policy.apply_baseline_read.name], aws_iam_role_policy.apply_stack_write[*].name)
 }
 
 resource "aws_iam_role_policy_attachments_exclusive" "apply" {
   role_name   = aws_iam_role.apply.name
   policy_arns = []
+}
+
+# What the account's own stack, applied by CI, needs to write. Only when the stack passes
+# statements; they are validated (variables.tf) and asserted literally by the stack's tests.
+# Nothing here changes IAM: the role cannot widen itself, because the baseline is a stack of
+# its own that stays local.
+resource "aws_iam_role_policy" "apply_stack_write" {
+  count = length(var.extra_write_statements) > 0 ? 1 : 0
+
+  name = "stack-write"
+  role = aws_iam_role.apply.id
+
+  policy = jsonencode({
+    Version   = "2012-10-17"
+    Statement = var.extra_write_statements
+  })
 }
 
 # State and native lockfile of this stack only. The apply role cannot change IAM: the

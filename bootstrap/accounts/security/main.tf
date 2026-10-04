@@ -1,7 +1,7 @@
 # The baseline of the security account: the GitHub OIDC provider and the two CI roles
-# (modules/account-ci-baseline), with what the roles read in the stack CI applies,
-# live/accounts/security (Identity Center and the audit log bucket). It is applied locally, like
-# bootstrap/, so that the role CI applies with can never change itself
+# (modules/account-ci-baseline), with what the roles read and what the apply role writes in the
+# stack CI applies, live/accounts/security (Identity Center and the audit log bucket). It is
+# applied locally, like bootstrap/, so that the role CI applies with can never change itself
 # (docs/ACCOUNT_CI_BASELINES.md).
 locals {
   # Same key as the backend: CI passes -backend-config=key=<stack>/terraform.tfstate.
@@ -83,6 +83,73 @@ locals {
   ] : []
 }
 
+locals {
+  # What live/accounts/security writes, applied by CI after the maintainer's approval on the
+  # security environment. The reason is beside each statement. None of it touches IAM and none
+  # of it deletes: a plan that would delete any of these resources fails first on
+  # prevent_destroy (scripts/check-prevent-destroy.sh), and the log bucket's own policy denies
+  # deletion to everyone but the break-glass role. Derived from what the provider calls for
+  # each resource and checked against the AWS service reference; a call this list misses shows
+  # up as AccessDenied at the first change that needs it, never as a wider grant.
+  audit_write_statements = local.audit_logging ? [
+    {
+      # Create and configure the log bucket (modules/audit-log-bucket: the bucket, its
+      # ownership controls, public access block, versioning, encryption, lifecycle and policy).
+      # Bucket level only: no object read, write or delete, so CI still cannot touch a log, and
+      # no DeleteBucket. CI can rewrite the bucket policy, like any change to this stack, so
+      # that change is guarded by review and by the approval of the security environment.
+      Sid    = "ConfigureAuditLogBucket"
+      Effect = "Allow"
+      Action = [
+        "s3:CreateBucket",
+        "s3:PutBucketOwnershipControls",
+        "s3:PutBucketPolicy",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:PutBucketTagging",
+        "s3:PutBucketVersioning",
+        "s3:PutEncryptionConfiguration",
+        "s3:PutLifecycleConfiguration",
+      ]
+      Resource = ["arn:aws:s3:::${var.audit_log_bucket_name}"]
+    },
+  ] : []
+
+  identity_write_statements = [
+    {
+      # Create and change the permission sets and attach their managed policy
+      # (modules/identity-center-access). Not detach and not delete: those are guarded by
+      # prevent_destroy, and removing a set cuts the maintainer's access.
+      Sid    = "ManageIdentityCenterPermissionSets"
+      Effect = "Allow"
+      Action = [
+        "sso:AttachManagedPolicyToPermissionSet",
+        "sso:CreatePermissionSet",
+        "sso:TagResource",
+        "sso:UntagResource",
+        "sso:UpdatePermissionSet",
+      ]
+      Resource = ["arn:aws:sso:::instance/ssoins-*", "arn:aws:sso:::permissionSet/ssoins-*/ps-*"]
+    },
+    {
+      # Push a changed set to the accounts that use it, and assign the maintainer to an account.
+      # This is the statement group that lets CI change who can reach an account: the control is
+      # the maintainer's approval on the security environment, and prevent_destroy on the
+      # assignments so that a plan can never remove one. Not DeleteAccountAssignment.
+      Sid      = "ProvisionAndAssignIdentityCenter"
+      Effect   = "Allow"
+      Action   = ["sso:CreateAccountAssignment", "sso:ProvisionPermissionSet"]
+      Resource = ["arn:aws:sso:::instance/ssoins-*", "arn:aws:sso:::permissionSet/ssoins-*/ps-*", "arn:aws:sso:::account/*"]
+    },
+    {
+      # Follow the asynchronous requests the two actions above start.
+      Sid      = "FollowIdentityCenterRequests"
+      Effect   = "Allow"
+      Action   = ["sso:DescribeAccountAssignmentCreationStatus", "sso:DescribePermissionSetProvisioningStatus"]
+      Resource = ["arn:aws:sso:::instance/ssoins-*"]
+    },
+  ]
+}
+
 module "baseline" {
   source = "../../../modules/account-ci-baseline"
 
@@ -92,5 +159,6 @@ module "baseline" {
   baseline_state_key = local.state_key
   tags               = var.tags
 
-  extra_read_statements = concat(local.identity_read_statements, local.audit_read_statements)
+  extra_read_statements  = concat(local.identity_read_statements, local.audit_read_statements)
+  extra_write_statements = concat(local.identity_write_statements, local.audit_write_statements)
 }

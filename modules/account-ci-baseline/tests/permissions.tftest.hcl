@@ -222,3 +222,102 @@ run "baseline_state_is_read_by_both_roles_and_written_by_neither" {
     error_message = "The apply role may read and lock the baseline state, to plan it after a merge, and must never write the state object: CI cannot change its own role."
   }
 }
+
+# What the account's own stack, applied by CI, may write. Only the apply role gets it; nothing
+# in it changes IAM, and the plan role stays read-only.
+run "write_statements_reach_the_apply_role_only" {
+  command = apply
+
+  variables {
+    extra_write_statements = [{
+      Sid      = "ConfigureLogBucket"
+      Effect   = "Allow"
+      Action   = ["s3:CreateBucket", "s3:PutBucketPolicy"]
+      Resource = ["arn:aws:s3:::example-logs"]
+    }]
+  }
+
+  assert {
+    condition = jsondecode(aws_iam_role_policy.apply_stack_write[0].policy).Statement == [{
+      Sid      = "ConfigureLogBucket"
+      Effect   = "Allow"
+      Action   = ["s3:CreateBucket", "s3:PutBucketPolicy"]
+      Resource = ["arn:aws:s3:::example-logs"]
+    }]
+    error_message = "The apply role must carry the write statements exactly as the stack passes them."
+  }
+
+  assert {
+    condition     = length(aws_iam_role_policy.apply_stack_write) == 1 && aws_iam_role_policy.apply_stack_write[0].name == "stack-write"
+    error_message = "The write policy is one inline policy named stack-write."
+  }
+
+  assert {
+    condition     = !strcontains(aws_iam_role_policy.plan_state_read.policy, "s3:CreateBucket") && !strcontains(aws_iam_role_policy.plan_baseline_read.policy, "s3:CreateBucket")
+    error_message = "The plan role must stay read-only: it gets no write statement."
+  }
+
+  assert {
+    condition     = length(regexall("iam:", aws_iam_role_policy.apply_stack_write[0].policy)) == 0
+    error_message = "A write statement must not touch IAM: CI cannot widen its own role."
+  }
+}
+
+run "no_write_statements_means_no_write_policy" {
+  command = apply
+
+  assert {
+    condition     = length(aws_iam_role_policy.apply_stack_write) == 0
+    error_message = "Without write statements the apply role has no write policy."
+  }
+}
+
+run "wildcard_action_is_rejected" {
+  command = plan
+
+  variables {
+    extra_write_statements = [{ Sid = "X", Effect = "Allow", Action = ["s3:*"], Resource = ["arn:aws:s3:::b"] }]
+  }
+
+  expect_failures = [var.extra_write_statements]
+}
+
+run "bare_wildcard_resource_is_rejected" {
+  command = plan
+
+  variables {
+    extra_write_statements = [{ Sid = "X", Effect = "Allow", Action = ["s3:CreateBucket"], Resource = ["*"] }]
+  }
+
+  expect_failures = [var.extra_write_statements]
+}
+
+run "not_action_is_rejected" {
+  command = plan
+
+  variables {
+    extra_write_statements = [{ Sid = "X", Effect = "Allow", NotAction = ["s3:DeleteBucket"], Action = ["s3:CreateBucket"], Resource = ["arn:aws:s3:::b"] }]
+  }
+
+  expect_failures = [var.extra_write_statements]
+}
+
+run "deny_or_principal_is_rejected" {
+  command = plan
+
+  variables {
+    extra_write_statements = [{ Sid = "X", Effect = "Deny", Action = ["s3:CreateBucket"], Resource = ["arn:aws:s3:::b"] }]
+  }
+
+  expect_failures = [var.extra_write_statements]
+}
+
+run "statement_without_sid_is_rejected" {
+  command = plan
+
+  variables {
+    extra_write_statements = [{ Effect = "Allow", Action = ["s3:CreateBucket"], Resource = ["arn:aws:s3:::b"] }]
+  }
+
+  expect_failures = [var.extra_write_statements]
+}
