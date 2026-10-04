@@ -62,7 +62,7 @@ Done for `security` and `workforce`. The `imports.tf` files and the `removed` bl
    `workforce`: from the checkout of `main`, where `live/accounts/workforce` still exists, `terraform state rm module.baseline`. The state is versioned, so the previous version is the way back.
 4. Both baseline stacks and `live/accounts/security` plan clean. Commit the `.ci-enabled` markers of `bootstrap/accounts/<account>`; the next pull request plans them through OIDC, which must be a no-op.
 5. **Do not merge before step 3.** After the merge the post-merge job fails for a stack that CI does not apply when its plan has changes, and the plan of `live/accounts/security` has the removals until step 3 is applied.
-6. In a later change, remove `imports.tf` and the `removed` block: they have no effect after the first apply (done). `live/accounts/workforce` returns when the account owns resources.
+6. `live/accounts/workforce` returns when the account owns resources.
 
 If step 2 shows a destroy or an add, do not apply: the baseline in the account differs from the module, which is a finding to understand first.
 

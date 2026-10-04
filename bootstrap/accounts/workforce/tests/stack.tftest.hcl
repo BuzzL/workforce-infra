@@ -1,8 +1,4 @@
-mock_provider "aws" {
-  mock_data "aws_caller_identity" {
-    defaults = { account_id = "111122223333" }
-  }
-}
+mock_provider "aws" {}
 
 variables {
   region            = "eu-west-1"

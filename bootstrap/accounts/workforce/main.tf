@@ -1,8 +1,6 @@
 # The baseline of the workforce account: the GitHub OIDC provider and the two CI roles
 # (modules/account-ci-baseline). It is applied locally, like bootstrap/, so that CI can never
 # widen its own role: the stack CI applies is live/accounts/workforce (docs/ACCOUNT_CI_BASELINES.md).
-data "aws_caller_identity" "current" {}
-
 locals {
   # Same key as the backend: CI passes -backend-config=key=<stack>/terraform.tfstate.
   state_key      = "bootstrap/accounts/workforce/terraform.tfstate"

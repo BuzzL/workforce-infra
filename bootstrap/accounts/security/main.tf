@@ -3,8 +3,6 @@
 # live/accounts/security (Identity Center and the audit log bucket). It is applied locally, like
 # bootstrap/, so that the role CI applies with can never change itself
 # (docs/ACCOUNT_CI_BASELINES.md).
-data "aws_caller_identity" "current" {}
-
 locals {
   # Same key as the backend: CI passes -backend-config=key=<stack>/terraform.tfstate.
   state_key      = "bootstrap/accounts/security/terraform.tfstate"
