@@ -257,6 +257,14 @@ cmp -s accounts.tf accounts-comment.tf && { echo "FAIL the accounts-comment fixt
 expect pass "check-accounts ignores a trailing comment on an account line" env ACCOUNTS_FILE=accounts-comment.tf ROOT_DIR=fixture-root scripts/check-accounts.sh
 printf '# nothing\n' > empty-accounts.tf
 expect fail:"no account found" "check-accounts refuses a file with no accounts" env ACCOUNTS_FILE=empty-accounts.tf scripts/check-accounts.sh
+mkdir -p fixture-root/live/environments/quality
+cp "$root/live/environments/quality/main.tf" "$root/live/environments/quality/backend.hcl.example" fixture-root/live/environments/quality/
+expect pass "check-accounts passes with the own stack of an environment" env ACCOUNTS_FILE=accounts.tf ROOT_DIR=fixture-root scripts/check-accounts.sh
+sed 's/key         = "qual"/key         = "quax"/' fixture-root/live/environments/quality/main.tf > fixture-root/m && mv fixture-root/m fixture-root/live/environments/quality/main.tf
+expect fail:"must set key" "check-accounts refuses an own stack with another key than the table" env ACCOUNTS_FILE=accounts.tf ROOT_DIR=fixture-root scripts/check-accounts.sh
+cp "$root/live/environments/quality/main.tf" fixture-root/live/environments/quality/
+sed 's#live/environments/quality#live/environments/qualx#' fixture-root/live/environments/quality/backend.hcl.example > fixture-root/m && mv fixture-root/m fixture-root/live/environments/quality/backend.hcl.example
+expect fail:"backend.hcl.example must hold" "check-accounts refuses a backend key that is not the stack path" env ACCOUNTS_FILE=accounts.tf ROOT_DIR=fixture-root scripts/check-accounts.sh
 rm -rf fixture-root
 rm -f accounts.tf accounts-comment.tf accounts-extra.tf keys-no-demo.tsv keys-wrong-ou.tsv empty-accounts.tf
 expect fail:usage "account secrets script rejects a missing account" scripts/set-account-environment-secrets.sh
