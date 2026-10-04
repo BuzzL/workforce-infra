@@ -25,15 +25,17 @@ One IAM role under `/platform/`, its trust policy, one inline policy named `perm
 | `web_identity` | an OIDC provider | `StringEquals` on the audience and on one exact subject. No ExternalId: it does not exist for web identity |
 | `service` | one AWS service (`<name>.amazonaws.com`) | `aws:SourceAccount` and `aws:SourceArn` of that account, whose resource part cannot start with a wildcard |
 
-Refused at plan time: a wildcard in a principal, the account root, a principal outside the declared source account, no ExternalId, an ExternalId with wildcard characters, a session pattern that is not `prefix-*`, a wildcard in a subject or audience, two trust blocks.
+Refused at plan time: a wildcard in a principal, the account root, a principal outside the declared source account, no ExternalId, an ExternalId with wildcard characters, a session pattern that is not `prefix-*`, a wildcard or policy variable (`$`) in a subject or audience, a service source ARN that is not of the source account, two trust blocks.
 
 ### Permission statements
 
 The type has no `NotAction`, `NotPrincipal` or `NotResource`, so they cannot be written. Also refused:
 
 - an Allow with any wildcard action (`*`, `service:*`, `service:Get*`);
-- resource `*` in an Allow, unless `any_resource_reason` says why. This is the exception of `docs/ENVIRONMENT_PERMISSIONS.md` that the maintainer approves in review;
-- a Deny with a wildcard action and no condition, and a Deny whose resource is `*` and which has no condition.
+- in an Allow, a resource that is not an ARN with a fixed service and account (`arn:aws:<service>:<region>:<account>:<resource>`) whose resource part does not start with a wildcard, so `arn:aws:s3:::*` and `arn:aws:iam::*:role/*` are refused. Inside the resource part patterns such as `name-*-function` are allowed and are the reviewer's to check;
+- resource `*` in an Allow, unless `any_resource_reason` (not blank) says why. This is the exception of `docs/ENVIRONMENT_PERMISSIONS.md` that the maintainer approves in review;
+- a Deny with a wildcard action and no condition, and a Deny whose resource is `*` and which has no condition;
+- a condition without a key or a value (it would narrow nothing), and two statements with the same `sid`.
 
 ## Tests
 
@@ -67,3 +69,9 @@ module "agent" {
 ```
 
 The values of `trust` come from variables, never from the repository (`CLAUDE.md`).
+
+## Limits worth knowing
+
+- AWS stores a role principal as its unique ID: if the principal role is deleted and recreated, the trust stops matching until the next apply. This fails closed.
+- `permissions_boundary_arn` and the OIDC provider's account are not validated beyond their type; the stack that uses the module passes them, and the reviewer checks them.
+- An ExternalId is a 16 to 1000 character string, not a measured secret: generate it with enough entropy (`docs/ENVIRONMENT_PERMISSIONS.md`).

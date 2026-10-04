@@ -220,3 +220,60 @@ run "narrowed_deny_wildcard_is_rendered_literally" {
     error_message = "A narrowed Deny must be rendered with its condition."
   }
 }
+
+run "refuses_wildcard_service_or_account_in_allow_resource" {
+  command         = plan
+  expect_failures = [var.statements]
+
+  variables {
+    statements = [{ sid = "X", actions = ["iam:PassRole"], resources = ["arn:aws:iam::*:role/*"] }]
+  }
+}
+
+run "refuses_wildcard_start_of_resource_part" {
+  command         = plan
+  expect_failures = [var.statements]
+
+  variables {
+    statements = [{ sid = "X", actions = ["s3:GetObject"], resources = ["arn:aws:s3:::*"] }]
+  }
+}
+
+run "refuses_blank_any_resource_reason" {
+  command         = plan
+  expect_failures = [var.statements]
+
+  variables {
+    statements = [{ sid = "X", actions = ["logs:DescribeLogGroups"], resources = ["*"], any_resource_reason = "  " }]
+  }
+}
+
+run "refuses_empty_condition_as_narrowing" {
+  command         = plan
+  expect_failures = [var.statements]
+
+  variables {
+    statements = [{ sid = "X", effect = "Deny", actions = ["s3:*"], resources = ["*"], conditions = { StringEquals = {} } }]
+  }
+}
+
+run "refuses_condition_key_without_value" {
+  command         = plan
+  expect_failures = [var.statements]
+
+  variables {
+    statements = [{ sid = "X", actions = ["s3:GetObject"], resources = ["arn:aws:s3:::b/*"], conditions = { StringEquals = { "aws:SourceVpc" = [] } } }]
+  }
+}
+
+run "refuses_duplicate_sid" {
+  command         = plan
+  expect_failures = [var.statements]
+
+  variables {
+    statements = [
+      { sid = "X", actions = ["s3:GetObject"], resources = ["arn:aws:s3:::b/*"] },
+      { sid = "X", actions = ["s3:ListBucket"], resources = ["arn:aws:s3:::b"] },
+    ]
+  }
+}

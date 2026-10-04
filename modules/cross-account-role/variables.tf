@@ -108,10 +108,10 @@ variable "trust" {
     condition = var.trust.web_identity == null || (
       can(regex("^arn:aws:iam::[0-9]{12}:oidc-provider/[A-Za-z0-9.-]+$", var.trust.web_identity.provider_arn)) &&
       length(var.trust.web_identity.subject) > 0 &&
-      !can(regex("[*?]", var.trust.web_identity.subject)) &&
-      !can(regex("[*?]", var.trust.web_identity.audience))
+      !can(regex("[$*?]", var.trust.web_identity.subject)) &&
+      !can(regex("[$*?]", var.trust.web_identity.audience))
     )
-    error_message = "trust.web_identity needs an OIDC provider ARN, and a subject and audience without wildcards."
+    error_message = "trust.web_identity needs an OIDC provider ARN, and a subject and audience without wildcards or policy variables ($)."
   }
 
   # service: one AWS service, bound to an account and to the ARN of what acts on its behalf.
@@ -120,7 +120,7 @@ variable "trust" {
       can(regex("^[a-z0-9-]+\\.amazonaws\\.com$", var.trust.service.principal)) &&
       can(regex("^[0-9]{12}$", var.trust.service.source_account_id)) &&
       can(regex("^arn:aws:[a-z0-9-]+:[a-z0-9-]*:[0-9]{12}:[^*?]", var.trust.service.source_arn_pattern)) &&
-      can(regex(":${var.trust.service.source_account_id}:", var.trust.service.source_arn_pattern))
+      can(regex("^arn:aws:[a-z0-9-]+:[a-z0-9-]*:${var.trust.service.source_account_id}:", var.trust.service.source_arn_pattern))
     )
     error_message = "trust.service needs a service principal (<name>.amazonaws.com), the 12-digit source account, and a source ARN pattern of that account whose resource part does not start with a wildcard."
   }
@@ -175,10 +175,31 @@ variable "statements" {
 
   validation {
     condition = alltrue([for s in var.statements : !contains(s.resources, "*") ||
-      (s.effect == "Allow" && (s.any_resource_reason != null ? s.any_resource_reason != "" : false)) ||
+      (s.effect == "Allow" && (s.any_resource_reason != null ? trimspace(s.any_resource_reason) != "" : false)) ||
       (s.effect == "Deny" && length(s.conditions) > 0)
     ])
     error_message = "Resource \"*\" is refused unless an Allow gives any_resource_reason or a Deny carries a condition."
+  }
+  # An Allow names its resources: an ARN of a service, with no wildcard in the service or account
+  # segment and none at the start of the resource part (the bare "*" is the reasoned exception above).
+  validation {
+    condition = alltrue([for s in var.statements : s.effect != "Allow" || alltrue([
+      for r in s.resources : r == "*" || can(regex("^arn:aws:[a-z0-9-]+:[a-z0-9-]*:([0-9]{12})?:[^*?]", r))
+    ])])
+    error_message = "An Allow resource must be an ARN with a fixed service and account (arn:aws:<service>:<region>:<account>:<resource>), whose resource part does not start with a wildcard, or \"*\" with any_resource_reason."
+  }
+
+  # A condition that selects nothing narrows nothing.
+  validation {
+    condition = alltrue([for s in var.statements : alltrue([
+      for op, m in s.conditions : length(m) > 0 && alltrue([for k, v in m : length(v) > 0 && alltrue([for x in v : x != ""])])
+    ])])
+    error_message = "Every condition needs at least one key, and every key at least one non-empty value."
+  }
+
+  validation {
+    condition     = length(distinct([for s in var.statements : s.sid])) == length(var.statements)
+    error_message = "Statement sids must be unique."
   }
 }
 

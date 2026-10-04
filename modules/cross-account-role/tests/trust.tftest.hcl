@@ -305,3 +305,36 @@ run "refuses_name_outside_the_convention" {
     }
   }
 }
+
+run "refuses_policy_variable_in_subject" {
+  command         = plan
+  expect_failures = [var.trust]
+
+  variables {
+    name = "test-foundation-testbed-deploy-role"
+    trust = {
+      mode = "web_identity"
+      web_identity = {
+        provider_arn = "arn:aws:iam::111122223333:oidc-provider/token.actions.githubusercontent.com"
+        subject      = "$${aws:userid}"
+      }
+    }
+  }
+}
+
+run "refuses_source_arn_of_another_account" {
+  command         = plan
+  expect_failures = [var.trust]
+
+  variables {
+    name = "qual-foundation-testbed-exec-role"
+    trust = {
+      mode = "service"
+      service = {
+        principal          = "cloudformation.amazonaws.com"
+        source_account_id  = "111122223333"
+        source_arn_pattern = "arn:aws:lambda:eu-west-1:999999999999:function:x:111122223333:*"
+      }
+    }
+  }
+}
