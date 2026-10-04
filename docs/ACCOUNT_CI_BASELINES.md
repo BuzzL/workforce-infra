@@ -2,7 +2,7 @@
 
 ## Context
 
-CI manages the AWS accounts without long-lived keys: GitHub Actions presents an OIDC token and assumes a role. The management account has had this since `bootstrap/`. Every new member account (`security`, `workforce`) needs the same baseline before CI can touch it: a GitHub OIDC provider and the CI roles. The baseline is `modules/account-ci-baseline`. It is its own stack per account, `bootstrap/accounts/security` and `bootstrap/accounts/workforce`, applied locally like `bootstrap/` is for the management account. Everything else in an account is the account's own stack, `live/accounts/<account>`. Two stacks, because the role CI applies with must not be defined in the stack it applies (decision 2).
+CI manages the AWS accounts without long-lived keys: GitHub Actions presents an OIDC token and assumes a role. The management account has had this since `bootstrap/`. Every new member account (`security`, `workforce`, `test`, `quality`, `demo`) needs the same baseline before CI can touch it: a GitHub OIDC provider and the CI roles. The baseline is `modules/account-ci-baseline`. It is its own stack per account, `bootstrap/accounts/security` and `bootstrap/accounts/workforce`, applied locally like `bootstrap/` is for the management account. Everything else in an account is the account's own stack, `live/accounts/<account>` (`live/environments/<name>` for `test`, `quality` and `demo`). Two stacks, because the role CI applies with must not be defined in the stack it applies (decision 2).
 
 ## Decisions
 
@@ -12,6 +12,8 @@ CI manages the AWS accounts without long-lived keys: GitHub Actions presents an 
 |---|---|---|
 | `github-infra-<account>` | `<account>` | read and write the state of its own stack and its lockfile, read the baseline resources |
 | `github-infra-<account>-plan` | `<account>-plan` | read the state object of its own stack and the baseline resources, nothing else |
+
+The environment accounts (`test`, `quality`, `demo`) name their roles by `docs/ENVIRONMENT_PERMISSIONS.md`: `<key>-foundation-infra-role` and `<key>-foundation-infra-plan-role` under `/platform/`, with the key of `scripts/environment-keys.tsv` (`test`, `qual`, `demo`). The module inputs `apply_role_name`, `plan_role_name` and `role_path` carry it; the key must be the account's and the names and the path are set together. The trust follows the account name (the GitHub Environment), not the role name.
 
 Both trust the provider of their account for one exact subject, `repo:<owner>@<owner id>/workforce-infra@<repo id>:environment:<environment>`, with `StringEquals` on `sub` and `aud`. The plan environment has no reviewer and accepts any branch, so its role is read-only and cannot take the lock (plans run with `-lock=false`), like `management-plan`.
 
@@ -58,8 +60,9 @@ Run by the maintainer, locally, with the management admin session. The account I
 1. Fill `bootstrap/accounts/<account>/backend.hcl` and `terraform.tfvars` from the `.example` files, with `break_glass_account_id` set.
 2. `terraform init -backend-config=backend.hcl && terraform plan`, review, then `terraform apply`. The provider assumes `OrganizationAccountAccessRole` in the account, the state is written with your own credentials.
 3. Remove `break_glass_account_id` from `terraform.tfvars`: from now on the baseline stack, `bootstrap/accounts/<account>`, is applied locally with the maintainer's own administrator session in the account (the provider, `AWS_PROFILE=<account profile>`) and the state backend on the management session (`profile` in `backend.hcl`), never as the CI role. Then add the account to `member_account_ids` in `bootstrap/terraform.tfvars` and in the secret `MEMBER_ACCOUNT_IDS` of `management` and `management-plan` (`MEMBER_ACCOUNT_IDS='{"security":"<id>"}' scripts/set-environment-secrets.sh`; CI plans `bootstrap/` too and would otherwise see the grants as drift), and apply `bootstrap/` locally: this opens the state bucket to the new roles and lets the management CI role assume the break-glass role there.
-4. `scripts/set-account-environment-secrets.sh <account>` creates the GitHub Environments `<account>` (protected: the maintainer as required reviewer, no admin bypass, `main` only) and `<account>-plan` (no reviewer, any branch, read-only role) with the secrets `AWS_ROLE_ARN`, `AWS_ROLE_ID`, `STATE_BUCKET` and the variable `AWS_REGION`. The `security` environments also get `MAINTAINER_USERNAME` and `ASSIGNMENT_ACCOUNT_IDS` (`docs/IDENTITY_CENTER.md`). The role ARN and ID are secrets so that they are masked in public logs.
-5. Commit `bootstrap/accounts/<account>/.ci-enabled` and `live/accounts/<account>/.ci-enabled`. The next PR plans the stack through OIDC, which must be a no-op.
+4. For `security` and `workforce`, `scripts/set-account-environment-secrets.sh <account>` creates the GitHub Environments `<account>` (protected: the maintainer as required reviewer, no admin bypass, `main` only) and `<account>-plan` (no reviewer, any branch, read-only role) with the secrets `AWS_ROLE_ARN`, `AWS_ROLE_ID`, `STATE_BUCKET` and the variable `AWS_REGION`. The `security` environments also get `MAINTAINER_USERNAME` and `ASSIGNMENT_ACCOUNT_IDS` (`docs/IDENTITY_CENTER.md`). The role ARN and ID are secrets so that they are masked in public logs.
+   For `test`, `quality` and `demo` the GitHub Environments `<name>` and `<name>-plan` and their secrets are code in `workforce-github` (IAT-79), fed with the role ARNs and IDs that step 2 printed (`terraform output`, never in the repository); the script is not used. The state key of the own stack is `live/environments/<name>/terraform.tfstate`.
+5. Commit `bootstrap/accounts/<account>/.ci-enabled` and the own stack's marker (`live/accounts/<account>/.ci-enabled`, `live/environments/<name>/.ci-enabled`). The next PR plans the stack through OIDC, which must be a no-op.
 
 ## Moving an existing baseline, once
 
