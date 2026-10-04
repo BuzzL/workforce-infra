@@ -21,3 +21,18 @@ output "plan_role_id" {
   value       = aws_iam_role.plan.unique_id
   sensitive   = true
 }
+
+output "apply_role_name" {
+  description = "Name of the apply role (not sensitive: the name holds no account ID)."
+  value       = aws_iam_role.apply.name
+}
+
+output "plan_role_name" {
+  description = "Name of the plan role."
+  value       = aws_iam_role.plan.name
+}
+
+output "role_path" {
+  description = "IAM path of both roles."
+  value       = aws_iam_role.apply.path
+}

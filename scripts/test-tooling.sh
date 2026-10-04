@@ -235,19 +235,29 @@ for old in qa qual management security workforce; do
 done
 # The accounts of the Organization stack and the table of names and keys are the same set.
 cp "$root/live/management/accounts.tf" accounts.tf
-expect pass "check-accounts passes on the shipped accounts and table" env ACCOUNTS_FILE=accounts.tf scripts/check-accounts.sh
+mkdir -p fixture-root/bootstrap/accounts/quality
+cp "$root/bootstrap/state_bucket.tf" fixture-root/bootstrap/
+cp "$root/bootstrap/accounts/quality/main.tf" fixture-root/bootstrap/accounts/quality/
+expect pass "check-accounts passes on the shipped accounts and table" env ACCOUNTS_FILE=accounts.tf ROOT_DIR=fixture-root scripts/check-accounts.sh
+sed 's/quality = "qual"/quality = "quax"/' fixture-root/bootstrap/state_bucket.tf > fixture-root/bootstrap/state_bucket.bad && mv fixture-root/bootstrap/state_bucket.bad fixture-root/bootstrap/state_bucket.tf
+expect fail:"environment_keys" "check-accounts refuses a key in the bucket policy that the table does not have" env ACCOUNTS_FILE=accounts.tf ROOT_DIR=fixture-root scripts/check-accounts.sh
+cp "$root/bootstrap/state_bucket.tf" fixture-root/bootstrap/
+sed 's/qual-foundation-infra-plan-role/qual-foundation-infra-other-role/' fixture-root/bootstrap/accounts/quality/main.tf > fixture-root/m && mv fixture-root/m fixture-root/bootstrap/accounts/quality/main.tf
+expect fail:"must name the role" "check-accounts refuses a baseline stack whose role names do not carry the key" env ACCOUNTS_FILE=accounts.tf ROOT_DIR=fixture-root scripts/check-accounts.sh
+cp "$root/bootstrap/accounts/quality/main.tf" fixture-root/bootstrap/accounts/quality/
 sed 's/^\(    demo  *= "Environments"\)$/\1\n    extra = "Environments"/' accounts.tf > accounts-extra.tf
 cmp -s accounts.tf accounts-extra.tf && { echo "FAIL the accounts-extra fixture was not built"; failed=1; }
-expect fail:"disagree" "check-accounts refuses an account with no row in the table" env ACCOUNTS_FILE=accounts-extra.tf scripts/check-accounts.sh
+expect fail:"disagree" "check-accounts refuses an account with no row in the table" env ACCOUNTS_FILE=accounts-extra.tf ROOT_DIR=/nonexistent scripts/check-accounts.sh
 grep -v '^demo	' scripts/environment-keys.tsv > keys-no-demo.tsv
 expect fail:"disagree" "check-accounts refuses an account whose row is missing" env ACCOUNTS_FILE=accounts.tf ENV_KEYS_FILE=keys-no-demo.tsv scripts/check-accounts.sh
 sed 's/^\(demo\)\tEnvironments/\1\tOperations/' scripts/environment-keys.tsv > keys-wrong-ou.tsv
 expect fail:"disagree" "check-accounts refuses a row in another OU" env ACCOUNTS_FILE=accounts.tf ENV_KEYS_FILE=keys-wrong-ou.tsv scripts/check-accounts.sh
 sed 's/^\(    demo  *= "Environments"\)$/\1 # a comment/' accounts.tf > accounts-comment.tf
 cmp -s accounts.tf accounts-comment.tf && { echo "FAIL the accounts-comment fixture was not built"; failed=1; }
-expect pass "check-accounts ignores a trailing comment on an account line" env ACCOUNTS_FILE=accounts-comment.tf scripts/check-accounts.sh
+expect pass "check-accounts ignores a trailing comment on an account line" env ACCOUNTS_FILE=accounts-comment.tf ROOT_DIR=fixture-root scripts/check-accounts.sh
 printf '# nothing\n' > empty-accounts.tf
 expect fail:"no account found" "check-accounts refuses a file with no accounts" env ACCOUNTS_FILE=empty-accounts.tf scripts/check-accounts.sh
+rm -rf fixture-root
 rm -f accounts.tf accounts-comment.tf accounts-extra.tf keys-no-demo.tsv keys-wrong-ou.tsv empty-accounts.tf
 expect fail:usage "account secrets script rejects a missing account" scripts/set-account-environment-secrets.sh
 expect fail:usage "account secrets script rejects an unknown account" scripts/set-account-environment-secrets.sh management

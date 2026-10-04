@@ -19,6 +19,9 @@ updates:
       - /bootstrap
       - /bootstrap/accounts/security
       - /bootstrap/accounts/workforce
+      - /bootstrap/accounts/test
+      - /bootstrap/accounts/quality
+      - /bootstrap/accounts/demo
       - /live/management
       - /live/accounts/security
     schedule:
