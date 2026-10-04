@@ -1,6 +1,6 @@
 # The last matching pattern wins. Every owner is the maintainer today. The paths below name the
 # layer that decides what CI may do: the CI roles and their baselines, the workflow and the gates
-# (scripts/check-codeowners.sh keeps them listed and real). A second owner of that layer would
+# (scripts/check-codeowners.sh keeps them listed, with an owner, and existing). A second owner of that layer would
 # change only these lines.
 *                              @BuzzL
 /bootstrap/                    @BuzzL

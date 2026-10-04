@@ -449,6 +449,12 @@ sed 's|^/Makefile .*|/Makefile|' co-ok > co-noowner
 expect fail:"/Makefile has no owner" "codeowners: a rule with no owner is refused" env CODEOWNERS_FILE=co-noowner CODEOWNERS_ROOT=co-root scripts/check-codeowners.sh
 grep -v '^\*' co-ok > co-nocatch
 expect fail:"first rule must be the catch-all" "codeowners: no catch-all first is refused" env CODEOWNERS_FILE=co-nocatch CODEOWNERS_ROOT=co-root scripts/check-codeowners.sh
+sed 's|^/Makefile .*|/Makefile  # todo|' co-ok > co-inline
+expect fail:"/Makefile has no owner" "codeowners: an inline comment is not an owner" env CODEOWNERS_FILE=co-inline CODEOWNERS_ROOT=co-root scripts/check-codeowners.sh
+sed 's|^/Makefile .*|/Makefile  BuzzL|' co-ok > co-bare
+expect fail:"is not an @user" "codeowners: an owner without @ is refused" env CODEOWNERS_FILE=co-bare CODEOWNERS_ROOT=co-root scripts/check-codeowners.sh
+{ cat co-ok; printf '*.tf  @BuzzL\n'; } > co-glob
+expect pass "codeowners: a glob pattern is accepted, not looked up on disk" env CODEOWNERS_FILE=co-glob CODEOWNERS_ROOT=co-root scripts/check-codeowners.sh
 expect fail:"no such file" "codeowners: a missing file is an error, not a pass" env CODEOWNERS_FILE=co-missing CODEOWNERS_ROOT=co-root scripts/check-codeowners.sh
 
 exit "$failed"
