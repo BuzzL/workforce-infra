@@ -43,14 +43,14 @@ variable "github_repository_id" {
 }
 
 variable "member_account_ids" {
-  description = "Account IDs of the member accounts with a CI baseline (security, workforce), by name. Set locally only, never committed. Empty until live/accounts/<name> has been bootstrapped: the state bucket policy names the roles that stack creates, and S3 rejects a policy that names a principal that does not exist yet."
+  description = "Account IDs of the member accounts with a CI baseline (security, workforce, test, quality, demo), by name. Set locally only, never committed. Empty until live/accounts/<name> has been bootstrapped: the state bucket policy names the roles that stack creates, and S3 rejects a policy that names a principal that does not exist yet."
   type        = map(string)
   default     = {}
   sensitive   = true
 
   validation {
-    condition     = alltrue([for name, id in var.member_account_ids : contains(["security", "workforce"], name) && can(regex("^[0-9]{12}$", id))])
-    error_message = "Keys must be security or workforce and values 12-digit account IDs."
+    condition     = alltrue([for name, id in var.member_account_ids : contains(["security", "workforce", "test", "quality", "demo"], name) && can(regex("^[0-9]{12}$", id))])
+    error_message = "Keys must be security, workforce, test, quality or demo and values 12-digit account IDs."
   }
 }
 

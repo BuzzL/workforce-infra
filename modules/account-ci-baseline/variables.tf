@@ -8,6 +8,54 @@ variable "account_name" {
   }
 }
 
+variable "apply_role_name" {
+  description = "Name of the apply role, <key>-<project>-infra-role (docs/ENVIRONMENT_PERMISSIONS.md). Null keeps the legacy name github-infra-<account_name>, for the accounts that are not renamed yet."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.apply_role_name == null || can(regex("^(test|qual|demo)-foundation-infra-role$", coalesce(var.apply_role_name, "-")))
+    error_message = "The apply role of an environment account is named <test|qual|demo>-foundation-infra-role."
+  }
+
+  validation {
+    condition     = var.apply_role_name == null || startswith(coalesce(var.apply_role_name, "-"), "${lookup({ test = "test", quality = "qual", demo = "demo" }, var.account_name, "-")}-")
+    error_message = "The key in the apply role name must be the key of account_name (test is test, quality is qual, demo is demo)."
+  }
+}
+
+variable "plan_role_name" {
+  description = "Name of the plan role, <key>-<project>-infra-plan-role. Null keeps the legacy name github-infra-<account_name>-plan."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.plan_role_name == null || can(regex("^(test|qual|demo)-foundation-infra-plan-role$", coalesce(var.plan_role_name, "-")))
+    error_message = "The plan role of an environment account is named <test|qual|demo>-foundation-infra-plan-role."
+  }
+
+  validation {
+    condition     = var.plan_role_name == null || startswith(coalesce(var.plan_role_name, "-"), "${lookup({ test = "test", quality = "qual", demo = "demo" }, var.account_name, "-")}-")
+    error_message = "The key in the plan role name must be the key of account_name (test is test, quality is qual, demo is demo)."
+  }
+}
+
+variable "role_path" {
+  description = "IAM path of both roles: / for the legacy names, /platform/ for the names of docs/ENVIRONMENT_PERMISSIONS.md."
+  type        = string
+  default     = "/"
+
+  validation {
+    condition     = contains(["/", "/platform/"], var.role_path)
+    error_message = "The role path is / or /platform/."
+  }
+
+  validation {
+    condition     = (var.role_path == "/platform/") == (var.apply_role_name != null && var.plan_role_name != null)
+    error_message = "The /platform/ path goes with the new role names, and the legacy names stay under /: set both names and the path together."
+  }
+}
+
 variable "github_owner" {
   description = "GitHub owner (user or organization) of the repository allowed to assume the roles."
   type        = string

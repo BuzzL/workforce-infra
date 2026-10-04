@@ -9,8 +9,9 @@ locals {
   apply_environment = var.account_name
   plan_environment  = "${var.account_name}-plan"
 
-  apply_role_name = "github-infra-${var.account_name}"
-  plan_role_name  = "github-infra-${var.account_name}-plan"
+  # Until an account is renamed to docs/ENVIRONMENT_PERMISSIONS.md, its roles keep the legacy name.
+  apply_role_name = coalesce(var.apply_role_name, "github-infra-${var.account_name}")
+  plan_role_name  = coalesce(var.plan_role_name, "github-infra-${var.account_name}-plan")
 
   # What the stack manages: this provider and these two roles. Read-only, on exactly them.
   baseline_read_statements = concat(var.extra_read_statements, [
@@ -24,7 +25,7 @@ locals {
       Sid      = "ReadBaselineRoles"
       Effect   = "Allow"
       Action   = ["iam:GetRole", "iam:ListRolePolicies", "iam:GetRolePolicy", "iam:ListAttachedRolePolicies", "iam:ListRoleTags"]
-      Resource = ["arn:aws:iam::${local.account_id}:role/${local.apply_role_name}", "arn:aws:iam::${local.account_id}:role/${local.plan_role_name}"]
+      Resource = ["arn:aws:iam::${local.account_id}:role${var.role_path}${local.apply_role_name}", "arn:aws:iam::${local.account_id}:role${var.role_path}${local.plan_role_name}"]
     },
   ])
 }
@@ -41,6 +42,7 @@ resource "aws_iam_openid_connect_provider" "github" {
 # Environment. StringEquals, never StringLike, so there is no wildcard to widen.
 resource "aws_iam_role" "apply" {
   name                 = local.apply_role_name
+  path                 = var.role_path
   description          = "Assumed by ${var.github_owner}/${var.github_repository} CI in the ${local.apply_environment} environment."
   max_session_duration = 3600
   tags                 = var.tags
@@ -159,6 +161,7 @@ resource "aws_iam_role_policy" "apply_baseline_read" {
 # no state writes, no IAM changes.
 resource "aws_iam_role" "plan" {
   name                 = local.plan_role_name
+  path                 = var.role_path
   description          = "Read-only plans for ${var.github_owner}/${var.github_repository} pull requests in the ${local.plan_environment} environment."
   max_session_duration = 3600
   tags                 = var.tags
