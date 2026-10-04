@@ -85,7 +85,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - run: make versions dependabot docs lifecycle
+      - run: make versions dependabot docs lifecycle accounts
 
   tf-test:
     runs-on: ubuntu-latest

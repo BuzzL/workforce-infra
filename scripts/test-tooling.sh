@@ -209,6 +209,19 @@ for old in qa qual management security workforce; do
   expect fail:unmapped "ci-stacks does not map live/environments/$old" scripts/ci-stacks.sh
   rm -rf live/environments/$old
 done
+# The accounts of the Organization stack and the table of names and keys are the same set.
+cp "$root/live/management/accounts.tf" accounts.tf
+expect pass "check-accounts passes on the shipped accounts and table" env ACCOUNTS_FILE=accounts.tf scripts/check-accounts.sh
+sed 's/^\(    demo  *= "Environments"\)$/\1\n    extra = "Environments"/' accounts.tf > accounts-extra.tf
+cmp -s accounts.tf accounts-extra.tf && { echo "FAIL the accounts-extra fixture was not built"; failed=1; }
+expect fail:"disagree" "check-accounts refuses an account with no row in the table" env ACCOUNTS_FILE=accounts-extra.tf scripts/check-accounts.sh
+grep -v '^demo	' scripts/environment-keys.tsv > keys-no-demo.tsv
+expect fail:"disagree" "check-accounts refuses an account whose row is missing" env ACCOUNTS_FILE=accounts.tf ENV_KEYS_FILE=keys-no-demo.tsv scripts/check-accounts.sh
+sed 's/^\(demo\)\tEnvironments/\1\tOperations/' scripts/environment-keys.tsv > keys-wrong-ou.tsv
+expect fail:"disagree" "check-accounts refuses a row in another OU" env ACCOUNTS_FILE=accounts.tf ENV_KEYS_FILE=keys-wrong-ou.tsv scripts/check-accounts.sh
+printf '# nothing\n' > empty-accounts.tf
+expect fail:"no account found" "check-accounts refuses a file with no accounts" env ACCOUNTS_FILE=empty-accounts.tf scripts/check-accounts.sh
+rm -f accounts.tf accounts-extra.tf keys-no-demo.tsv keys-wrong-ou.tsv empty-accounts.tf
 expect fail:usage "account secrets script rejects a missing account" scripts/set-account-environment-secrets.sh
 expect fail:usage "account secrets script rejects an unknown account" scripts/set-account-environment-secrets.sh management
 expect fail:usage "account secrets script rejects an unknown option" scripts/set-account-environment-secrets.sh security --nonsense
