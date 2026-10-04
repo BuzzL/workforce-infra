@@ -14,9 +14,10 @@ keys_file=${ENV_KEYS_FILE:-scripts/environment-keys.tsv}
 declared=$(awk '
   /^[[:space:]]*accounts[[:space:]]*=[[:space:]]*\{/ { in_block = 1; next }
   in_block && /^[[:space:]]*\}/ { in_block = 0 }
-  in_block && match($0, /^[[:space:]]*[a-z]+[[:space:]]*=[[:space:]]*"[A-Za-z]+"/) {
+  in_block && match($0, /^[[:space:]]*[a-z]+[[:space:]]*=[[:space:]]*"[A-Za-z]+"[[:space:]]*(#.*)?\r?$/) {
     line = $0
-    gsub(/[[:space:]"]/, "", line)
+    sub(/[[:space:]]*#.*$/, "", line)
+    gsub(/[[:space:]"\r]/, "", line)
     split(line, kv, "=")
     print kv[1] " " kv[2]
   }

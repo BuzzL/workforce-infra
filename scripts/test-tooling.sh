@@ -219,9 +219,12 @@ grep -v '^demo	' scripts/environment-keys.tsv > keys-no-demo.tsv
 expect fail:"disagree" "check-accounts refuses an account whose row is missing" env ACCOUNTS_FILE=accounts.tf ENV_KEYS_FILE=keys-no-demo.tsv scripts/check-accounts.sh
 sed 's/^\(demo\)\tEnvironments/\1\tOperations/' scripts/environment-keys.tsv > keys-wrong-ou.tsv
 expect fail:"disagree" "check-accounts refuses a row in another OU" env ACCOUNTS_FILE=accounts.tf ENV_KEYS_FILE=keys-wrong-ou.tsv scripts/check-accounts.sh
+sed 's/^\(    demo  *= "Environments"\)$/\1 # a comment/' accounts.tf > accounts-comment.tf
+cmp -s accounts.tf accounts-comment.tf && { echo "FAIL the accounts-comment fixture was not built"; failed=1; }
+expect pass "check-accounts ignores a trailing comment on an account line" env ACCOUNTS_FILE=accounts-comment.tf scripts/check-accounts.sh
 printf '# nothing\n' > empty-accounts.tf
 expect fail:"no account found" "check-accounts refuses a file with no accounts" env ACCOUNTS_FILE=empty-accounts.tf scripts/check-accounts.sh
-rm -f accounts.tf accounts-extra.tf keys-no-demo.tsv keys-wrong-ou.tsv empty-accounts.tf
+rm -f accounts.tf accounts-comment.tf accounts-extra.tf keys-no-demo.tsv keys-wrong-ou.tsv empty-accounts.tf
 expect fail:usage "account secrets script rejects a missing account" scripts/set-account-environment-secrets.sh
 expect fail:usage "account secrets script rejects an unknown account" scripts/set-account-environment-secrets.sh management
 expect fail:usage "account secrets script rejects an unknown option" scripts/set-account-environment-secrets.sh security --nonsense
