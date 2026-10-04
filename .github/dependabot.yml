@@ -33,6 +33,7 @@ updates:
       - /modules/budget
       - /modules/organization-trail
       - /modules/identity-center-access
+      - /modules/cross-account-role
     schedule:
       interval: weekly
     commit-message:
