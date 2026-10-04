@@ -59,3 +59,45 @@ variable "extra_read_statements" {
   type        = any
   default     = []
 }
+
+variable "extra_write_statements" {
+  description = "IAM statements added to the apply role only, for what the account's own stack (live/accounts/<account>) manages and CI applies. Each statement needs a Sid, Effect Allow, Action and Resource; no * in an action, no Not* element, no Principal, no bare * resource (a * inside an ARN pattern is allowed, for IDs that are not known before the call). The stack passing them writes the reason for each beside it and asserts them literally in its tests. The baseline itself stays out of reach: nothing here changes IAM."
+  type        = any
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for s in var.extra_write_statements : alltrue([for k in ["Sid", "Effect", "Action", "Resource"] : contains(keys(s), k)])
+    ])
+    error_message = "Every write statement needs a Sid, an Effect, an Action and a Resource."
+  }
+
+  validation {
+    condition = alltrue([
+      for s in var.extra_write_statements : s.Effect == "Allow"
+      && !contains(keys(s), "NotAction") && !contains(keys(s), "NotResource") && !contains(keys(s), "NotPrincipal") && !contains(keys(s), "Principal")
+    ])
+    error_message = "A write statement is an Allow without Principal, NotAction, NotResource or NotPrincipal."
+  }
+
+  validation {
+    condition = alltrue([
+      for s in var.extra_write_statements : alltrue([for a in tolist(s.Action) : !strcontains(a, "*")])
+    ])
+    error_message = "A write statement names its actions: no * and no service:*."
+  }
+
+  validation {
+    condition = alltrue([
+      for s in var.extra_write_statements : alltrue([for r in tolist(s.Resource) : can(regex("^arn:aws:[a-z0-9-]+:", r))])
+    ])
+    error_message = "A write statement names its resources as ARNs of one service (arn:aws:<service>:...): no bare * and no arn:*."
+  }
+
+  validation {
+    condition = alltrue([
+      for s in var.extra_write_statements : alltrue([for a in tolist(s.Action) : !can(regex("^(iam|sts|organizations|account):", lower(a)))])
+    ])
+    error_message = "A write statement must not touch IAM, STS, Organizations or Account: CI cannot widen its own role or reach other accounts."
+  }
+}

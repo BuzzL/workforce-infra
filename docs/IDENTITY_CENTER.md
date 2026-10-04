@@ -33,27 +33,30 @@ Identity Center does not let a delegated administrator provision a permission se
 
 Terraform has no resource for the sign-in MFA mode, and sessions that come from Identity Center do not carry `aws:MultiFactorAuthPresent`, so an IAM condition cannot enforce it. MFA is required at every sign-in (Settings → Authentication, `docs/BOOTSTRAP.md` step 2.6) and verified by hand; the console is the only check.
 
-### 5. CI plans, humans apply
+### 5. CI plans and applies, behind the maintainer's approval
 
-As for every account baseline (`docs/ACCOUNT_CI_BASELINES.md`), CI plans the stack with a read-only role and never applies it: the CI apply role has no IAM or Identity Center write. The plan reads (`sso:List*`, `sso:Describe*`, `identitystore:Describe*`) are added to both roles through the module input `extra_read_statements` and asserted in `bootstrap/accounts/security/tests`, the stack that defines the roles.
+`live/accounts/security` (the permission sets, their policy attachments and the assignments, and the audit log bucket) is applied by CI. A pull request gets a read-only plan, as for every stack. After the merge, the `security` job waits for the maintainer's approval on the `security` GitHub Environment (required reviewer, `main` only, no admin bypass), then plans again and applies exactly that plan.
+
+The apply role writes only what this stack manages (`extra_write_statements` of `modules/account-ci-baseline`, defined in `bootstrap/accounts/security`, asserted literally in its tests): create and update permission sets, attach the managed policy, provision, create account assignments, and follow those requests. It does **not** delete or detach anything and has no IAM write. Removing a set, an attachment or an assignment is blocked twice: by `prevent_destroy` on each of them (`scripts/check-prevent-destroy.sh` fails the build if the line is missing), and by the absence of the delete actions. A deliberate removal is a reviewed change that deletes the `prevent_destroy` line first and a local step with SSO admin.
+
+This is the one statement group that lets CI change **who can reach an account**: creating an assignment or changing a permission set. Concretely, the service reference has no condition key to narrow `AttachManagedPolicyToPermissionSet`, so CI can create a permission set with `AdministratorAccess` (or attach more managed policies to the existing ones) and assign it to any principal that already exists in the identity store (the maintainer; CI cannot create users or groups) in any member account, including `security`, where the CI roles live. It cannot use inline policies, permissions boundaries or IAM, and it cannot change its own role directly; but an administrator assignment in `security` would let a person do so. The control is the approval on the `security` environment, which only the maintainer gives after reading the plan, and the review of the pull request that changed the stack. The role that CI applies with cannot widen itself: the OIDC provider and the two CI roles are a separate stack, `bootstrap/accounts/security`, applied locally (`docs/ACCOUNT_CI_BASELINES.md`).
+
+The plan reads (`sso:List*`, `sso:Describe*`, `identitystore:Describe*`) are added to both roles through the module input `extra_read_statements` and asserted in `bootstrap/accounts/security/tests`, the stack that defines the roles.
 
 The maintainer user name and the account IDs to assign are the secrets `MAINTAINER_USERNAME` and `ASSIGNMENT_ACCOUNT_IDS` of the `security` and `security-plan` environments (`scripts/set-account-environment-secrets.sh security`).
 
 The plan role can run from any branch and `identitystore:DescribeUser` has no resource to scope to, so branch code can read the identity store user profiles. Accepted: there is one user and pushing a branch needs write access. The plan output is redacted (`scripts/redact.sh` masks `ssoins-`/`ps-` IDs and UUIDs) before it is posted.
 
-## Apply, once
+## What stays local
 
-Run by the maintainer, locally, in this order. Before step 1, the Identity Center home region must be enabled in `security` and in every assigned account, if it is not enabled by default (`docs/ACCOUNT_CI_BASELINES.md`, step 0). Nothing here is applied by CI.
+Two things are applied by the maintainer with SSO admin, because they change who can administer Identity Center or what CI may do:
 
-**Why locally.** These steps change who can reach every account, and CI is deliberately unable to: its roles have no IAM or Identity Center write, so a compromised workflow cannot widen its own access or grant itself a login. Only a person with SSO admin can do it, after reading the plan.
+1. The delegation, `bootstrap/identity.tf`: registers `security` as delegated administrator of `sso.amazonaws.com`. It is registered once and never changes. `terraform plan` of `bootstrap/` must show exactly one `aws_organizations_delegated_administrator`; apply it with the management SSO admin session. Before this, the Identity Center home region must be enabled in `security` and in every assigned account, if it is not enabled by default (`docs/ACCOUNT_CI_BASELINES.md`, step 0).
+2. The baseline of the account, `bootstrap/accounts/security` (the CI roles and their permissions), when CI needs a new permission: widen the role there first, in its own pull request, and apply it locally before the pull request that needs it.
 
-**Why once.** After this the stack is stable: one user, two permission sets. A change (a new account in `ASSIGNMENT_ACCOUNT_IDS`, a new permission set) is the same local apply, done only when it is needed and reviewed in a PR first. The delegation in step 1 is registered once and never changes. Nothing here runs on a schedule or on merge; CI only plans it to detect drift.
+The first creation of the permission sets and assignments was applied locally, before CI could apply this stack. Adding an account to `ASSIGNMENT_ACCOUNT_IDS` is a normal change: set the secret, and the next CI run plans and applies it after the maintainer's approval.
 
-1. `bootstrap/`: with `security` in `member_account_ids`, `terraform plan` must show exactly one `aws_organizations_delegated_administrator`. Apply it with the management SSO admin session.
-2. `live/accounts/security`: add `maintainer_username` and `assignment_account_ids` to `terraform.tfvars` (see the `.example`; not the management account). The first run has no SSO access to `security` yet, so run with the maintainer's own administrator session in the account (the provider, `AWS_PROFILE=<account profile>`) and the state backend on the management session (`profile` in `backend.hcl`). There is nothing to import. `terraform plan` must show only creations: two permission sets, their two managed policy attachments and the assignments, and no change to the manual `AdministratorAccess` set. Review, then apply. A later apply is done from the maintainer's own `WorkforceAdministrator` session in `security`.
-3. `scripts/set-account-environment-secrets.sh security` with `MAINTAINER_USERNAME` and `ASSIGNMENT_ACCOUNT_IDS` in the environment, so the `security` plans can read the stack.
-
-Keep the working `AdministratorAccess` session on the management account while doing this; it is not touched. The root user is the break-glass if Identity Center is broken.
+Keep the working `AdministratorAccess` session on the management account; it is not touched. The root user is the break-glass if Identity Center is broken.
 
 ## Local SSO profiles
 
