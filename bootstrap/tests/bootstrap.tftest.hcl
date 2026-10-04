@@ -719,11 +719,12 @@ run "ci_roles_cannot_assume_roles_in_member_accounts" {
   }
 
   # OrganizationAccountAccessRole is full administrator in each member account: with it a CI job
-  # could rewrite the baseline that limits CI. The exclusive resources below make the listed
-  # policies the only ones on the roles, so these documents are everything the roles are granted.
+  # could rewrite the baseline that limits CI. The exclusive resources make the listed policies the
+  # only ones on the roles, and the count below ties this list to them, so a policy added to a role
+  # without being added here fails the test. IAM actions are case-insensitive, hence lower().
   assert {
-    condition = alltrue([
-      for d in concat(
+    condition = [
+      for docs in [concat(
         [
           aws_iam_role_policy.state_access.policy,
           aws_iam_role_policy.plan_bootstrap.policy,
@@ -738,9 +739,14 @@ run "ci_roles_cannot_assume_roles_in_member_accounts" {
         ],
         [for p in aws_iam_role_policy.audit_trail : p.policy],
         [for p in aws_iam_role_policy.plan_audit_trail : p.policy],
-      ) : !strcontains(d, "sts:AssumeRole") && !strcontains(d, "OrganizationAccountAccessRole")
-    ])
-    error_message = "A CI role of the management account must not be able to assume a role in a member account, even when member accounts are listed."
+        )] : (
+        length(docs) == length(aws_iam_role_policies_exclusive.github_infra_management.policy_names) + length(aws_iam_role_policies_exclusive.github_infra_management_plan.policy_names)
+        && alltrue([
+          for d in docs : !strcontains(lower(d), "sts:assume") && !strcontains(lower(d), "sts:*") && !strcontains(lower(d), "organizationaccountaccessrole") && !strcontains(d, "NotAction")
+        ])
+      )
+    ][0]
+    error_message = "A CI role of the management account must not be able to assume a role in a member account, even when member accounts are listed, and every policy of the roles must be covered by this check."
   }
 
   assert {

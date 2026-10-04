@@ -21,7 +21,7 @@ Rejected: a single role that also plans pull requests. Code from any branch woul
 
 The apply role has no IAM write permission, and it does not need one: the baseline is its own stack under `bootstrap/accounts/`, applied locally, so whatever CI is allowed to write in the account's own stack, `live/accounts/<account>`, it cannot reach its own roles. What it may write there is the module input `extra_write_statements` (validated: no `*` action, no `Not*` element, no principal, no bare `*` resource), defined with the roles in `bootstrap/accounts/<account>`, with the reason beside each statement and asserted literally in the stack's tests. Widening it is a pull request on `bootstrap/accounts/<account>` that is applied locally first ("CI permissions first", `CLAUDE.md`). CI plans the baseline stack (drift check) through the `-plan` role and never applies it (`apply: false` in `scripts/ci-stacks.sh`). Account permissions that CI needs are added to the module in a reviewed PR and applied locally from the baseline stack.
 
-No CI role can reach an account as administrator either: the roles of the management account have no `sts:AssumeRole` at all, so they cannot use `OrganizationAccountAccessRole` (see "Break-glass"), asserted in `bootstrap/tests`.
+No CI role can assume a role in a member account: the roles of the management account have no `sts:AssumeRole` at all, so they cannot use `OrganizationAccountAccessRole` (see "Break-glass"), asserted in `bootstrap/tests`. One path to access remains and is documented: the apply role of `security` can create permission sets and assignments (`docs/IDENTITY_CENTER.md`, section 5), guarded by review and the approval of the `security` environment.
 
 Rejected: letting CI apply its own baseline. It needs `iam:PutRolePolicy` on its own role, which is a privilege-escalation path.
 
@@ -89,7 +89,7 @@ If step 2 shows a destroy or an add, do not apply: the baseline in the account d
 - Every use is recorded as an `AssumeRole` event in CloudTrail once the organization trail exists; after a use, write down why in the Linear issue.
 - If a use is not the maintainer's, treat it as an incident and rotate.
 
-- The baseline stacks assume the role under the session name `baseline-bootstrap`, so a use stands out in CloudTrail. The caller chooses the name, so it is a way to spot a use, not a control. The control is that only the maintainer's session can assume it.
+- The baseline stacks assume the role under the session name `baseline-bootstrap`, so a use stands out in CloudTrail. The caller chooses the name, so it is a way to spot a use, not a control. The control is that no other principal is granted it: the role trusts the management account, so any administrator there could assume it, and no CI role has the permission.
 - If a CI role is deleted and recreated, the bucket policy stops matching it (AWS stores role principals by ID): re-apply `bootstrap/` after recreating a role.
 
 Rejected: removing the role. It is the only way back into an account whose OIDC provider was deleted, and the maintainer's session still reaches it. Closing that door is not worth the lockout. Rejected too: letting a CI role assume it, which an earlier version did for the one-time bootstrap (see the bug IAT-85).
