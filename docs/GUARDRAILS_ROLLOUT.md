@@ -22,20 +22,27 @@ The code is in `live/management` (`service_control_policies.tf`, `scp_attachment
 | Development | `workforce` | the four |
 | Environments | none yet | the four |
 | Operations | none yet | the four |
-| Management | `security` | none yet (last stage) |
+| Management | `security` | the four |
 | Root | the management account is here | `DenyLeaveAndCloseAccount` and `FullAWSAccess` only |
 
 Every OU keeps `FullAWSAccess`. AWS allows **five SCPs directly attached to an OU**: `FullAWSAccess` plus the four baseline SCPs is exactly five, so no further SCP can be attached to such an OU without removing one. `deny-leave-organization` is partly redundant with `DenyLeaveAndCloseAccount`; merging policies or dropping one is a separate decision.
 
-## Adding an OU
+## Changing what is attached
 
-A stage is one PR that **adds** one OU, with all four SCPs, to the default of `scp_attachments` (the default is cumulative). The plan comment of the PR must contain only `+ aws_organizations_policy_attachment.scp[...]` for that OU. Before the stage:
+A change is one PR that edits the default of `scp_attachments`, one OU per PR, with all four SCPs. The plan comment of the PR must contain only `aws_organizations_policy_attachment.scp[...]` lines for that OU: `+` when it is attached, `-` when it is detached. Before attaching to an OU:
 
 - `aws organizations list-accounts-for-parent` on the OU names the accounts it reaches;
 - `aws organizations list-policies-for-target` on the OU shows `FullAWSAccess` attached;
 - the fallback path (management SSO admin session) works.
 
-The last OU is `Management`, because `security` holds Identity Center and the audit log bucket.
+`Management` is last in the rollout order, because `security` holds the Identity Center delegation and the audit log bucket.
+
+## Why `security` is not locked out
+
+- Everything `security` does runs in the allowed region (state, audit log bucket, Identity Center home region), and `sts`, `iam`, `sso`, `identitystore`, `organizations` and `account` are exempt from the region SCP, so sign-in, role assumption and the Identity Center administration are not reached by it.
+- `deny-disable-cloudtrail` has no effect on `security`: it holds no trail. The Organization trail is managed from the management account, which SCPs never reach.
+- `deny-root-user` blocks the root user of `security`, with no exception; centralized root recovery (`sts:AssumeRoot`, from the management account) is not matched by it.
+- If anything in `security` is locked out, the management account's SSO admin session works unchanged, and so does assuming `OrganizationAccountAccessRole` into `security` from it. That role assumption is checked before an OU with an account is attached.
 
 ## Rollback
 
@@ -61,6 +68,8 @@ For each OU with an account, the SCPs are verified from a principal inside that 
 | `deny-outside-allowed-region` | A harmless real call, `ec2 describe-regions` in another region, is denied and the error names the policy; the same call in the allowed region, `iam get-account-summary` and `sts get-caller-identity` (regional and global endpoint) succeed. |
 
 Verified for `Development` (`workforce`) with the methods above, and for the CI role of `workforce` on its read path: it assumes through OIDC, reads the state in the allowed region and plans the IAM reads with no change, under the four SCPs.
+
+`Management` (`security`) is attached; its effect is not verified from inside the account yet.
 
 For an OU with no account (`Environments`, `Operations`) there is no principal to call from: the verification is that the policies are attached, and their effect is unproven until the first account exists, where the account creation story runs the checks above.
 
