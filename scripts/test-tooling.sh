@@ -435,4 +435,20 @@ expect fail:"aws_s3_bucket.logs must carry" "prevent_destroy: the text inside a 
 expect fail:"aws_s3_bucket.logs must carry" "prevent_destroy: = true && false is not a guard" scripts/check-prevent-destroy.sh pd-trueish
 expect fail:"aws_cloudtrail.this must carry" "prevent_destroy: the audit trail is listed" scripts/check-prevent-destroy.sh pd-trail
 
+# The CODEOWNERS gate passes on the shipped file and refuses a missing path, a stale entry, a rule
+# with no owner and a catch-all that is not first.
+mkdir -p co-root/bootstrap co-root/modules/account-ci-baseline co-root/.github co-root/scripts && touch co-root/Makefile
+cp "$root/.github/CODEOWNERS" co-ok
+expect pass "codeowners: the shipped file passes" env CODEOWNERS_FILE=co-ok CODEOWNERS_ROOT=co-root scripts/check-codeowners.sh
+grep -v '^/bootstrap/' co-ok > co-unlisted
+expect fail:"/bootstrap/ is not listed" "codeowners: an unlisted protected path is refused" env CODEOWNERS_FILE=co-unlisted CODEOWNERS_ROOT=co-root scripts/check-codeowners.sh
+rm -rf co-root/scripts
+expect fail:"/scripts/ does not exist" "codeowners: a path that no longer exists is refused" env CODEOWNERS_FILE=co-ok CODEOWNERS_ROOT=co-root scripts/check-codeowners.sh
+mkdir -p co-root/scripts
+sed 's|^/Makefile .*|/Makefile|' co-ok > co-noowner
+expect fail:"/Makefile has no owner" "codeowners: a rule with no owner is refused" env CODEOWNERS_FILE=co-noowner CODEOWNERS_ROOT=co-root scripts/check-codeowners.sh
+grep -v '^\*' co-ok > co-nocatch
+expect fail:"first rule must be the catch-all" "codeowners: no catch-all first is refused" env CODEOWNERS_FILE=co-nocatch CODEOWNERS_ROOT=co-root scripts/check-codeowners.sh
+expect fail:"no such file" "codeowners: a missing file is an error, not a pass" env CODEOWNERS_FILE=co-missing CODEOWNERS_ROOT=co-root scripts/check-codeowners.sh
+
 exit "$failed"
