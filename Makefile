@@ -1,7 +1,7 @@
 # Every gate that loops over stacks lives in scripts/each.sh. Recipes stay one-liners
 # because macOS ships Make 3.81, which cannot make recipes fail fast on its own.
-.PHONY: fmt validate lint versions dependabot sec test workflows lifecycle docs selftest check
-check: fmt validate lint versions dependabot sec test workflows lifecycle docs selftest
+.PHONY: fmt validate lint versions dependabot sec test workflows lifecycle accounts docs selftest check
+check: fmt validate lint versions dependabot sec test workflows lifecycle accounts docs selftest
 
 fmt:
 	terraform fmt -check -recursive -diff
@@ -31,6 +31,10 @@ workflows:
 # What must not disappear carries prevent_destroy (terraform test cannot plan a destroy).
 lifecycle:
 	scripts/check-prevent-destroy.sh
+
+# Every account of the Organization stack has a row, in the same OU, in the table of names and keys.
+accounts:
+	scripts/check-accounts.sh
 
 # The repo is public: no account IDs, ARNs with IDs or emails in docs.
 docs:

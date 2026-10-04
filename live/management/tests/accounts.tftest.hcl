@@ -84,20 +84,23 @@ variables {
 # Values are asserted literally on purpose: a new account, a different parent OU or another
 # email scheme must be a visible, reviewed change to this file.
 
-run "security_and_workforce_in_their_ous" {
+run "accounts_in_their_ous" {
   command = apply
 
   assert {
-    condition     = toset(keys(aws_organizations_account.this)) == toset(["security", "workforce"])
-    error_message = "The Organization must have exactly the member accounts security and workforce."
+    condition     = toset(keys(aws_organizations_account.this)) == toset(["security", "workforce", "test", "quality", "demo"])
+    error_message = "The Organization must have exactly the member accounts security, workforce, test, quality and demo."
   }
 
   assert {
     condition = (
       aws_organizations_account.this["security"].parent_id == aws_organizations_organizational_unit.this["Management"].id &&
-      aws_organizations_account.this["workforce"].parent_id == aws_organizations_organizational_unit.this["Development"].id
+      aws_organizations_account.this["workforce"].parent_id == aws_organizations_organizational_unit.this["Development"].id &&
+      aws_organizations_account.this["test"].parent_id == aws_organizations_organizational_unit.this["Environments"].id &&
+      aws_organizations_account.this["quality"].parent_id == aws_organizations_organizational_unit.this["Environments"].id &&
+      aws_organizations_account.this["demo"].parent_id == aws_organizations_organizational_unit.this["Environments"].id
     )
-    error_message = "security must sit in the Management OU and workforce in the Development OU."
+    error_message = "security must sit in the Management OU, workforce in Development, and test, quality and demo in Environments."
   }
 
   assert {
@@ -117,7 +120,10 @@ run "emails_come_from_the_variable" {
   assert {
     condition = (
       aws_organizations_account.this["security"].email == "owner+security@example.com" &&
-      aws_organizations_account.this["workforce"].email == "owner+workforce@example.com"
+      aws_organizations_account.this["workforce"].email == "owner+workforce@example.com" &&
+      aws_organizations_account.this["test"].email == "owner+test@example.com" &&
+      aws_organizations_account.this["quality"].email == "owner+quality@example.com" &&
+      aws_organizations_account.this["demo"].email == "owner+demo@example.com"
     )
     error_message = "Emails must be local+<account>@domain built from account_email_base."
   }
@@ -132,8 +138,8 @@ run "account_ids_are_sensitive" {
   }
 
   assert {
-    condition     = toset(keys(nonsensitive(output.account_ids))) == toset(["security", "workforce"])
-    error_message = "The output must list both accounts by name."
+    condition     = toset(keys(nonsensitive(output.account_ids))) == toset(["security", "workforce", "test", "quality", "demo"])
+    error_message = "The output must list every account by name."
   }
 }
 
