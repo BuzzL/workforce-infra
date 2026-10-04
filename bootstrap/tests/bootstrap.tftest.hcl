@@ -696,8 +696,8 @@ run "environment_accounts_are_accepted_and_others_are_not" {
   }
 
   assert {
-    condition     = !strcontains(aws_s3_bucket_policy.state.policy, "\"*\":") && length(aws_iam_role_policy.break_glass_bootstrap) == 1
-    error_message = "No wildcard principal beyond the TLS deny, and the break-glass permission exists once accounts are listed."
+    condition     = !strcontains(aws_s3_bucket_policy.state.policy, "\"*\":")
+    error_message = "No wildcard principal beyond the TLS deny."
   }
 }
 
@@ -711,39 +711,41 @@ run "environment_account_names_stay_closed" {
   expect_failures = [var.member_account_ids]
 }
 
-run "management_role_may_bootstrap_listed_accounts_only" {
+run "ci_roles_cannot_assume_roles_in_member_accounts" {
   command = apply
 
   variables {
     member_account_ids = { workforce = "444455556666", security = "111122223333" }
   }
 
+  # OrganizationAccountAccessRole is full administrator in each member account: with it a CI job
+  # could rewrite the baseline that limits CI. The exclusive resources below make the listed
+  # policies the only ones on the roles, so these documents are everything the roles are granted.
   assert {
-    condition = jsondecode(aws_iam_role_policy.break_glass_bootstrap[0].policy) == {
-      Version = "2012-10-17"
-      Statement = [{
-        Sid       = "BootstrapMemberAccounts"
-        Effect    = "Allow"
-        Action    = "sts:AssumeRole"
-        Resource  = ["arn:aws:iam::111122223333:role/OrganizationAccountAccessRole", "arn:aws:iam::444455556666:role/OrganizationAccountAccessRole"]
-        Condition = { StringEquals = { "sts:RoleSessionName" = "baseline-bootstrap" } }
-      }]
-    }
-    error_message = "The CI role may assume OrganizationAccountAccessRole only in the listed accounts and only as baseline-bootstrap."
+    condition = alltrue([
+      for d in concat(
+        [
+          aws_iam_role_policy.state_access.policy,
+          aws_iam_role_policy.plan_bootstrap.policy,
+          aws_iam_role_policy.organization_units.policy,
+          aws_iam_role_policy.budget.policy,
+          aws_iam_role_policy.service_control_policies.policy,
+          aws_iam_role_policy.plan_state_read.policy,
+          aws_iam_role_policy.plan_bootstrap_read.policy,
+          aws_iam_role_policy.plan_organization_units.policy,
+          aws_iam_role_policy.plan_budget.policy,
+          aws_iam_role_policy.plan_service_control_policies.policy,
+        ],
+        [for p in aws_iam_role_policy.audit_trail : p.policy],
+        [for p in aws_iam_role_policy.plan_audit_trail : p.policy],
+      ) : !strcontains(d, "sts:AssumeRole") && !strcontains(d, "OrganizationAccountAccessRole")
+    ])
+    error_message = "A CI role of the management account must not be able to assume a role in a member account, even when member accounts are listed."
   }
 
   assert {
-    condition     = aws_iam_role_policies_exclusive.github_infra_management.policy_names == toset(["terraform-state", "plan-bootstrap-stack", "organization-units", "budget", "service-control-policies", "audit-trail", "break-glass-bootstrap"])
-    error_message = "The break-glass policy must be the last inline policy."
-  }
-}
-
-run "no_member_accounts_means_no_break_glass_permission" {
-  command = apply
-
-  assert {
-    condition     = length(aws_iam_role_policy.break_glass_bootstrap) == 0
-    error_message = "Without member accounts the CI role must not be able to assume anything in them."
+    condition     = aws_iam_role_policies_exclusive.github_infra_management.policy_names == toset(["terraform-state", "plan-bootstrap-stack", "organization-units", "budget", "service-control-policies", "audit-trail"]) && aws_iam_role_policies_exclusive.github_infra_management_plan.policy_names == toset(["terraform-state-read", "plan-bootstrap-stack", "plan-organization-units", "plan-budget", "plan-service-control-policies", "plan-audit-trail"])
+    error_message = "Listing member accounts must not add an inline policy to either role."
   }
 }
 

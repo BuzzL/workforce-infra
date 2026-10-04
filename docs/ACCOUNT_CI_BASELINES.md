@@ -21,6 +21,8 @@ Rejected: a single role that also plans pull requests. Code from any branch woul
 
 The apply role has no IAM write permission, and it does not need one: the baseline is its own stack under `bootstrap/accounts/`, applied locally, so whatever CI is allowed to write in the account's own stack, `live/accounts/<account>`, it cannot reach its own roles. What it may write there is the module input `extra_write_statements` (validated: no `*` action, no `Not*` element, no principal, no bare `*` resource), defined with the roles in `bootstrap/accounts/<account>`, with the reason beside each statement and asserted literally in the stack's tests. Widening it is a pull request on `bootstrap/accounts/<account>` that is applied locally first ("CI permissions first", `CLAUDE.md`). CI plans the baseline stack (drift check) through the `-plan` role and never applies it (`apply: false` in `scripts/ci-stacks.sh`). Account permissions that CI needs are added to the module in a reviewed PR and applied locally from the baseline stack.
 
+No CI role can reach an account as administrator either: the roles of the management account have no `sts:AssumeRole` at all, so they cannot use `OrganizationAccountAccessRole` (see "Break-glass"), asserted in `bootstrap/tests`.
+
 Rejected: letting CI apply its own baseline. It needs `iam:PutRolePolicy` on its own role, which is a privilege-escalation path.
 
 ### 3. State stays in the management bucket
@@ -57,7 +59,7 @@ Run by the maintainer, locally, with the management admin session. The account I
 
 1. Fill `bootstrap/accounts/<account>/backend.hcl` and `terraform.tfvars` from the `.example` files, with `break_glass_account_id` set.
 2. `terraform init -backend-config=backend.hcl && terraform plan`, review, then `terraform apply`. The provider assumes `OrganizationAccountAccessRole` in the account, the state is written with your own credentials.
-3. Remove `break_glass_account_id` from `terraform.tfvars`: from now on the baseline stack, `bootstrap/accounts/<account>`, is applied locally with the maintainer's own administrator session in the account (the provider, `AWS_PROFILE=<account profile>`) and the state backend on the management session (`profile` in `backend.hcl`), never as the CI role. Then add the account to `member_account_ids` in `bootstrap/terraform.tfvars` and in the secret `MEMBER_ACCOUNT_IDS` of `management` and `management-plan` (`MEMBER_ACCOUNT_IDS='{"security":"<id>"}' scripts/set-environment-secrets.sh`; CI plans `bootstrap/` too and would otherwise see the grants as drift), and apply `bootstrap/` locally: this opens the state bucket to the new roles and lets the management CI role assume the break-glass role there.
+3. Remove `break_glass_account_id` from `terraform.tfvars`: from now on the baseline stack, `bootstrap/accounts/<account>`, is applied locally with the maintainer's own administrator session in the account (the provider, `AWS_PROFILE=<account profile>`) and the state backend on the management session (`profile` in `backend.hcl`), never as the CI role. Then add the account to `member_account_ids` in `bootstrap/terraform.tfvars` and in the secret `MEMBER_ACCOUNT_IDS` of `management` and `management-plan` (`MEMBER_ACCOUNT_IDS='{"security":"<id>"}' scripts/set-environment-secrets.sh`; CI plans `bootstrap/` too and would otherwise see the grants as drift), and apply `bootstrap/` locally: this opens the state bucket to the new roles.
 4. `scripts/set-account-environment-secrets.sh <account>` creates the GitHub Environments `<account>` (protected: the maintainer as required reviewer, no admin bypass, `main` only) and `<account>-plan` (no reviewer, any branch, read-only role) with the secrets `AWS_ROLE_ARN`, `AWS_ROLE_ID`, `STATE_BUCKET` and the variable `AWS_REGION`. The `security` environments also get `MAINTAINER_USERNAME` and `ASSIGNMENT_ACCOUNT_IDS` (`docs/IDENTITY_CENTER.md`). The role ARN and ID are secrets so that they are masked in public logs.
 5. Commit `bootstrap/accounts/<account>/.ci-enabled` and `live/accounts/<account>/.ci-enabled`. The next PR plans the stack through OIDC, which must be a no-op.
 
@@ -83,11 +85,11 @@ If step 2 shows a destroy or an add, do not apply: the baseline in the account d
 
 - Allowed uses: the one-time bootstrap above, and recovery when the CI roles or the OIDC provider are broken or deleted.
 - Not allowed: routine changes, anything CI can do, or any use by an agent.
-- Who: the maintainer, from the management admin session, or the management CI role (the maintainer approved this for the bootstrap). The CI role may assume it only into the accounts in `member_account_ids` and only with the session name `baseline-bootstrap`, which the stacks use, so its use stands out in CloudTrail. The permission exists only once an account is listed.
+- Who: the maintainer only, from the management admin session. No CI role may assume it: it is full administrator, so a CI job holding it could rewrite the baseline that limits CI. The roles of the management account have no `sts:AssumeRole`, asserted in `bootstrap/tests` even when member accounts are listed.
 - Every use is recorded as an `AssumeRole` event in CloudTrail once the organization trail exists; after a use, write down why in the Linear issue.
 - If a use is not the maintainer's, treat it as an incident and rotate.
 
-- The session name is chosen by the caller, so `baseline-bootstrap` is a way to spot a use in CloudTrail, not a control. The control is the `management` environment protection. The permission stays for as long as an account is in `member_account_ids`; to take it away, remove the account there and re-apply (its state access goes too).
+- The baseline stacks assume the role under the session name `baseline-bootstrap`, so a use stands out in CloudTrail. The caller chooses the name, so it is a way to spot a use, not a control. The control is that only the maintainer's session can assume it.
 - If a CI role is deleted and recreated, the bucket policy stops matching it (AWS stores role principals by ID): re-apply `bootstrap/` after recreating a role.
 
-Rejected: removing the role. It is the only way back into an account whose OIDC provider was deleted. Closing that door is not worth the lockout.
+Rejected: removing the role. It is the only way back into an account whose OIDC provider was deleted, and the maintainer's session still reaches it. Closing that door is not worth the lockout. Rejected too: letting a CI role assume it, which an earlier version did for the one-time bootstrap (see the bug IAT-85).
