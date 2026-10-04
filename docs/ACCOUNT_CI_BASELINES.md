@@ -37,7 +37,18 @@ Rejected: a bucket per account, which needs a second bootstrap for every account
 
 Run by the maintainer, locally, with the management admin session. The account ID is read from the management stack outputs and never committed.
 
-0. **Enable the region in the account first, if it is not enabled by default.** Regions launched after March 2019 are opt-in and are enabled per account, so the region of this repository (`<region>`, `docs/ORGANIZATION_INPUTS.md`) must be enabled in every member account the same way. Skip this step for a region that is enabled by default. Until it is enabled, the provider's regional STS call is refused, and `terraform plan` fails with `AccessDenied` on `sts:AssumeRole` into `OrganizationAccountAccessRole`, although switching role in the console works (the console uses the global endpoint). From the management SSO admin session, switch role into the account (`OrganizationAccountAccessRole`), open Account → AWS Regions and enable `<region>`; it can take a few minutes. It cannot be done from the CLI of the management account without enabling trusted access for AWS Account Management in the Organization, which this repository does not do. Check it with:
+0. **Enable the region in the account first, if it is not enabled by default.** Regions launched after March 2019 are opt-in and are enabled per account, so the region of this repository (`<region>`, `docs/ORGANIZATION_INPUTS.md`) must be enabled in every member account the same way. Skip this step for a region that is enabled by default. Until it is enabled, the provider's regional STS call is refused, and `terraform plan` fails with `AccessDenied` on `sts:AssumeRole` into `OrganizationAccountAccessRole`, although switching role in the console works (the console uses the global endpoint). From the management SSO admin session, assume `OrganizationAccountAccessRole` into the account through the **global STS endpoint** (`--region us-east-1`: the regional endpoint of an opt-in region is refused until it is enabled) and call `account enable-region` with those credentials, or do the same in the console (switch role, then Account → AWS Regions). It must run as a role inside the account: calling it for a member account from the management account needs trusted access for AWS Account Management in the Organization, which this repository does not enable. It takes a few minutes; `account get-region-opt-status` reports `ENABLING`, then `ENABLED`. Check it with:
+
+   ```sh
+   # Role session in the account, from the management SSO admin session (never print the credentials).
+   aws sts assume-role --region us-east-1 --role-arn arn:aws:iam::<account-id>:role/OrganizationAccountAccessRole \
+     --role-session-name enable-region --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' --output text
+   # With those credentials exported (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN):
+   aws account enable-region --region us-east-1 --region-name <region>
+   aws account get-region-opt-status --region us-east-1 --region-name <region>   # ENABLING, then ENABLED
+   ```
+
+   Check it with the regional endpoint, which only works once the region is enabled:
 
    ```sh
    aws sts assume-role --region <region> --role-arn arn:aws:iam::<account-id>:role/OrganizationAccountAccessRole \
