@@ -321,3 +321,33 @@ run "statement_without_sid_is_rejected" {
 
   expect_failures = [var.extra_write_statements]
 }
+
+run "iam_sts_and_organizations_actions_are_rejected" {
+  command = plan
+
+  variables {
+    extra_write_statements = [{ Sid = "X", Effect = "Allow", Action = ["iam:PutRolePolicy"], Resource = ["arn:aws:iam::123456789012:role/x"] }]
+  }
+
+  expect_failures = [var.extra_write_statements]
+}
+
+run "sts_assume_role_is_rejected" {
+  command = plan
+
+  variables {
+    extra_write_statements = [{ Sid = "X", Effect = "Allow", Action = ["STS:AssumeRole"], Resource = ["arn:aws:iam::123456789012:role/x"] }]
+  }
+
+  expect_failures = [var.extra_write_statements]
+}
+
+run "resource_that_is_not_an_aws_arn_is_rejected" {
+  command = plan
+
+  variables {
+    extra_write_statements = [{ Sid = "X", Effect = "Allow", Action = ["s3:CreateBucket"], Resource = ["arn:*"] }]
+  }
+
+  expect_failures = [var.extra_write_statements]
+}

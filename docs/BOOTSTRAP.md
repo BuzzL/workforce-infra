@@ -280,7 +280,7 @@ The `management` role can manage the state of `live/management`, read the bootst
 - **State key** of a stack: `<stack>/terraform.tfstate`. The plan role can read only `bootstrap/terraform.tfstate`, so a plan of another stack needs its read access to be added to `bootstrap/plan_role.tf` first.
 - **Concurrency:** one apply per stack at a time, stacks apply one after the other, a newer push cancels the older plan of a pull request.
 - **Checks of the workflow:** `actionlint` and `scripts/check-workflow.sh` (`make workflows`, needs Ruby) parse the workflow and compare each job with an exact allowlist: permissions, conditions, environments, actions and pins, contexts (the only variable is `AWS_REGION`), secrets, masking, and that every Terraform call goes through the redaction. `make selftest` proves each check rejects the matching bad change and that the redaction hides what it must.
-- An `AccessDenied` in a plan means the role lacks a read permission for a resource of the stack: add it in `bootstrap/` and apply locally.
+- An `AccessDenied` in a plan means the role lacks a read permission for a resource of the stack: add it in `bootstrap/` (for a member account, in `bootstrap/accounts/<account>`) and apply locally. An `AccessDenied` in an apply means it lacks a write permission: add it to `extra_write_statements` of that baseline, in its own pull request, applied locally before the change that needs it.
 
 ## 8. Organization
 

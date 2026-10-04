@@ -53,8 +53,8 @@ locals {
 
 locals {
   # What a plan of this stack reads about the log bucket, once it exists. Read only, on
-  # exactly the bucket (never its objects): the CI roles cannot read, write or delete a log,
-  # and the bucket itself is created and changed locally, not by CI (docs/AUDIT_LOGGING.md).
+  # exactly the bucket (never its objects): the CI roles have no direct access to a log. The bucket
+  # itself is created and changed by CI (audit_write_statements below, docs/AUDIT_LOGGING.md).
   audit_read_statements = local.audit_logging ? [
     {
       Sid    = "ReadAuditLogBucket"
@@ -95,9 +95,12 @@ locals {
     {
       # Create and configure the log bucket (modules/audit-log-bucket: the bucket, its
       # ownership controls, public access block, versioning, encryption, lifecycle and policy).
-      # Bucket level only: no object read, write or delete, so CI still cannot touch a log, and
-      # no DeleteBucket. CI can rewrite the bucket policy, like any change to this stack, so
-      # that change is guarded by review and by the approval of the security environment.
+      # Bucket level only: no object action and no DeleteBucket, so CI has no direct access to a
+      # log. But these Puts include the ones that protect the logs: CI can rewrite the bucket
+      # policy (and with it the deny of deletion and its own access), remove the public access
+      # block, suspend versioning, change the encryption and set a lifecycle that expires the
+      # logs. So the deny-delete design does not hold against CI: the control is review of the
+      # pull request and the maintainer's approval of the plan on the security environment.
       Sid    = "ConfigureAuditLogBucket"
       Effect = "Allow"
       Action = [

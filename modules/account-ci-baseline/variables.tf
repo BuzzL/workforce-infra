@@ -89,8 +89,15 @@ variable "extra_write_statements" {
 
   validation {
     condition = alltrue([
-      for s in var.extra_write_statements : alltrue([for r in tolist(s.Resource) : r != "*"])
+      for s in var.extra_write_statements : alltrue([for r in tolist(s.Resource) : can(regex("^arn:aws:[a-z0-9-]+:", r))])
     ])
-    error_message = "A write statement names its resources: a bare * is not allowed."
+    error_message = "A write statement names its resources as ARNs of one service (arn:aws:<service>:...): no bare * and no arn:*."
+  }
+
+  validation {
+    condition = alltrue([
+      for s in var.extra_write_statements : alltrue([for a in tolist(s.Action) : !can(regex("^(iam|sts|organizations|account):", lower(a)))])
+    ])
+    error_message = "A write statement must not touch IAM, STS, Organizations or Account: CI cannot widen its own role or reach other accounts."
   }
 }
