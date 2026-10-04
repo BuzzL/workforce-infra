@@ -148,8 +148,11 @@ write_stack live/accounts/security
 write_stack live/environments/test
 write_stack live/environments/quality
 write_stack live/environments/demo
+write_stack bootstrap/accounts/test
+write_stack bootstrap/accounts/quality
+write_stack bootstrap/accounts/demo
 got=$(scripts/ci-stacks.sh apply)
-want='[{"stack":"bootstrap","environment":"management","apply":false},{"stack":"live/environments/demo","environment":"demo","apply":true},{"stack":"live/environments/quality","environment":"quality","apply":true},{"stack":"live/environments/test","environment":"test","apply":true},{"stack":"live/management","environment":"management","apply":true}]'
+want='[{"stack":"bootstrap","environment":"management","apply":false},{"stack":"live/management","environment":"management","apply":true}]'
 if [ "$got" = "$want" ]; then echo "ok   ci-stacks apply maps paths to environments"; else echo "FAIL ci-stacks apply mapping"; echo "$got"; failed=1; fi
 got=$(scripts/ci-stacks.sh plan)
 want='[{"stack":"bootstrap","environment":"management-plan"},{"stack":"live/management","environment":"management-plan"}]'
@@ -158,7 +161,7 @@ if [ "$got" = "$want" ]; then echo "ok   ci-stacks plan lists only stacks with a
 # account's own stack is applied by CI (apply true), planned in <account>-plan, and its baseline is not.
 touch live/accounts/security/.ci-enabled
 got=$(scripts/ci-stacks.sh apply)
-want='[{"stack":"bootstrap","environment":"management","apply":false},{"stack":"live/accounts/security","environment":"security","apply":true},{"stack":"live/environments/demo","environment":"demo","apply":true},{"stack":"live/environments/quality","environment":"quality","apply":true},{"stack":"live/environments/test","environment":"test","apply":true},{"stack":"live/management","environment":"management","apply":true}]'
+want='[{"stack":"bootstrap","environment":"management","apply":false},{"stack":"live/accounts/security","environment":"security","apply":true},{"stack":"live/management","environment":"management","apply":true}]'
 if [ "$got" = "$want" ]; then echo "ok   ci-stacks enables an account stack with its marker, and CI applies it"; else echo "FAIL ci-stacks account apply mapping"; echo "$got"; failed=1; fi
 got=$(scripts/ci-stacks.sh plan)
 want='[{"stack":"bootstrap","environment":"management-plan"},{"stack":"live/accounts/security","environment":"security-plan"},{"stack":"live/management","environment":"management-plan"}]'
@@ -167,12 +170,23 @@ rm live/accounts/security/.ci-enabled
 # The baseline stack of an account follows the same rule: local apply (apply false), planned in <account>-plan.
 touch bootstrap/accounts/security/.ci-enabled
 got=$(scripts/ci-stacks.sh apply)
-want='[{"stack":"bootstrap","environment":"management","apply":false},{"stack":"bootstrap/accounts/security","environment":"security","apply":false},{"stack":"live/environments/demo","environment":"demo","apply":true},{"stack":"live/environments/quality","environment":"quality","apply":true},{"stack":"live/environments/test","environment":"test","apply":true},{"stack":"live/management","environment":"management","apply":true}]'
+want='[{"stack":"bootstrap","environment":"management","apply":false},{"stack":"bootstrap/accounts/security","environment":"security","apply":false},{"stack":"live/management","environment":"management","apply":true}]'
 if [ "$got" = "$want" ]; then echo "ok   ci-stacks enables an account's baseline stack with its marker, without apply"; else echo "FAIL ci-stacks baseline apply mapping"; echo "$got"; failed=1; fi
 got=$(scripts/ci-stacks.sh plan)
 want='[{"stack":"bootstrap","environment":"management-plan"},{"stack":"bootstrap/accounts/security","environment":"security-plan"},{"stack":"live/management","environment":"management-plan"}]'
 if [ "$got" = "$want" ]; then echo "ok   ci-stacks plans an enabled baseline stack in <account>-plan"; else echo "FAIL ci-stacks baseline plan mapping"; echo "$got"; failed=1; fi
 rm bootstrap/accounts/security/.ci-enabled
+# The environment accounts follow the same rule: their stacks join CI with their own marker. The baseline is
+# planned in <name>-plan and never applied, the account's own stack is applied behind <name> and planned in <name>-plan.
+for e in test quality demo; do touch bootstrap/accounts/$e/.ci-enabled live/environments/$e/.ci-enabled; done
+got=$(scripts/ci-stacks.sh apply)
+want='[{"stack":"bootstrap","environment":"management","apply":false},{"stack":"bootstrap/accounts/demo","environment":"demo","apply":false},{"stack":"bootstrap/accounts/quality","environment":"quality","apply":false},{"stack":"bootstrap/accounts/test","environment":"test","apply":false},{"stack":"live/environments/demo","environment":"demo","apply":true},{"stack":"live/environments/quality","environment":"quality","apply":true},{"stack":"live/environments/test","environment":"test","apply":true},{"stack":"live/management","environment":"management","apply":true}]'
+if [ "$got" = "$want" ]; then echo "ok   ci-stacks enables the environment accounts with their markers"; else echo "FAIL ci-stacks environment apply mapping"; echo "$got"; failed=1; fi
+got=$(scripts/ci-stacks.sh plan)
+want='[{"stack":"bootstrap","environment":"management-plan"},{"stack":"bootstrap/accounts/demo","environment":"demo-plan"},{"stack":"bootstrap/accounts/quality","environment":"quality-plan"},{"stack":"bootstrap/accounts/test","environment":"test-plan"},{"stack":"live/environments/demo","environment":"demo-plan"},{"stack":"live/environments/quality","environment":"quality-plan"},{"stack":"live/environments/test","environment":"test-plan"},{"stack":"live/management","environment":"management-plan"}]'
+if [ "$got" = "$want" ]; then echo "ok   ci-stacks plans the environment accounts in <name>-plan"; else echo "FAIL ci-stacks environment plan mapping"; echo "$got"; failed=1; fi
+for e in test quality demo; do rm bootstrap/accounts/$e/.ci-enabled live/environments/$e/.ci-enabled; done
+expect fail:unmapped "ci-stacks does not map a baseline of an account outside the Environments OU" sh -c 'mkdir -p bootstrap/accounts/management && printf "terraform {}\n" > bootstrap/accounts/management/main.tf && scripts/ci-stacks.sh; rc=$?; rm -rf bootstrap/accounts/management; exit $rc'
 expect fail:usage "ci-stacks rejects an unknown mode" scripts/ci-stacks.sh nonsense
 # Names are explanatory, keys are four lowercase letters, unique (scripts/environment-keys.tsv).
 # The shipped table passes (every mapping above), and each way of breaking it is refused.

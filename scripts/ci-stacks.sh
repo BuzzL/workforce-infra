@@ -8,9 +8,11 @@
 #   stack                 apply environment   applied by CI   plan environment
 #   bootstrap             management          no (local)      management-plan
 #   live/management       management          yes             management-plan
-#   bootstrap/accounts/security|workforce  same name  no (local)  <acct>-plan, once <stack>/.ci-enabled exists
+#   bootstrap/accounts/<name>  same name  no (local)  <name>-plan, once <stack>/.ci-enabled exists
+#                              (security, workforce and the accounts of the Environments OU in scripts/environment-keys.tsv)
 #   live/accounts/security                 same name  yes         <acct>-plan, once <stack>/.ci-enabled exists
-#   live/environments/<name>  same name  yes  none  (accounts of the Environments OU in scripts/environment-keys.tsv)
+#   live/environments/<name>   same name  yes         <name>-plan, once <stack>/.ci-enabled exists
+#                              (accounts of the Environments OU in scripts/environment-keys.tsv)
 #
 # A stack name is used in JSON and in job names, so it is limited to [a-z0-9/_-], and only
 # the environments named below exist: a directory name cannot inject anything or select
@@ -60,16 +62,20 @@ while IFS= read -r stack; do
     # applied by CI, behind the approval of the account's GitHub Environment, with the write
     # permissions its baseline grants. Both join CI when .ci-enabled is committed, after the
     # roles and GitHub Environments exist: until then a plan could only fail.
-    bootstrap/accounts/security | bootstrap/accounts/workforce)
+    bootstrap/accounts/*)
+      env=${stack#bootstrap/accounts/}
+      case "$env" in security | workforce) ;; *) case " $environments " in *" $env "*) ;; *) echo "unmapped stack: $stack" >&2; exit 1 ;; esac ;; esac
       [ -f "$stack/.ci-enabled" ] || continue
-      env=${stack#bootstrap/accounts/} apply=false plan_env=${stack#bootstrap/accounts/}-plan ;;
+      apply=false plan_env=$env-plan ;;
     live/accounts/security)
       [ -f "$stack/.ci-enabled" ] || continue
       env=${stack#live/accounts/} apply=true plan_env=${stack#live/accounts/}-plan ;;
     live/environments/*)
       env=${stack#live/environments/}
       case " $environments " in *" $env "*) ;; *) echo "unmapped stack: $stack" >&2; exit 1 ;; esac
-      apply=true ;;
+      # Joins CI with the account's baseline: before its roles and GitHub Environments exist a plan could only fail.
+      [ -f "$stack/.ci-enabled" ] || continue
+      apply=true plan_env=$env-plan ;;
     *)                     echo "unmapped stack: $stack" >&2; exit 1 ;;
   esac
   if [ "$mode" = plan ]; then
