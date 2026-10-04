@@ -33,3 +33,23 @@ if [ "$declared" != "$tabled" ]; then
   diff <(echo "$declared") <(echo "$tabled") >&2 || true
   exit 1
 fi
+
+# The key of an environment account is written in the state bucket policy (bootstrap/state_bucket.tf) and
+# in the role names of its baseline stack (bootstrap/accounts/<name>/main.tf). Both must say what the table
+# says, or a role would be named differently from the principal the bucket policy admits. ROOT_DIR exists
+# for the selftest.
+root_dir=${ROOT_DIR:-.}
+tabled_keys=$(awk -F'\t' '$1 !~ /^(#|$)/ && $2 == "Environments" { print $1 "=" $3 }' "$keys_file" | sort | tr '\n' ' ')
+policy_keys=$(sed -n 's/^[[:space:]]*environment_keys[[:space:]]*=[[:space:]]*{\(.*\)}[[:space:]]*$/\1/p' "$root_dir/bootstrap/state_bucket.tf" | sed 's/"//g; s/,/ /g; s/=/ = /g' | awk '{ for (i = 1; i <= NF; i += 3) print $i "=" $(i + 2) }' | sort | tr '\n' ' ')
+if [ "$tabled_keys" != "$policy_keys" ]; then
+  echo "environment_keys in bootstrap/state_bucket.tf and the Environments rows of $keys_file disagree: '$policy_keys' vs '$tabled_keys'" >&2
+  exit 1
+fi
+while IFS=$'\t' read -r name ou key _; do
+  [ "$ou" = Environments ] || continue
+  main="$root_dir/bootstrap/accounts/$name/main.tf"
+  [ -f "$main" ] || continue
+  for role in "$key-foundation-infra-role" "$key-foundation-infra-plan-role"; do
+    grep -q "\"$role\"" "$main" || { echo "$main must name the role $role (key of $name in $keys_file)" >&2; exit 1; }
+  done
+done < <(grep -v '^#' "$keys_file")
