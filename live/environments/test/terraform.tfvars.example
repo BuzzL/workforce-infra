@@ -1,0 +1,2 @@
+# Copy to terraform.tfvars (gitignored) for a local run. CI sets region from its environment.
+region = "<region>"

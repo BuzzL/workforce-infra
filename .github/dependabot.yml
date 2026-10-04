@@ -24,6 +24,9 @@ updates:
       - /bootstrap/accounts/demo
       - /live/management
       - /live/accounts/security
+      - /live/environments/test
+      - /live/environments/quality
+      - /live/environments/demo
     schedule:
       interval: weekly
     commit-message:
