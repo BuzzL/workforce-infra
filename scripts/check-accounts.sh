@@ -53,4 +53,8 @@ while IFS=$'\t' read -r name ou key _; do
   grep -Eq "^[[:space:]]*apply_role_name[[:space:]]*=[[:space:]]*\"$key-foundation-infra-role\"" "$main" || { echo "$main must name the role $key-foundation-infra-role as apply_role_name (key of $name in $keys_file)" >&2; exit 1; }
   grep -Eq "^[[:space:]]*plan_role_name[[:space:]]*=[[:space:]]*\"$key-foundation-infra-plan-role\"" "$main" || { echo "$main must name the role $key-foundation-infra-plan-role as plan_role_name (key of $name in $keys_file)" >&2; exit 1; }
   grep -Eq "^[[:space:]]*role_path[[:space:]]*=[[:space:]]*\"/platform/\"" "$main" || { echo "$main must set role_path to /platform/" >&2; exit 1; }
+  live="$root_dir/live/environments/$name"
+  [ -d "$live" ] || continue
+  grep -Eq "^[[:space:]]*key[[:space:]]*=[[:space:]]*\"$key\"" "$live/main.tf" || { echo "$live/main.tf must set key to $key (key of $name in $keys_file)" >&2; exit 1; }
+  grep -Eq "^key[[:space:]]*=[[:space:]]*\"live/environments/$name/terraform.tfstate\"" "$live/backend.hcl.example" || { echo "$live/backend.hcl.example must hold the key live/environments/$name/terraform.tfstate" >&2; exit 1; }
 done < <(grep -v '^#' "$keys_file")
