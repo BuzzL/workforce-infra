@@ -4,16 +4,29 @@ locals {
 }
 
 locals {
+  # Role ARNs of the CI roles per member account. security and workforce keep github-infra-<name>
+  # under /; the environment accounts follow docs/ENVIRONMENT_PERMISSIONS.md, <key>-foundation-infra-role
+  # under /platform/. The path is part of the ARN a bucket policy matches.
+  environment_keys = { test = "test", quality = "qual", demo = "demo" }
+  member_roles = {
+    for name, id in var.member_account_ids : name => {
+      apply = contains(keys(local.environment_keys), name) ? "arn:aws:iam::${id}:role/platform/${local.environment_keys[name]}-foundation-infra-role" : "arn:aws:iam::${id}:role/github-infra-${name}"
+      plan  = contains(keys(local.environment_keys), name) ? "arn:aws:iam::${id}:role/platform/${local.environment_keys[name]}-foundation-infra-plan-role" : "arn:aws:iam::${id}:role/github-infra-${name}-plan"
+    }
+  }
+}
+
+locals {
   # The CI roles of the member accounts (modules/account-ci-baseline) reach the state of their
   # own stack and nothing else in the bucket. Each Allow names one exact role ARN as the
   # principal and one key: no wildcard anywhere. The identity policies of the roles say the
   # same from their side; both are needed for a cross-account request.
   member_state_statements = flatten([
-    for name, id in var.member_account_ids : [
+    for name, roles in local.member_roles : [
       {
         Sid       = "List${title(name)}State"
         Effect    = "Allow"
-        Principal = { AWS = ["arn:aws:iam::${id}:role/github-infra-${name}", "arn:aws:iam::${id}:role/github-infra-${name}-plan"] }
+        Principal = { AWS = [roles.apply, roles.plan] }
         Action    = "s3:ListBucket"
         Resource  = local.state_bucket_arn
         Condition = { StringEquals = { "s3:prefix" = ["env:/", "live/accounts/${name}/terraform.tfstate", "live/accounts/${name}/terraform.tfstate.tflock", "bootstrap/accounts/${name}/terraform.tfstate", "bootstrap/accounts/${name}/terraform.tfstate.tflock"] } }
@@ -21,21 +34,21 @@ locals {
       {
         Sid       = "ReadAndWrite${title(name)}State"
         Effect    = "Allow"
-        Principal = { AWS = "arn:aws:iam::${id}:role/github-infra-${name}" }
+        Principal = { AWS = roles.apply }
         Action    = ["s3:GetObject", "s3:PutObject"]
         Resource  = "${local.state_bucket_arn}/live/accounts/${name}/terraform.tfstate"
       },
       {
         Sid       = "Lock${title(name)}State"
         Effect    = "Allow"
-        Principal = { AWS = "arn:aws:iam::${id}:role/github-infra-${name}" }
+        Principal = { AWS = roles.apply }
         Action    = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
         Resource  = "${local.state_bucket_arn}/live/accounts/${name}/terraform.tfstate.tflock"
       },
       {
         Sid       = "Read${title(name)}StateForPlans"
         Effect    = "Allow"
-        Principal = { AWS = "arn:aws:iam::${id}:role/github-infra-${name}-plan" }
+        Principal = { AWS = roles.plan }
         Action    = "s3:GetObject"
         Resource  = "${local.state_bucket_arn}/live/accounts/${name}/terraform.tfstate"
       },
@@ -46,14 +59,14 @@ locals {
         # the state object: CI cannot change its own role.
         Sid       = "Read${title(name)}BaselineState"
         Effect    = "Allow"
-        Principal = { AWS = ["arn:aws:iam::${id}:role/github-infra-${name}", "arn:aws:iam::${id}:role/github-infra-${name}-plan"] }
+        Principal = { AWS = [roles.apply, roles.plan] }
         Action    = "s3:GetObject"
         Resource  = "${local.state_bucket_arn}/bootstrap/accounts/${name}/terraform.tfstate"
       },
       {
         Sid       = "Lock${title(name)}BaselineState"
         Effect    = "Allow"
-        Principal = { AWS = "arn:aws:iam::${id}:role/github-infra-${name}" }
+        Principal = { AWS = roles.apply }
         Action    = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
         Resource  = "${local.state_bucket_arn}/bootstrap/accounts/${name}/terraform.tfstate.tflock"
       },

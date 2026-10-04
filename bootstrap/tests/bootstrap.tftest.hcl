@@ -598,6 +598,119 @@ run "member_roles_reach_only_their_own_state" {
   }
 }
 
+run "environment_roles_have_platform_names_and_reach_only_their_own_state" {
+  command = apply
+
+  variables {
+    member_account_ids = { quality = "111122223333" }
+  }
+
+  assert {
+    condition = jsondecode(aws_s3_bucket_policy.state.policy).Statement == [
+      {
+        Sid       = "DenyInsecureTransport"
+        Effect    = "Deny"
+        Principal = { AWS = "*" }
+        Action    = "s3:*"
+        Resource  = ["arn:aws:s3:::workforce-tfstate-a1b2c3d4", "arn:aws:s3:::workforce-tfstate-a1b2c3d4/*"]
+        Condition = { Bool = { "aws:SecureTransport" = "false" } }
+      },
+      {
+        Sid       = "ListQualityState"
+        Effect    = "Allow"
+        Principal = { AWS = ["arn:aws:iam::111122223333:role/platform/qual-foundation-infra-role", "arn:aws:iam::111122223333:role/platform/qual-foundation-infra-plan-role"] }
+        Action    = "s3:ListBucket"
+        Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4"
+        Condition = { StringEquals = { "s3:prefix" = ["env:/", "live/accounts/quality/terraform.tfstate", "live/accounts/quality/terraform.tfstate.tflock", "bootstrap/accounts/quality/terraform.tfstate", "bootstrap/accounts/quality/terraform.tfstate.tflock"] } }
+      },
+      {
+        Sid       = "ReadAndWriteQualityState"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::111122223333:role/platform/qual-foundation-infra-role" }
+        Action    = ["s3:GetObject", "s3:PutObject"]
+        Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4/live/accounts/quality/terraform.tfstate"
+      },
+      {
+        Sid       = "LockQualityState"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::111122223333:role/platform/qual-foundation-infra-role" }
+        Action    = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4/live/accounts/quality/terraform.tfstate.tflock"
+      },
+      {
+        Sid       = "ReadQualityStateForPlans"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::111122223333:role/platform/qual-foundation-infra-plan-role" }
+        Action    = "s3:GetObject"
+        Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4/live/accounts/quality/terraform.tfstate"
+      },
+      {
+        Sid       = "ReadQualityBaselineState"
+        Effect    = "Allow"
+        Principal = { AWS = ["arn:aws:iam::111122223333:role/platform/qual-foundation-infra-role", "arn:aws:iam::111122223333:role/platform/qual-foundation-infra-plan-role"] }
+        Action    = "s3:GetObject"
+        Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4/bootstrap/accounts/quality/terraform.tfstate"
+      },
+      {
+        Sid       = "LockQualityBaselineState"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::111122223333:role/platform/qual-foundation-infra-role" }
+        Action    = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Resource  = "arn:aws:s3:::workforce-tfstate-a1b2c3d4/bootstrap/accounts/quality/terraform.tfstate.tflock"
+      },
+    ]
+    error_message = "An environment account's roles must carry the name and /platform/ path of docs/ENVIRONMENT_PERMISSIONS.md and be named exactly and reach only their own state key, the plan role without write or lock, and neither role writes the state object of the baseline stack, which only the apply role can lock."
+  }
+
+  # No wildcard in any Allow of the bucket policy: the only * is in the TLS Deny.
+  assert {
+    condition = alltrue([
+      for s in jsondecode(aws_s3_bucket_policy.state.policy).Statement : (
+        s.Effect == "Deny" || (
+          !strcontains(jsonencode(s.Principal), "*") && !strcontains(jsonencode(s.Resource), "*") && !strcontains(jsonencode(s.Action), "*")
+        )
+      )
+    ])
+    error_message = "An Allow in the bucket policy uses a wildcard principal, action or resource."
+  }
+}
+
+run "environment_accounts_are_accepted_and_others_are_not" {
+  command = plan
+
+  variables {
+    member_account_ids = { test = "111122223333", quality = "444455556666", demo = "777788889999" }
+  }
+
+  assert {
+    condition = alltrue([
+      for k in ["test-foundation-infra-role", "test-foundation-infra-plan-role", "qual-foundation-infra-role", "qual-foundation-infra-plan-role", "demo-foundation-infra-role", "demo-foundation-infra-plan-role"] :
+      strcontains(aws_s3_bucket_policy.state.policy, ":role/platform/${k}\"")
+    ])
+    error_message = "Each environment account needs both of its platform roles in the bucket policy."
+  }
+
+  assert {
+    condition     = !strcontains(aws_s3_bucket_policy.state.policy, "github-infra-test") && !strcontains(aws_s3_bucket_policy.state.policy, "github-infra-quality") && !strcontains(aws_s3_bucket_policy.state.policy, "github-infra-demo")
+    error_message = "The environment accounts must not be granted under the legacy names."
+  }
+
+  assert {
+    condition     = !strcontains(aws_s3_bucket_policy.state.policy, "\"*\":") && length(aws_iam_role_policy.break_glass_bootstrap) == 1
+    error_message = "No wildcard principal beyond the TLS deny, and the break-glass permission exists once accounts are listed."
+  }
+}
+
+run "environment_account_names_stay_closed" {
+  command = plan
+
+  variables {
+    member_account_ids = { staging = "111122223333" }
+  }
+
+  expect_failures = [var.member_account_ids]
+}
+
 run "management_role_may_bootstrap_listed_accounts_only" {
   command = apply
 
