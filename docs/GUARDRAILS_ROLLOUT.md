@@ -29,13 +29,13 @@ Every OU keeps `FullAWSAccess`. AWS allows **five SCPs directly attached to an O
 
 ## Changing what is attached
 
-A change is one PR that edits the default of `scp_attachments`; a new OU is added with all four SCPs, one OU per PR. The plan comment of the PR must contain only `+ aws_organizations_policy_attachment.scp[...]` for that OU. Before attaching to an OU:
+A change is one PR that edits the default of `scp_attachments`, one OU per PR, with all four SCPs. The plan comment of the PR must contain only `aws_organizations_policy_attachment.scp[...]` lines for that OU: `+` when it is attached, `-` when it is detached. Before attaching to an OU:
 
 - `aws organizations list-accounts-for-parent` on the OU names the accounts it reaches;
 - `aws organizations list-policies-for-target` on the OU shows `FullAWSAccess` attached;
 - the fallback path (management SSO admin session) works.
 
-`Management` was attached last, because `security` holds the Identity Center delegation and the audit log bucket.
+`Management` is last in the rollout order, because `security` holds the Identity Center delegation and the audit log bucket.
 
 ## Why `security` is not locked out
 
@@ -68,6 +68,8 @@ For each OU with an account, the SCPs are verified from a principal inside that 
 | `deny-outside-allowed-region` | A harmless real call, `ec2 describe-regions` in another region, is denied and the error names the policy; the same call in the allowed region, `iam get-account-summary` and `sts get-caller-identity` (regional and global endpoint) succeed. |
 
 Verified for `Development` (`workforce`) with the methods above, and for the CI role of `workforce` on its read path: it assumes through OIDC, reads the state in the allowed region and plans the IAM reads with no change, under the four SCPs.
+
+`Management` (`security`) is attached; its effect is not verified from inside the account yet.
 
 For an OU with no account (`Environments`, `Operations`) there is no principal to call from: the verification is that the policies are attached, and their effect is unproven until the first account exists, where the account creation story runs the checks above.
 
