@@ -20,7 +20,7 @@ The code is in `live/management` (`service_control_policies.tf`, `scp_attachment
 | OU | Accounts | Baseline SCPs attached |
 |---|---|---|
 | Development | `workforce` | the four |
-| Environments | none yet | the four |
+| Environments | `test`, `quality`, `demo` once created (IAT-41), none before | the four |
 | Operations | none yet | the four |
 | Management | `security` | the four |
 | Root | the management account is here | `DenyLeaveAndCloseAccount` and `FullAWSAccess` only |
@@ -69,7 +69,14 @@ For each OU with an account, the SCPs are verified from a principal inside that 
 
 Verified for `Development` (`workforce`) and `Management` (`security`) with the methods above, and for the CI role of `workforce` on its read path: it assumes through OIDC, reads the state in the allowed region and plans the IAM reads with no change, under the four SCPs.
 
-For an OU with no account (`Environments`, `Operations`) there is no principal to call from: the verification is that the policies are attached, and their effect is unproven until the first account exists, where the account creation story runs the checks above.
+For an OU with no account (`Operations`) there is no principal to call from: the verification is that the policies are attached, and their effect is unproven until the first account exists, where the account creation story runs the checks above. The accounts of `Environments` (`test`, `quality`, `demo`) are verified the same way once they exist, each from inside the account, and the run is recorded on the issue that creates them (IAT-41), not here.
+
+### Opening a new account
+
+- **Order: PR approval, the maintainer's explicit yes, local apply, then merge.** The management CI role has no `organizations:CreateAccount` (IAT-31), so the apply job that a merge starts would fail on the creates and keep failing on every later push to `live/**` until the accounts exist. The plan of the PR is the same before and after the merge, so the local apply comes first and the post-merge plan is then a no-op. The local apply needs the same `TF_VAR_*` values as CI (the secrets of the `management` environment), and runs with `-parallelism=1`: concurrent `CreateAccount` calls are rate limited, and a half-created account has already consumed its email.
+- The region of this repository is opt-in: enable it in the account first (`docs/ACCOUNT_CI_BASELINES.md`, step 0), or the provider's regional STS call is refused.
+- No step logs in as the root user of a new account. `deny-root-user` leaves it nothing it may do (no root MFA, no root contact changes). Alternate contacts go through `account:PutAlternateContact` from a role inside the account (setting them from the management account needs trusted access for AWS Account Management, which this repository does not enable), and recovery is `sts:AssumeRoot` from the management account.
+- Closing a member account is `organizations:CloseAccount` from the management account, not the member-side `account:CloseAccount` that `DenyLeaveAndCloseAccount` denies. The SCP is not loosened for it.
 
 ## Limits and open points
 
