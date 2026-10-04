@@ -9,7 +9,7 @@
 #   bootstrap             management          no (local)      management-plan
 #   live/management       management          yes             management-plan
 #   bootstrap/accounts/security|workforce  same name  no (local)  <acct>-plan, once <stack>/.ci-enabled exists
-#   live/accounts/security                 same name  no (local)  <acct>-plan, once <stack>/.ci-enabled exists
+#   live/accounts/security                 same name  yes         <acct>-plan, once <stack>/.ci-enabled exists
 #   live/environments/<name>  same name  yes  none  (accounts of the Environments OU in scripts/environment-keys.tsv)
 #
 # A stack name is used in JSON and in job names, so it is limited to [a-z0-9/_-], and only
@@ -56,15 +56,16 @@ while IFS= read -r stack; do
     bootstrap)             env=management apply=false plan_env=management-plan ;;
     live/management)       env=management apply=true plan_env=management-plan ;;
     # The baseline of an account (OIDC provider and CI roles) is applied locally, so that the role
-    # CI applies with can never change itself: CI only plans it. The account's own stack is still
-    # plan-only here. Both join CI when .ci-enabled is committed, after the roles and GitHub
-    # Environments exist: until then a plan could only fail.
+    # CI applies with can never change itself: CI only plans it. The account's own stack is
+    # applied by CI, behind the approval of the account's GitHub Environment, with the write
+    # permissions its baseline grants. Both join CI when .ci-enabled is committed, after the
+    # roles and GitHub Environments exist: until then a plan could only fail.
     bootstrap/accounts/security | bootstrap/accounts/workforce)
       [ -f "$stack/.ci-enabled" ] || continue
       env=${stack#bootstrap/accounts/} apply=false plan_env=${stack#bootstrap/accounts/}-plan ;;
     live/accounts/security)
       [ -f "$stack/.ci-enabled" ] || continue
-      env=${stack#live/accounts/} apply=false plan_env=${stack#live/accounts/}-plan ;;
+      env=${stack#live/accounts/} apply=true plan_env=${stack#live/accounts/}-plan ;;
     live/environments/*)
       env=${stack#live/environments/}
       case " $environments " in *" $env "*) ;; *) echo "unmapped stack: $stack" >&2; exit 1 ;; esac

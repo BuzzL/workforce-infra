@@ -154,12 +154,12 @@ if [ "$got" = "$want" ]; then echo "ok   ci-stacks apply maps paths to environme
 got=$(scripts/ci-stacks.sh plan)
 want='[{"stack":"bootstrap","environment":"management-plan"},{"stack":"live/management","environment":"management-plan"}]'
 if [ "$got" = "$want" ]; then echo "ok   ci-stacks plan lists only stacks with a plan environment"; else echo "FAIL ci-stacks plan mapping"; echo "$got"; failed=1; fi
-# Account baselines stay out of CI until their .ci-enabled marker exists (checked above: absent), and
-# then are only planned (apply false), under their own <account>-plan environment.
+# Account stacks stay out of CI until their .ci-enabled marker exists (checked above: absent). Then the
+# account's own stack is applied by CI (apply true), planned in <account>-plan, and its baseline is not.
 touch live/accounts/security/.ci-enabled
 got=$(scripts/ci-stacks.sh apply)
-want='[{"stack":"bootstrap","environment":"management","apply":false},{"stack":"live/accounts/security","environment":"security","apply":false},{"stack":"live/environments/demo","environment":"demo","apply":true},{"stack":"live/environments/quality","environment":"quality","apply":true},{"stack":"live/environments/test","environment":"test","apply":true},{"stack":"live/management","environment":"management","apply":true}]'
-if [ "$got" = "$want" ]; then echo "ok   ci-stacks enables an account baseline with its marker, without apply"; else echo "FAIL ci-stacks account apply mapping"; echo "$got"; failed=1; fi
+want='[{"stack":"bootstrap","environment":"management","apply":false},{"stack":"live/accounts/security","environment":"security","apply":true},{"stack":"live/environments/demo","environment":"demo","apply":true},{"stack":"live/environments/quality","environment":"quality","apply":true},{"stack":"live/environments/test","environment":"test","apply":true},{"stack":"live/management","environment":"management","apply":true}]'
+if [ "$got" = "$want" ]; then echo "ok   ci-stacks enables an account stack with its marker, and CI applies it"; else echo "FAIL ci-stacks account apply mapping"; echo "$got"; failed=1; fi
 got=$(scripts/ci-stacks.sh plan)
 want='[{"stack":"bootstrap","environment":"management-plan"},{"stack":"live/accounts/security","environment":"security-plan"},{"stack":"live/management","environment":"management-plan"}]'
 if [ "$got" = "$want" ]; then echo "ok   ci-stacks plans an enabled account baseline in <account>-plan"; else echo "FAIL ci-stacks account plan mapping"; echo "$got"; failed=1; fi
