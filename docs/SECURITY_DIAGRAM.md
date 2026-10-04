@@ -47,7 +47,7 @@ flowchart TB
   ENV -->|"CloudFormation service only<br/>exec-role, SourceArn scoped"| ENV
 
   TRAIL -->|"writes, exact trail ARN"| SEC
-  MGMT -.->|"OrganizationAccountAccessRole<br/>break-glass"| SEC
+  M -.->|"OrganizationAccountAccessRole<br/>break-glass, maintainer only"| SEC
 ```
 
 Solid arrows are normal paths, dashed arrows are break-glass or one-off.
