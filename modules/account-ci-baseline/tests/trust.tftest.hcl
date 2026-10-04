@@ -68,3 +68,82 @@ run "plan_role_trust" {
     error_message = "The plan role must trust exactly one repository and the security-plan environment."
   }
 }
+
+run "environment_naming_and_path" {
+  command = apply
+
+  variables {
+    account_name    = "quality"
+    apply_role_name = "qual-foundation-infra-role"
+    plan_role_name  = "qual-foundation-infra-plan-role"
+    role_path       = "/platform/"
+  }
+
+  assert {
+    condition     = aws_iam_role.apply.name == "qual-foundation-infra-role" && aws_iam_role.plan.name == "qual-foundation-infra-plan-role"
+    error_message = "The roles must carry the names of docs/ENVIRONMENT_PERMISSIONS.md."
+  }
+
+  assert {
+    condition     = aws_iam_role.apply.path == "/platform/" && aws_iam_role.plan.path == "/platform/"
+    error_message = "Both roles must live under /platform/."
+  }
+
+  # The trust follows the account name (the GitHub Environment), not the role name.
+  assert {
+    condition = (
+      jsondecode(aws_iam_role.apply.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == "repo:BuzzL@6116516/workforce-infra@1394667495:environment:quality"
+      && jsondecode(aws_iam_role.plan.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == "repo:BuzzL@6116516/workforce-infra@1394667495:environment:quality-plan"
+    )
+    error_message = "The subjects must stay the exact environment names quality and quality-plan."
+  }
+
+  # A role under a path is read through its ARN with the path in it.
+  assert {
+    condition = contains(flatten([
+      for s in jsondecode(aws_iam_role_policy.apply_baseline_read.policy).Statement : s.Resource if s.Sid == "ReadBaselineRoles"
+    ]), "arn:aws:iam::111122223333:role/platform/qual-foundation-infra-role")
+    error_message = "The baseline read must name the roles with their path."
+  }
+}
+
+run "legacy_names_are_unchanged" {
+  command = apply
+
+  assert {
+    condition     = aws_iam_role.apply.name == "github-infra-security" && aws_iam_role.apply.path == "/"
+    error_message = "Without the new inputs the roles keep their legacy name and path."
+  }
+}
+
+run "environment_names_are_strict" {
+  command = plan
+
+  variables {
+    account_name    = "quality"
+    apply_role_name = "quality-foundation-infra-role"
+  }
+
+  expect_failures = [var.apply_role_name]
+}
+
+run "plan_role_name_is_strict" {
+  command = plan
+
+  variables {
+    account_name   = "test"
+    plan_role_name = "test-foundation-agent-role"
+  }
+
+  expect_failures = [var.plan_role_name]
+}
+
+run "role_path_is_strict" {
+  command = plan
+
+  variables {
+    role_path = "/other/"
+  }
+
+  expect_failures = [var.role_path]
+}
