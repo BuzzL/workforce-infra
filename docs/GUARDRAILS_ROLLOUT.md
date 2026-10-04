@@ -67,9 +67,7 @@ For each OU with an account, the SCPs are verified from a principal inside that 
 | `deny-disable-cloudtrail` | A harmless real call, `aws cloudtrail stop-logging --name no-such-trail-$(uuidgen)` in the allowed region, from an admin role in the account. The name must be random, **never a real trail name and never an ARN**: if the SCP were not effective, a real name would stop that trail. With the SCP the error says explicit deny in a service control policy, and names the policy; without it, `TrailNotFoundException` (the same call in the management account shows it). A caller with no cloudtrail permission gets an implicit-deny message instead, which is not the proof. |
 | `deny-outside-allowed-region` | A harmless real call, `ec2 describe-regions` in another region, is denied and the error names the policy; the same call in the allowed region, `iam get-account-summary` and `sts get-caller-identity` (regional and global endpoint) succeed. |
 
-Verified for `Development` (`workforce`) with the methods above, and for the CI role of `workforce` on its read path: it assumes through OIDC, reads the state in the allowed region and plans the IAM reads with no change, under the four SCPs.
-
-`Management` (`security`) is attached; its effect is not verified from inside the account yet.
+Verified for `Development` (`workforce`) and `Management` (`security`) with the methods above, and for the CI role of `workforce` on its read path: it assumes through OIDC, reads the state in the allowed region and plans the IAM reads with no change, under the four SCPs.
 
 For an OU with no account (`Environments`, `Operations`) there is no principal to call from: the verification is that the policies are attached, and their effect is unproven until the first account exists, where the account creation story runs the checks above.
 
