@@ -1,7 +1,7 @@
 # Every gate that loops over stacks lives in scripts/each.sh. Recipes stay one-liners
 # because macOS ships Make 3.81, which cannot make recipes fail fast on its own.
-.PHONY: fmt validate lint versions dependabot sec test workflows lifecycle accounts docs selftest check
-check: fmt validate lint versions dependabot sec test workflows lifecycle accounts docs selftest
+.PHONY: fmt validate lint versions dependabot sec test workflows lifecycle accounts docs codeowners selftest check
+check: fmt validate lint versions dependabot sec test workflows lifecycle accounts docs codeowners selftest
 
 fmt:
 	terraform fmt -check -recursive -diff
@@ -39,6 +39,10 @@ accounts:
 # The repo is public: no account IDs, ARNs with IDs or emails in docs.
 docs:
 	scripts/check-docs-public.sh
+
+# The paths that decide what CI may do are listed in CODEOWNERS and exist.
+codeowners:
+	scripts/check-codeowners.sh
 
 # Proves the gates above pass on valid code and fail on broken code.
 selftest:
