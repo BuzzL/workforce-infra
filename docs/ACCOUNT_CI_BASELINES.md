@@ -19,7 +19,7 @@ Rejected: a single role that also plans pull requests. Code from any branch woul
 
 ### 2. CI cannot change the baseline
 
-The apply role has no IAM write permission, and it does not need one: the baseline is its own stack under `bootstrap/accounts/`, applied locally, so whatever CI is allowed to write in the account's own stack, `live/accounts/<account>`, it cannot reach its own roles. CI plans the baseline stack (drift check) through the `-plan` role and never applies it (`apply: false` in `scripts/ci-stacks.sh`). Account permissions that CI needs are added to the module in a reviewed PR and applied locally from the baseline stack.
+The apply role has no IAM write permission, and it does not need one: the baseline is its own stack under `bootstrap/accounts/`, applied locally, so whatever CI is allowed to write in the account's own stack, `live/accounts/<account>`, it cannot reach its own roles. What it may write there is the module input `extra_write_statements` (validated: no `*` action, no `Not*` element, no principal, no bare `*` resource), defined with the roles in `bootstrap/accounts/<account>`, with the reason beside each statement and asserted literally in the stack's tests. Widening it is a pull request on `bootstrap/accounts/<account>` that is applied locally first ("CI permissions first", `CLAUDE.md`). CI plans the baseline stack (drift check) through the `-plan` role and never applies it (`apply: false` in `scripts/ci-stacks.sh`). Account permissions that CI needs are added to the module in a reviewed PR and applied locally from the baseline stack.
 
 Rejected: letting CI apply its own baseline. It needs `iam:PutRolePolicy` on its own role, which is a privilege-escalation path.
 
