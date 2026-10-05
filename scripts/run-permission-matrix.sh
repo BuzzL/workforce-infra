@@ -59,7 +59,7 @@ probe_stack=$base-probe-stack
 alarm=$base-main-alarm
 group=/aws/lambda/$fn
 exec_role=${ROLE_ARN/-deploy-role/-exec-role}
-tags=(Key=App,Value=$app Key=Environment,Value="$environment")
+tags=("Key=App,Value=$app" "Key=Environment,Value=$environment")
 url=${ARTIFACT_URL:-https://example.invalid/artifact/template.yaml}
 
 # call <action>: the CLI call of one matrix action, against names that do not need to exist.

@@ -41,7 +41,7 @@ done < "$matrix"
 runner=${RUNNER_FILE:-scripts/run-permission-matrix.sh}
 while IFS=$'\t' read -r role action _; do
   case "$role" in '#'* | '') continue ;; esac
-  grep -qE "^[[:space:]]+(.*\| )?$action[ )]" "$runner" || fail "$role $action: no call in $runner"
+  grep -qE "^[[:space:]]+(.*\| )?${action}[ )]" "$runner" || fail "$role $action: no call in $runner"
 done < "$matrix"
 
 # Every action the modules allow has a row, so a widening cannot go unnoticed.
