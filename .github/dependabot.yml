@@ -39,6 +39,7 @@ updates:
       - /modules/budget
       - /modules/organization-trail
       - /modules/identity-center-access
+      - /modules/agent-role
       - /modules/cross-account-role
     schedule:
       interval: weekly
