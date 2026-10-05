@@ -15,7 +15,7 @@ need = ->(cond, msg) { errors << msg unless cond }
 norm = ->(s) { s.to_s.gsub(/\s+/, " ").strip }
 
 jobs = doc["jobs"] || {}
-need.(jobs.keys.sort == %w[apply comment discover plan], "the workflow must have exactly the jobs apply, comment, discover, plan")
+need.(jobs.keys.sort == %w[apply changes comment discover plan], "the workflow must have exactly the jobs apply, changes, comment, discover, plan")
 abort(errors.join("\n")) unless errors.empty?
 
 # Triggers: no pull_request_target, workflow_run or manual runs.
@@ -29,15 +29,20 @@ need.(doc["permissions"] == {}, "workflow-level permissions must be {}")
   "discover" => { "contents" => "read" },
   "plan" => { "id-token" => "write", "contents" => "read" },
   "comment" => { "pull-requests" => "write", "contents" => "read" },
+  "changes" => { "contents" => "read" },
   "apply" => { "id-token" => "write", "contents" => "read" },
 }.each { |j, p| need.(jobs[j]["permissions"] == p, "#{j}: permissions must be exactly #{p}") }
 
 # Conditions and environments, compared as whole strings.
-need.(norm.(jobs["plan"]["if"]) == "github.event_name == \x27pull_request\x27 && github.event.pull_request.head.repo.full_name == github.repository && needs.discover.outputs.plan_stacks != \x27[]\x27", "plan: the condition must skip forks and other events")
-need.(norm.(jobs["comment"]["if"]) == "always() && (needs.plan.result == \x27success\x27 || needs.plan.result == \x27failure\x27)", "comment: it must only post a finished plan")
-need.(norm.(jobs["apply"]["if"]) == "github.event_name == \x27push\x27 && needs.discover.outputs.apply_stacks != \x27[]\x27", "apply: it must only run on push")
+need.(norm.(jobs["plan"]["if"]) == "(github.event_name == \x27push\x27 || (github.event_name == \x27pull_request\x27 && github.event.pull_request.head.repo.full_name == github.repository)) && needs.discover.outputs.plan_stacks != \x27[]\x27", "plan: the condition must skip forks and other events")
+need.(norm.(jobs["comment"]["if"]) == "always() && github.event_name == \x27pull_request\x27 && (needs.plan.result == \x27success\x27 || needs.plan.result == \x27failure\x27)", "comment: it must only post a finished plan, on a pull request")
+need.(jobs["changes"]["if"] == "github.event_name == \x27push\x27", "changes: it must only run on push")
+need.(jobs["changes"]["needs"] == "plan", "changes: it must wait for the plans, and only run when they succeeded")
+need.(norm.(jobs["apply"]["if"]) == "github.event_name == \x27push\x27 && needs.changes.outputs.apply_stacks != \x27[]\x27", "apply: it must only run on push, for the stacks with changes")
+need.(jobs["apply"]["needs"] == "changes", "apply: it must wait for changes, which keeps the stacks without changes away from the approval")
+need.(jobs["apply"].dig("strategy", "matrix", "include") == "${{ fromJSON(needs.changes.outputs.apply_stacks) }}", "apply: the matrix must be the stacks that changes passed")
 %w[plan apply].each { |j| need.(jobs[j]["environment"] == "${{ matrix.environment }}", "#{j}: it must run in the environment of its stack") }
-%w[discover comment].each { |j| need.(!jobs[j].key?("environment"), "#{j}: it must have no environment") }
+%w[discover changes comment].each { |j| need.(!jobs[j].key?("environment"), "#{j}: it must have no environment") }
 need.(jobs["plan"].dig("concurrency", "cancel-in-progress") == true, "plan: an older plan must be cancelled by a newer push")
 need.(jobs["apply"].dig("concurrency", "cancel-in-progress") == false, "apply: an apply must never be cancelled")
 
@@ -112,6 +117,11 @@ plan_run = (jobs["plan"]["steps"].find { |s| s["id"] == "plan" } || {})["run"].t
 need.(plan_run =~ /terraform plan[^\n]*-lock=false/, "plan: terraform plan must run with -lock=false")
 apply_step = (jobs["apply"]["steps"].find { |s| s["name"] == "Apply" } || {})
 need.(norm.(apply_step["if"]) == "matrix.apply == true && steps.plan.outputs.exitcode == \x272\x27", "apply: Apply must be guarded by matrix.apply == true")
+
+# The changes job: the gate runs the plan results through ci-stacks.sh, nothing else.
+g = jobs["changes"]["steps"]
+need.(g.map { |s| s["uses"].to_s.split("@").first.to_s }.reject(&:empty?).sort == %w[actions/checkout actions/download-artifact], "changes: only checkout and download-artifact are allowed")
+need.(g.map { |s| s["run"].to_s }.join.include?("scripts/ci-stacks.sh gate"), "changes: the plan results must go through scripts/ci-stacks.sh gate")
 
 # The comment job: one script checked out, an artifact downloaded, the comment updated in place.
 c = jobs["comment"]["steps"]
