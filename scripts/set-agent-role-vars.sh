@@ -67,7 +67,9 @@ agent_value() { # agent_value <name> <file>
   principal_arn=$(printf '%s\n' "$block" | grep -E '^[[:space:]]*principal_arn' | grep -oE '"[^"]+"' | tr -d '"')
   account=$(printf '%s\n' "$block" | grep -E '^[[:space:]]*workforce_account_id' | grep -oE '"[0-9]{12}"' | tr -d '"')
   ids=$(current_ids "$2" | awk 'NF {printf "%s\"%s\"", (n++ ? "," : ""), $0}')
-  [[ $principal_arn =~ ^arn:aws:iam::[0-9]{12}:role(/[A-Za-z0-9+=,.@_-]+)*/wrkf-[A-Za-z0-9+=,.@_-]+$ && -n $account && -n $ids ]] || {
+  # The list must close on its line (a hand-edited multi-line list would lose ids), and the account is the principal's.
+  printf '%s\n' "$block" | grep -qE '^[[:space:]]*external_ids[[:space:]]*=[[:space:]]*\[.*\][[:space:]]*$' || ids=
+  [[ $principal_arn =~ ^arn:aws:iam::([0-9]{12}):role(/[A-Za-z0-9+=,.@_-]+)*/wrkf-[A-Za-z0-9+=,.@_-]+$ && -n $account && -n $ids && $account == "${BASH_REMATCH[1]}" ]] || {
     echo "$1: the agent block of terraform.tfvars is not in the expected shape" >&2
     return 1
   }
@@ -99,6 +101,27 @@ check_file() { # check_file <name> <file>
   fi
 }
 
+# Every value is built and checked before the first call to gh, so that a bad file leaves all
+# three secrets as they are.
+if [ "$mode" = --set-secrets ]; then
+  values=()
+  for name in $accounts; do
+    file=$root/bootstrap/accounts/$name/terraform.tfvars
+    [ -d "$root/bootstrap/accounts/$name" ] || { echo "$name: no stack at bootstrap/accounts/$name" >&2; exit 1; }
+    check_file "$name" "$file"
+    [ -n "$(current_ids "$file")" ] || { echo "$name: no agent block in terraform.tfvars, run the script without options first" >&2; exit 1; }
+    value=$(agent_value "$name" "$file")
+    values+=("$value")
+  done
+  i=0
+  for name in $accounts; do
+    printf '%s' "${values[$i]}" | gh secret set AGENT --repo BuzzL/workforce-infra --env "$name-plan"
+    echo "$name: AGENT set in $name-plan"
+    i=$((i + 1))
+  done
+  exit 0
+fi
+
 for name in $accounts; do
   dir=$root/bootstrap/accounts/$name
   file=$dir/terraform.tfvars
@@ -109,12 +132,6 @@ for name in $accounts; do
 
   case "$mode" in
     --check) echo "$name: $count ExternalId(s)"; continue ;;
-    --set-secrets)
-      [ "$count" -ge 1 ] || { echo "$name: no agent block in terraform.tfvars, run the script without options first" >&2; exit 1; }
-      value=$(agent_value "$name" "$file")
-      printf '%s' "$value" | gh secret set AGENT --repo BuzzL/workforce-infra --env "$name-plan"
-      echo "$name: AGENT set in $name-plan, $count ExternalId(s)"
-      continue ;;
     create) if [ "$count" -eq 0 ]; then ids=$(openssl rand -hex 32); fi ;;
     --rotate)
       [ "$count" -eq 1 ] || { echo "$name: --rotate needs exactly one ExternalId, found $count" >&2; exit 1; }

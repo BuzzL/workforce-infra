@@ -90,9 +90,6 @@ jobs:
       TF_VAR_audit_log_bucket_name: ${{ secrets.AUDIT_LOG_BUCKET }}
       TF_VAR_organization_id: ${{ secrets.ORGANIZATION_ID }}
       TF_VAR_management_account_id: ${{ secrets.MANAGEMENT_ACCOUNT_ID }}
-      # The agent role of an environment account, only in its <name>-plan environment: the
-      # baseline is applied locally with it, so the plan needs it to be a no-op (IAT-92).
-      TF_VAR_agent: ${{ secrets.AGENT || 'null' }}
       AWS_REGION_NAME: ${{ vars.AWS_REGION }}
       STATE_BUCKET: ${{ secrets.STATE_BUCKET }}
       AUDIT_LOG_BUCKET: ${{ secrets.AUDIT_LOG_BUCKET }}
@@ -129,8 +126,13 @@ jobs:
             -backend-config="region=$AWS_REGION_NAME" 2>&1 | "$GITHUB_WORKSPACE/scripts/redact.sh"
       # -lock=false: the plan role cannot write the lockfile. The output is redacted before
       # it reaches the log or the artifact; an artifact of a public repository is public.
+      # TF_VAR_agent: the agent role of an environment account, only in its <name>-plan
+      # environment and only for this step. The baseline is applied locally with it, so the plan
+      # needs it to be a no-op (IAT-92).
       - name: Plan
         id: plan
+        env:
+          TF_VAR_agent: ${{ secrets.AGENT || 'null' }}
         run: |
           set +e
           terraform plan -input=false -lock=false -no-color -detailed-exitcode 2>&1 | "$GITHUB_WORKSPACE/scripts/redact.sh" | tee "$RUNNER_TEMP/plan.txt"
