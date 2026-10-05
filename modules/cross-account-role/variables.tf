@@ -3,8 +3,8 @@ variable "name" {
   type        = string
 
   validation {
-    condition     = can(regex("^(test|qual|demo|root|wrkf|scrt)-[a-z0-9]{1,10}-(agent-role|infra-role|infra-plan-role|github-role|github-plan-role|[a-z0-9]{1,16}-(deploy-role|exec-role))$", var.name))
-    error_message = "The name must be a platform role name: <acct>-<project>-(agent-role|infra-role|infra-plan-role|github-role|github-plan-role|<app>-deploy-role|<app>-exec-role), the account being one of the keys test, qual, demo, root, wrkf, scrt."
+    condition     = can(regex("^(test|qual|demo|root|wrkf|scrt)-[a-z0-9]{1,10}-(agent-role|infra-role|infra-plan-role|github-role|github-plan-role|matrix-(test|quality|demo)-role|[a-z0-9]{1,16}-(deploy-role|exec-role))$", var.name))
+    error_message = "The name must be a platform role name: <acct>-<project>-(agent-role|infra-role|infra-plan-role|github-role|github-plan-role|matrix-<env>-role|<app>-deploy-role|<app>-exec-role), the account being one of the keys test, qual, demo, root, wrkf, scrt."
   }
 }
 
@@ -56,6 +56,7 @@ variable "trust" {
       source_account_id    = string
       external_ids         = list(string)
       session_name_pattern = optional(string)
+      extra_principal_arns = optional(list(string), [])
     }))
     web_identity = optional(object({
       provider_arn = string
@@ -86,6 +87,19 @@ variable "trust" {
       can(regex(":iam::${var.trust.assume_role.source_account_id}:role/", var.trust.assume_role.principal_arn))
     )
     error_message = "trust.assume_role.principal_arn must be the exact ARN of one IAM role (no wildcard, not an account root) in the 12-digit trust.assume_role.source_account_id."
+  }
+
+  # Extra principals are exact roles of the same account, never duplicates of the first.
+  validation {
+    condition = var.trust.assume_role == null || (
+      length(var.trust.assume_role.extra_principal_arns) <= 3 &&
+      length(distinct(concat([var.trust.assume_role.principal_arn], var.trust.assume_role.extra_principal_arns))) == 1 + length(var.trust.assume_role.extra_principal_arns) &&
+      alltrue([for a in var.trust.assume_role.extra_principal_arns :
+        can(regex("^arn:aws:iam::[0-9]{12}:role(/[A-Za-z0-9+=,.@_-]+)*/[A-Za-z0-9+=,.@_-]+$", a)) &&
+        can(regex(":iam::${var.trust.assume_role.source_account_id}:role/", a))
+      ])
+    )
+    error_message = "trust.assume_role.extra_principal_arns holds at most three more exact role ARNs (no wildcard, not an account root, no duplicate) of trust.assume_role.source_account_id."
   }
 
   validation {
