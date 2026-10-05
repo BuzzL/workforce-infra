@@ -1,0 +1,56 @@
+# The allowed/denied matrix of docs/ENVIRONMENT_PERMISSIONS.md in a form scripts can read.
+#
+# role     agent (<key>-<project>-agent-role) or deploy (<key>-<project>-<app>-deploy-role)
+# action   one IAM action. A deny row names a representative action of a "Not allowed" row
+# test, quality, demo   allow or deny, per GitHub Environment name (not key)
+#
+# scripts/check-permission-matrix.sh checks it against the doc's narrowing rule (demo is inside
+# quality is inside test) and against the Allow statements of modules/agent-role and
+# modules/deploy-role. Resources are the ones of the doc's "ARN shapes" and are resolved by
+# the live runner, so no account ID or ARN is written here. Fields are separated by a tab.
+agent	lambda:GetFunctionConfiguration	allow	allow	allow
+agent	lambda:GetAlias	allow	allow	allow
+agent	lambda:ListVersionsByFunction	allow	allow	allow
+agent	lambda:ListAliases	allow	allow	allow
+agent	cloudformation:DescribeStacks	allow	allow	allow
+agent	cloudformation:DescribeStackEvents	allow	allow	allow
+agent	logs:FilterLogEvents	allow	allow	allow
+agent	logs:DescribeLogStreams	allow	allow	allow
+agent	logs:GetLogEvents	allow	allow	allow
+agent	cloudwatch:DescribeAlarms	allow	allow	allow
+agent	lambda:UpdateFunctionCode	deny	deny	deny
+agent	lambda:GetFunction	deny	deny	deny
+agent	cloudformation:CreateStack	deny	deny	deny
+agent	cloudformation:GetTemplate	deny	deny	deny
+agent	logs:PutLogEvents	deny	deny	deny
+agent	cloudwatch:PutMetricAlarm	deny	deny	deny
+agent	iam:CreateRole	deny	deny	deny
+agent	sts:AssumeRole	deny	deny	deny
+agent	secretsmanager:GetSecretValue	deny	deny	deny
+agent	kms:Decrypt	deny	deny	deny
+agent	s3:GetObject	deny	deny	deny
+deploy	cloudformation:CreateStack	allow	deny	deny
+deploy	cloudformation:DeleteStack	allow	deny	deny
+deploy	cloudformation:CreateChangeSet	allow	allow	allow
+deploy	cloudformation:ExecuteChangeSet	allow	allow	allow
+deploy	cloudformation:DeleteChangeSet	allow	allow	allow
+deploy	cloudformation:DescribeStacks	allow	allow	allow
+deploy	cloudformation:DescribeStackEvents	allow	allow	allow
+deploy	cloudformation:DescribeChangeSet	allow	allow	allow
+deploy	cloudformation:GetTemplate	allow	allow	allow
+deploy	cloudformation:GetTemplateSummary	allow	allow	allow
+deploy	cloudformation:TagResource	allow	allow	allow
+deploy	cloudformation:UntagResource	allow	allow	allow
+deploy	iam:PassRole	allow	allow	allow
+deploy	s3:GetObject	allow	allow	allow
+deploy	lambda:GetFunctionConfiguration	allow	allow	allow
+deploy	lambda:GetAlias	allow	allow	allow
+deploy	cloudwatch:DescribeAlarms	allow	allow	allow
+deploy	cloudformation:UpdateStack	deny	deny	deny
+deploy	lambda:UpdateFunctionCode	deny	deny	deny
+deploy	lambda:CreateFunction	deny	deny	deny
+deploy	iam:CreateRole	deny	deny	deny
+deploy	iam:AttachRolePolicy	deny	deny	deny
+deploy	organizations:DescribeOrganization	deny	deny	deny
+deploy	account:GetContactInformation	deny	deny	deny
+deploy	sts:AssumeRole	deny	deny	deny

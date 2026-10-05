@@ -612,4 +612,21 @@ agent --rotate > /dev/null
 expect pass "agent vars: --set-secrets carries both ExternalIds of a rotation" bash -c "env PATH=\"$PWD/fake-gh:\$PATH\" $agent_root/scripts/set-agent-role-vars.sh --set-secrets >/dev/null && grep -qE 'external_ids=\\[\"[0-9a-f]{64}\",\"[0-9a-f]{64}\"\\]' gh.in.1"
 agent --drop-old > /dev/null
 
+# check-permission-matrix.sh: the matrix and the role modules must agree.
+mx=$work/matrix
+rm -rf "$mx" && mkdir -p "$mx/agent-role" "$mx/deploy-role"
+printf '"lambda:GetAlias"\n' > "$mx/agent-role/main.tf"
+printf '"cloudformation:CreateStack"\n' > "$mx/deploy-role/main.tf"
+printf 'agent\tlambda:GetAlias\tallow\tallow\tallow\nagent\tcloudformation:CreateStack\tdeny\tdeny\tdeny\ndeploy\tcloudformation:CreateStack\tallow\tdeny\tdeny\n' > "$mx/m.tsv"
+matrix() { env MATRIX_FILE="$mx/m.tsv" MODULES_DIR="$mx" scripts/check-permission-matrix.sh; }
+expect pass "matrix  accepts a matrix that matches the modules" matrix
+printf '"cloudformation:CreateStack"\n' >> "$mx/agent-role/main.tf"
+expect fail:"denied in the matrix, written in" "matrix  catches a widened agent role" matrix
+printf '"lambda:GetAlias"\n' > "$mx/agent-role/main.tf"
+printf '"cloudformation:CreateStack"\n"iam:PassRole"\n' > "$mx/deploy-role/main.tf"
+expect fail:"in $mx/deploy-role/main.tf but not in the matrix" "matrix  catches an action without a row" matrix
+printf '"cloudformation:CreateStack"\n' > "$mx/deploy-role/main.tf"
+printf 'deploy\tcloudformation:CreateStack\tdeny\tallow\tdeny\n' >> "$mx/m.tsv"
+expect fail:"allowed in quality but not in test" "matrix  catches a broken narrowing rule" matrix
+
 exit "$failed"
