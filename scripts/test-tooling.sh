@@ -494,7 +494,11 @@ expect pass "agent vars: one ExternalId of 64 hex characters each" test "$(ids t
 expect pass "agent vars: the files are private (600)" test "$(stat -f %Lp "$agent_root/bootstrap/accounts/demo/terraform.tfvars" 2>/dev/null || stat -c %a "$agent_root/bootstrap/accounts/demo/terraform.tfvars")" = 600
 expect pass "agent vars: every environment has its own ExternalId" test "$(for a in test quality demo; do ids $a; done | sort -u | wc -l)" -eq 3
 first_id=$(ids test)
+cp "$agent_root/bootstrap/accounts/test/terraform.tfvars" before.tfvars
 expect pass "agent vars: a second run changes nothing" agent
+expect pass "agent vars: ...not even a byte of the file" cmp before.tfvars "$agent_root/bootstrap/accounts/test/terraform.tfvars"
+expect fail:"principal differs" "agent vars: another principal is refused, not swapped in" env AGENT_ROLE_ARN=arn:aws:iam::444455556666:role/platform/wrkf-other-role "$agent_root/scripts/set-agent-role-vars.sh"
+expect pass "agent vars: no temporary file is left behind" test -z "$(find "$agent_root/bootstrap" -name 'tmp.*')"
 expect pass "agent vars: the ExternalId is kept" test "$(ids test)" = "$first_id"
 agent --check > check.out 2>&1 || true
 expect pass "agent vars: --check never prints a value" test -z "$(grep -E '[0-9a-f]{64}' check.out)"
@@ -504,6 +508,20 @@ new_id=$(ids test | head -n 1)
 expect pass "agent vars: --drop-old keeps the new one only" bash -c "$(declare -f agent ids); agent_root=$agent_root; agent_arn=$agent_arn; agent --drop-old && test \"\$(ids test)\" = $new_id"
 expect fail:"not the ARN of a wrkf" "agent vars: a principal that is not a wrkf role is refused" env AGENT_ROLE_ARN=arn:aws:iam::444455556666:root "$agent_root/scripts/set-agent-role-vars.sh"
 expect fail:"usage" "agent vars: an unknown option is refused" agent --nope
+# Files the markers cannot be trusted on are refused and left as they are.
+bad=$agent_root/bootstrap/accounts/demo/terraform.tfvars
+cp "$bad" good.tfvars
+printf 'agent = null\n' > "$bad"
+expect fail:"outside the markers" "agent vars: a hand-written agent is refused" agent
+printf '%s\r\nregion = "x"\r\n' "# BEGIN agent (scripts/set-agent-role-vars.sh)" > "$bad"
+expect fail:"CRLF" "agent vars: CRLF is refused" agent
+printf '# BEGIN agent (scripts/set-agent-role-vars.sh)\nb = 2\n' > "$bad"
+expect fail:"unbalanced" "agent vars: a block without END is refused, nothing after it is lost" agent
+expect pass "agent vars: ...and the file is untouched" grep -q '^b = 2' "$bad"
+printf 'region = "x"' > "$bad"
+expect pass "agent vars: a file without a trailing newline gets the block" agent
+expect pass "agent vars: ...and keeps its own line" grep -q '^region = "x"' "$bad"
+cp good.tfvars "$bad"
 expect pass "agent vars: the principal and account are written" grep -q "principal_arn        = \"$agent_arn\"" "$agent_root/bootstrap/accounts/quality/terraform.tfvars"
 
 exit "$failed"
