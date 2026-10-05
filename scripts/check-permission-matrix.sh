@@ -37,6 +37,13 @@ while IFS=$'\t' read -r role action test quality demo extra; do
   fi
 done < "$matrix"
 
+# Every row has a call in the live runner, or the live job would fail on it.
+runner=${RUNNER_FILE:-scripts/run-permission-matrix.sh}
+while IFS=$'\t' read -r role action _; do
+  case "$role" in '#'* | '') continue ;; esac
+  grep -qE "^[[:space:]]+(.*\| )?$action[ )]" "$runner" || fail "$role $action: no call in $runner"
+done < "$matrix"
+
 # Every action the modules allow has a row, so a widening cannot go unnoticed.
 for role in agent deploy; do
   file="$modules/$role-role/main.tf"

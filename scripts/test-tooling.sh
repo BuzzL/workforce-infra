@@ -629,4 +629,21 @@ printf '"cloudformation:CreateStack"\n' > "$mx/deploy-role/main.tf"
 printf 'deploy\tcloudformation:CreateStack\tdeny\tallow\tdeny\n' >> "$mx/m.tsv"
 expect fail:"allowed in quality but not in test" "matrix  catches a broken narrowing rule" matrix
 
+# run-permission-matrix.sh: an allowed row must not be refused, a denied row must be, and nothing sensitive is printed.
+rm -rf fake-aws && mkdir -p fake-aws
+cat > fake-aws/aws <<'SH'
+#!/usr/bin/env bash
+if [ "$1 $2" = "sts assume-role" ]; then printf 'AKIAFAKEFAKEFAKE0\tsecret\ttoken\n'; exit 0; fi
+case " $FAKE_DENY " in *" $1:$2 "*) echo "An error occurred (AccessDenied) when calling the $2 operation: not authorized" >&2; exit 254 ;; esac
+echo "An error occurred (ResourceNotFoundException) when calling the $2 operation: not found" >&2; exit 254
+SH
+chmod +x fake-aws/aws
+printf 'agent\tlambda:GetAlias\tallow\tallow\tallow\nagent\tlambda:GetFunction\tdeny\tdeny\tdeny\n' > run.tsv
+run_matrix() { env PATH="$PWD/fake-aws:$PATH" MATRIX_FILE="$PWD/run.tsv" ROLE_ARN=arn:aws:iam::123456789012:role/platform/test-foundation-agent-role AWS_REGION=eu-west-1 "$@" scripts/run-permission-matrix.sh agent test; }
+expect pass:"agent test: 2 calls, passed" "run matrix: passes when IAM answers as the matrix says" run_matrix FAKE_DENY=lambda:get-function
+expect fail:"FAIL agent test lambda:GetFunction: wanted deny, got allow" "run matrix: catches a denied row that succeeds (widened role)" run_matrix FAKE_DENY=
+expect fail:"FAIL agent test lambda:GetAlias: wanted allow, got deny" "run matrix: catches an allowed row that is refused" run_matrix FAKE_DENY="lambda:get-function lambda:get-alias"
+expect pass "run matrix: prints no account ID" bash -c '! grep -q 123456789012 out.log'
+expect fail:"no call defined" "run matrix: an action without a call fails" env PATH="$PWD/fake-aws:$PATH" MATRIX_FILE="$PWD/run.tsv" ROLE_ARN=arn:aws:iam::123456789012:role/x AWS_REGION=eu-west-1 bash -c 'printf "agent\tnope:Nope\tallow\tallow\tallow\n" > run2.tsv; MATRIX_FILE=$PWD/run2.tsv scripts/run-permission-matrix.sh agent test'
+
 exit "$failed"
