@@ -31,7 +31,7 @@
 #                         environment variable of the same name (it cannot be derived)
 #   BUDGET_ALERT_EMAIL    the address of the budget alerts, read from the environment variable of
 #                         the same name (it is not stored anywhere else)
-#   MEMBER_ACCOUNT_IDS    JSON map of the member account IDs, e.g. {"security":"<12 digits>"}, read from
+#   MEMBER_ACCOUNT_IDS    JSON map of the member account IDs, e.g. {"security":"<12 digits>"}, one entry per account with a baseline stack,, read from
 #                         the environment variable of the same name ({} if unset). It is the CI side of
 #                         bootstrap's local var.member_account_ids: without it CI would plan the removal
 #                         of the member accounts' grants. Keep the two in sync.
@@ -102,7 +102,7 @@ budget_email=$(read_value "BUDGET_ALERT_EMAIL (set it in the environment)" '^[^@
 email_base=$(read_value "ACCOUNT_EMAIL_BASE (set it in the environment)" '^[A-Za-z0-9._%-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$' printenv ACCOUNT_EMAIL_BASE)
 
 members=${MEMBER_ACCOUNT_IDS:-\{\}}
-[[ $members =~ ^\{(\"(security|workforce)\":\"[0-9]{12}\"(,\"(security|workforce)\":\"[0-9]{12}\")*)?\}$ ]] || { echo "MEMBER_ACCOUNT_IDS does not have the expected shape" >&2; exit 1; }
+[[ $members =~ ^\{(\"(security|workforce|test|quality|demo)\":\"[0-9]{12}\"(,\"(security|workforce|test|quality|demo)\":\"[0-9]{12}\")*)?\}$ ]] || { echo "MEMBER_ACCOUNT_IDS does not have the expected shape" >&2; exit 1; }
 
 audit_bucket=${AUDIT_LOG_BUCKET:-}
 [ -z "$audit_bucket" ] || [[ $audit_bucket =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]] || { echo "AUDIT_LOG_BUCKET does not have the expected shape" >&2; exit 1; }
