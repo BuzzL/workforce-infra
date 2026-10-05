@@ -21,3 +21,9 @@ output "plan_role_id" {
   value       = module.baseline.plan_role_id
   sensitive   = true
 }
+
+output "agent_role_arn" {
+  description = "ARN of the agent task role: the principal of the agent roles in the environment accounts (scripts/set-agent-role-vars.sh). Sensitive: public repository."
+  value       = module.agent_role.arn
+  sensitive   = true
+}

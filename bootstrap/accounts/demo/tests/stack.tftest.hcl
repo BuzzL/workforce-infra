@@ -87,4 +87,10 @@ run "agent_role_named_by_key_and_read_by_the_plan_role_only" {
     }])
     error_message = "The plan role may read exactly the agent role and only through read actions."
   }
+  # The statement really reaches the plan role: the stack passes it on to the baseline.
+  assert {
+    condition     = contains([for s in jsondecode(module.baseline.plan_read_policy).Statement : s.Sid], "ReadAgentRole")
+    error_message = "The plan role must be able to read the agent role."
+  }
 }
+
