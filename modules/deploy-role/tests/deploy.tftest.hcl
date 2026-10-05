@@ -260,6 +260,8 @@ run "quality_trust_names_the_quality_environment_not_the_key" {
   }
 }
 
+# The inclusion compares (action, resource) pairs only. The conditions of each statement are pinned
+# by the literal permission-set runs above, which is what stops a dropped condition.
 # Narrowing rule of docs/ENVIRONMENT_PERMISSIONS.md: allowed(demo) ⊆ allowed(quality) ⊆ allowed(test),
 # as (action, resource pattern) pairs once the account key is taken out of the names. A resource of
 # a narrower role is included when a pattern of the wider one matches it (a registered stack is

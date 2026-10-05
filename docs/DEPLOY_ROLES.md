@@ -21,7 +21,8 @@ Like the agent roles (`docs/AGENT_ROLES.md`): the role is an IAM resource and th
 
 - The execution role `<key>-foundation-testbed-exec-role` does not exist yet. `iam:PassRole` names it, so the deploy role can be created first but cannot deploy until it exists.
 - The GitHub Environments restrict the refs (`feature/*` and `bugfix/*` for `test`, `main` for `quality`, `v*` tags for `demo`): the `sub` carries no ref (`docs/ENVIRONMENTS.md`).
-- The pipeline passes the stack tags (`App`, `Environment` and the others of `docs/TAG_CONVENTION.md`) on every create and update, because no condition key tells the two apart.
+- The template is loaded from the artifact in the **virtual-hosted URL form** `https://<bucket>.s3.<region>.amazonaws.com/<prefix>/...`. The `cloudformation:TemplateUrl` condition does not match the path-style form (`https://s3.<region>.amazonaws.com/<bucket>/...`), so the pipeline must pass the former.
+- The pipeline passes the stack tags (`App`, `Environment` and the others of `docs/TAG_CONVENTION.md`) on every create and update, because no condition key tells the two apart. Tag keys are restricted only on `TagResource` and `UntagResource` (`aws:TagKeys`), not at creation, and tag values are not restricted there: tags describe, names authorize (`docs/TAG_CONVENTION.md`).
 
 ## CI and the `deploy` variable
 
