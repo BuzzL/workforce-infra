@@ -1,11 +1,15 @@
 locals {
   trust = var.trust
 
+  # One principal renders as a string, as before; extra principals turn it into a list.
+  assume_role_principals = local.trust.mode != "assume_role" ? [] : concat([local.trust.assume_role.principal_arn], local.trust.assume_role.extra_principal_arns)
+  assume_role_principal  = jsondecode(length(local.assume_role_principals) == 1 ? jsonencode(local.assume_role_principals[0]) : jsonencode(local.assume_role_principals))
+
   assume_role_policy = local.trust.mode != "assume_role" ? "" : jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
-      Principal = { AWS = local.trust.assume_role.principal_arn }
+      Principal = { AWS = local.assume_role_principal }
       Action    = "sts:AssumeRole"
       Condition = merge(
         {
@@ -15,7 +19,7 @@ locals {
             "aws:PrincipalAccount" = local.trust.assume_role.source_account_id
             "sts:ExternalId"       = local.trust.assume_role.external_ids
           }
-          ArnEquals = { "aws:PrincipalArn" = local.trust.assume_role.principal_arn }
+          ArnEquals = { "aws:PrincipalArn" = local.assume_role_principal }
         },
         try(local.trust.assume_role.session_name_pattern, null) == null ? {} : {
           StringLike = { "sts:RoleSessionName" = local.trust.assume_role.session_name_pattern }
