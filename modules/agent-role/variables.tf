@@ -62,6 +62,17 @@ variable "principal_arn" {
   }
 }
 
+variable "extra_principal_arns" {
+  description = "Exact ARNs of more roles of the workforce account that may assume the role: the matrix runner role of this environment (docs/AGENT_ROLES.md). Same ExternalId and session name pattern as the agent task role."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = length(var.extra_principal_arns) <= 3 && alltrue([for a in var.extra_principal_arns : can(regex("^arn:aws:iam::[0-9]{12}:role(/[A-Za-z0-9+=,.@_-]+)*/wrkf-[A-Za-z0-9+=,.@_-]+$", a))])
+    error_message = "Extra principals are at most three exact roles of the workforce account, named wrkf-<project>-... (no wildcard, not an account root)."
+  }
+}
+
 variable "workforce_account_id" {
   description = "The workforce account, source of the principal."
   type        = string
