@@ -42,3 +42,9 @@ output "plan_read_policy" {
   value       = aws_iam_role_policy.plan_baseline_read.policy
   sensitive   = true
 }
+
+output "oidc_provider_arn" {
+  description = "ARN of the account's GitHub OIDC provider, for the roles a stack trusts to a GitHub Environment (modules/deploy-role). Sensitive: it holds the account ID."
+  value       = aws_iam_openid_connect_provider.github.arn
+  sensitive   = true
+}

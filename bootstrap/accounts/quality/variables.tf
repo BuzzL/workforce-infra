@@ -41,3 +41,20 @@ variable "agent" {
   default   = null
   sensitive = true
 }
+
+variable "deploy" {
+  description = "The deploy role of this account (docs/ENVIRONMENT_PERMISSIONS.md): the testbed's repository and its numeric GitHub ID, the registered stack qualifiers, and where the artifact is built to. Null creates no role. Set in the gitignored terraform.tfvars; never committed."
+  type = object({
+    github_repository    = optional(string, "workforce-testbed")
+    github_repository_id = string
+    stacks               = optional(list(string), ["main"])
+    artifact_bucket      = string
+    artifact_prefix      = string
+  })
+  default = null
+
+  validation {
+    condition     = var.deploy == null || can(regex("^[0-9]+$", var.deploy.github_repository_id))
+    error_message = "The repository ID must be the numeric GitHub ID of the repository."
+  }
+}

@@ -40,6 +40,7 @@ updates:
       - /modules/organization-trail
       - /modules/identity-center-access
       - /modules/agent-role
+      - /modules/deploy-role
       - /modules/cross-account-role
     schedule:
       interval: weekly
