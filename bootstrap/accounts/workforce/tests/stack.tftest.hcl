@@ -1,4 +1,8 @@
-mock_provider "aws" {}
+mock_provider "aws" {
+  mock_data "aws_caller_identity" {
+    defaults = { account_id = "111122223333" }
+  }
+}
 
 variables {
   region            = "eu-west-1"
@@ -34,4 +38,46 @@ run "bootstrap_account_id_must_be_12_digits" {
   }
 
   expect_failures = [var.break_glass_account_id]
+}
+
+# The agent roles of the environment accounts trust this role (docs/AGENT_ROLES.md).
+run "agent_task_role_is_assumed_by_ecs_tasks_of_this_account_only" {
+  command = apply
+
+  assert {
+    condition     = module.agent_role.name == "wrkf-foundation-agent-role"
+    error_message = "The agent task role must be wrkf-foundation-agent-role."
+  }
+
+  assert {
+    condition = jsondecode(module.agent_role.trust_policy) == {
+      Version = "2012-10-17"
+      Statement = [{
+        Effect    = "Allow"
+        Principal = { Service = "ecs-tasks.amazonaws.com" }
+        Action    = "sts:AssumeRole"
+        Condition = {
+          StringEquals = { "aws:SourceAccount" = "111122223333" }
+          ArnLike      = { "aws:SourceArn" = "arn:aws:ecs:eu-west-1:111122223333:task/*" }
+        }
+      }]
+    }
+    error_message = "Only ECS tasks of the workforce account may assume the agent task role."
+  }
+
+  # No permissions yet: each one arrives with the change that needs it.
+  assert {
+    condition     = module.agent_role.permissions_policy == null
+    error_message = "The agent task role starts with no permissions."
+  }
+
+  assert {
+    condition = jsonencode(local.agent_read_statements) == jsonencode([{
+      Sid      = "ReadAgentTaskRole"
+      Effect   = "Allow"
+      Action   = ["iam:GetRole", "iam:ListRolePolicies", "iam:GetRolePolicy", "iam:ListAttachedRolePolicies", "iam:ListRoleTags"]
+      Resource = ["arn:aws:iam::111122223333:role/platform/wrkf-foundation-agent-role"]
+    }])
+    error_message = "The plan role may read exactly the agent task role and only through read actions."
+  }
 }
