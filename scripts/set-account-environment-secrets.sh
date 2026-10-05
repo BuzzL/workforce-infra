@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # WHICH SCRIPT? This one is for ONE MEMBER account (security, workforce, or an account of the
-# Environments OU: test, quality, demo), run once per account after its local bootstrap. Its sibling set-environment-secrets.sh is for the MANAGEMENT account
-# (environments `management` and `management-plan`, the Organization-wide values, management SSO
-# admin session needed); see the header of that script for the full comparison. This script also
+# Environments OU: test, quality, demo), run once per account after its local bootstrap. Its
+# sibling set-environment-secrets.sh is for the MANAGEMENT account (environments `management` and
+# `management-plan`, the Organization-wide values, management SSO admin session needed); see the
+# header of that script for the full comparison. For security and workforce this script also
 # CREATES the two environments of the account and protects the apply one, which the management
-# script does not.
+# script does not; for test, quality and demo it creates nothing (see below).
 #
 # For security and workforce it creates the GitHub Environments <account> and <account>-plan and
 # sets their SECRETS AWS_ROLE_ARN, AWS_ROLE_ID and STATE_BUCKET and the variable AWS_REGION (copied
@@ -43,7 +44,7 @@ cd "$(dirname "$0")/.."
 # The key of an account: the member accounts keep github-infra-<account>; an environment account
 # is named <key>-foundation-infra-role under /platform/ (modules/account-ci-baseline).
 if [ "$kind" = environment ]; then
-  key=$(awk -F'\t' -v n="$account" '$1 == n { print $3 }' scripts/environment-keys.tsv)
+  key=$(awk -F'\t' -v n="$account" '$1 == n { print $3 }' "${ENV_KEYS_FILE:-scripts/environment-keys.tsv}")
   [[ $key =~ ^[a-z]{4}$ ]] || { echo "no four-letter key for $account in scripts/environment-keys.tsv" >&2; exit 1; }
   apply_pattern="^arn:aws:iam::[0-9]{12}:role/platform/$key-foundation-infra-role\$"
   plan_pattern="^arn:aws:iam::[0-9]{12}:role/platform/$key-foundation-infra-plan-role\$"
@@ -91,7 +92,10 @@ id_plan=$(read_value "the plan role ID" '^AROA[A-Z0-9]{12,}$' terraform output -
 # shellcheck disable=SC2329 # called through read_value
 hcl_value() { sed -n "s/^$1[[:space:]]*=[[:space:]]*\"\(.*\)\"[[:space:]]*\$/\1/p" backend.hcl; }
 bucket=$(read_value "the state bucket name in backend.hcl" '^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$' hcl_value bucket)
-region=$(read_value "the region in backend.hcl" '^[a-z]{2}(-[a-z]+)+-[0-9]$' hcl_value region)
+# The region is only a variable of the member accounts' environments: workforce-github sets it for the others.
+if [ "$kind" = member ]; then
+  region=$(read_value "the region in backend.hcl" '^[a-z]{2}(-[a-z]+)+-[0-9]$' hcl_value region)
+fi
 
 # The security stack also manages Identity Center (IAT-33): its plans need the maintainer's
 # user name and the accounts to assign, from the environment, never from a file.
@@ -144,8 +148,7 @@ JSON
 
 set_environment() { # set_environment <env> <role arn> <role id>
   if [ "$kind" = environment ]; then
-    # Owned by workforce-github: it must exist, and its protection is not touched here.
-    gh api "repos/$repo/environments/$1" --silent || { echo "environment $1 does not exist: apply live/github in workforce-github first" >&2; exit 1; }
+    : # Owned by workforce-github: checked to exist before anything is written, protection not touched here.
   elif [ "$1" = "$account" ]; then
     protect_apply_environment
   else
@@ -167,6 +170,12 @@ set_environment() { # set_environment <env> <role arn> <role id>
     fi
   fi
 }
+
+if [ "$kind" = environment ]; then
+  for e in $environments; do
+    gh api "repos/$repo/environments/$e" --silent 2>/dev/null || { echo "environment $e does not exist: apply live/github in workforce-github first" >&2; exit 1; }
+  done
+fi
 
 set_environment "$account" "$arn_apply" "$id_apply"
 set_environment "${account}-plan" "$arn_plan" "$id_plan"
