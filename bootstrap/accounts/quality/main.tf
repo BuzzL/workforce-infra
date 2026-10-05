@@ -18,4 +18,6 @@ module "baseline" {
   state_key          = local.live_state_key
   baseline_state_key = local.state_key
   tags               = var.tags
+
+  extra_read_statements = local.agent_read_statements
 }

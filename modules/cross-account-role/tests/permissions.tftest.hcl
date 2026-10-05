@@ -277,3 +277,29 @@ run "refuses_duplicate_sid" {
     ]
   }
 }
+
+run "documents_are_exposed_for_callers_tests" {
+  command = apply
+
+  variables {
+    statements = [{
+      sid       = "ReadFunctions"
+      actions   = ["lambda:GetAlias"]
+      resources = ["arn:aws:lambda:eu-west-1:111122223333:function:qual-foundation-testbed-*-function"]
+    }]
+  }
+
+  assert {
+    condition     = output.permissions_policy == aws_iam_role_policy.permissions[0].policy && output.trust_policy == aws_iam_role.this.assume_role_policy
+    error_message = "The outputs must be the very documents the role carries."
+  }
+}
+
+run "no_statements_no_permissions_document" {
+  command = apply
+
+  assert {
+    condition     = output.permissions_policy == null
+    error_message = "A role without statements has no permissions document."
+  }
+}

@@ -21,3 +21,9 @@ output "plan_role_id" {
   value       = module.baseline.plan_role_id
   sensitive   = true
 }
+
+output "agent_role_arn" {
+  description = "ARN of the agent role, or null while var.agent is unset. Sensitive: public repository."
+  value       = one(module.agent_role[*].arn)
+  sensitive   = true
+}

@@ -4,3 +4,10 @@ state_bucket_name = "<state-bucket-name>"
 
 # Only for the one-time bootstrap, never in CI: the quality account ID.
 # break_glass_account_id = "<12 digits>"
+
+# The agent role (docs/AGENT_ROLES.md). Leave unset until the agent task role exists in workforce.
+# agent = {
+#   principal_arn        = "arn:aws:iam::<workforce account id>:role/<agent task role>"
+#   workforce_account_id = "<workforce account id>"
+#   external_ids         = ["<ExternalId of this environment>"]
+# }
