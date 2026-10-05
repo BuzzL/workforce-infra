@@ -50,3 +50,41 @@ run "bootstrap_account_id_must_be_12_digits" {
 
   expect_failures = [var.break_glass_account_id]
 }
+
+# The agent role is off until var.agent is set: no role and no extra read for the plan role.
+run "no_agent_role_without_agent_variable" {
+  command = apply
+
+  assert {
+    condition     = length(module.agent_role) == 0 && length(local.agent_read_statements) == 0
+    error_message = "Without var.agent the stack creates no agent role and widens nothing."
+  }
+}
+
+run "agent_role_named_by_key_and_read_by_the_plan_role_only" {
+  command = apply
+
+  variables {
+    agent = {
+      principal_arn        = "arn:aws:iam::444455556666:role/wrkf-foundation-agent-task-role"
+      workforce_account_id = "444455556666"
+      external_ids         = ["0123456789abcdef-current"]
+    }
+  }
+
+  assert {
+    condition     = module.agent_role[0].name == "test-foundation-agent-role"
+    error_message = "The agent role must be test-foundation-agent-role."
+  }
+
+  # The plan role (drift check) may read this one role, which CI never writes.
+  assert {
+    condition = jsonencode(local.agent_read_statements) == jsonencode([{
+      Sid      = "ReadAgentRole"
+      Effect   = "Allow"
+      Action   = ["iam:GetRole", "iam:ListRolePolicies", "iam:GetRolePolicy", "iam:ListAttachedRolePolicies", "iam:ListRoleTags"]
+      Resource = ["arn:aws:iam::111122223333:role/platform/test-foundation-agent-role"]
+    }])
+    error_message = "The plan role may read exactly the agent role and only through read actions."
+  }
+}
