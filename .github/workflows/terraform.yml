@@ -128,11 +128,13 @@ jobs:
       # it reaches the log or the artifact; an artifact of a public repository is public.
       # TF_VAR_agent: the agent role of an environment account, only in its <name>-plan
       # environment and only for this step. The baseline is applied locally with it, so the plan
-      # needs it to be a no-op (IAT-92).
+      # needs it to be a no-op (IAT-92). TF_VAR_matrix is the same for the matrix runner roles of
+      # the workforce account (secret MATRIX of workforce-plan, IAT-46).
       - name: Plan
         id: plan
         env:
           TF_VAR_agent: ${{ secrets.AGENT || 'null' }}
+          TF_VAR_matrix: ${{ secrets.MATRIX || 'null' }}
         run: |
           set +e
           terraform plan -input=false -lock=false -no-color -detailed-exitcode 2>&1 | "$GITHUB_WORKSPACE/scripts/redact.sh" | tee "$RUNNER_TEMP/plan.txt"
