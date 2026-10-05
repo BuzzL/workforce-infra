@@ -24,6 +24,6 @@ The trusted principal is the agent task role in `workforce`, which does not exis
 
 Rotation: set both ExternalIds, apply, switch the secret in `workforce`, remove the old value, apply.
 
-## Before CI plans these stacks
+## CI and the `agent` variable
 
-`.ci-enabled` must not be added to `bootstrap/accounts/test`, `quality` or `demo` until the value of `agent` reaches CI as a secret (`TF_VAR_agent`, like `audit_log_bucket_name`, with `scripts/redact.sh` checked so that the ExternalId never appears in a plan comment). CI plans without it see `agent = null` and propose to destroy the role, which fails the drift check on every run. This belongs to the change that enables these stacks in CI (IAT-79).
+CI plans `bootstrap/accounts/test`, `quality` and `demo` (`.ci-enabled`) through the `<name>-plan` environments. `agent` is never passed to CI: `TF_VAR_agent` is not set, so CI plans with `agent = null`. The agent role exists only where `agent` is set in the local `terraform.tfvars`, and a baseline applied that way shows the role as a change to destroy in every CI plan, which fails the drift check. No environment has an agent role set at present, so these plans are no-ops. The ExternalId is a secret that must not appear in a plan comment, so `scripts/redact.sh` has to mask it before `agent` can reach CI as a secret.

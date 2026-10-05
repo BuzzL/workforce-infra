@@ -275,6 +275,11 @@ done
 expect fail:usage "account secrets script rejects a missing account" scripts/set-account-environment-secrets.sh
 expect fail:usage "account secrets script rejects an unknown account" scripts/set-account-environment-secrets.sh management
 expect fail:usage "account secrets script rejects an unknown option" scripts/set-account-environment-secrets.sh security --nonsense
+printf 'name\tou\tkey\tdescription\ntest\tEnvironments\ttest\tx\n' > keys-no-quality.tsv
+expect fail:"no four-letter key for quality" "account secrets script refuses an environment account without a key" env ENV_KEYS_FILE=keys-no-quality.tsv scripts/set-account-environment-secrets.sh quality
+printf 'quality\tEnvironments\tqa\tx\n' > keys-short.tsv
+expect fail:"no four-letter key for quality" "account secrets script refuses a key that is not four letters" env ENV_KEYS_FILE=keys-short.tsv scripts/set-account-environment-secrets.sh quality
+rm -f keys-no-quality.tsv keys-short.tsv
 write_stack live/other
 expect fail:"unmapped stack: live/other" "ci-stacks rejects an unmapped stack" scripts/ci-stacks.sh
 rm -rf live/other
