@@ -80,4 +80,10 @@ run "agent_task_role_is_assumed_by_ecs_tasks_of_this_account_only" {
     }])
     error_message = "The plan role may read exactly the agent task role and only through read actions."
   }
+
+  # The statement really reaches the plan role: the stack passes it on to the baseline.
+  assert {
+    condition     = contains([for s in jsondecode(module.baseline.plan_read_policy).Statement : s.Sid], "ReadAgentTaskRole")
+    error_message = "The plan role must be able to read the agent role."
+  }
 }

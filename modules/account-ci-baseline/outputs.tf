@@ -36,3 +36,9 @@ output "role_path" {
   description = "IAM path of both roles."
   value       = aws_iam_role.apply.path
 }
+
+output "plan_read_policy" {
+  description = "The read policy of the plan role (JSON), so a stack's tests can assert what it passed in extra_read_statements."
+  value       = aws_iam_role_policy.plan_baseline_read.policy
+  sensitive   = true
+}

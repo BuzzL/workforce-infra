@@ -146,6 +146,11 @@ run "extra_read_statements_reach_both_roles" {
   }
 
   assert {
+    condition     = output.plan_read_policy == aws_iam_role_policy.plan_baseline_read.policy
+    error_message = "The plan read policy output must be the policy the role carries."
+  }
+
+  assert {
     condition     = length(jsondecode(aws_iam_role_policy.plan_baseline_read.policy).Statement) == 3
     error_message = "The two baseline statements must stay, with the extra one added."
   }
