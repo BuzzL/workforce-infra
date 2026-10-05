@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Reads text on stdin and writes it on stdout with what must not appear in a public
 # repository's logs, artifacts and comments replaced:
+#   ExternalIds (64 hex characters; also any SHA-256 digest) -> <external-id>
 #   12-digit numbers (AWS account IDs)   -> <account-id>
 #   the state bucket ($STATE_BUCKET, or anything named workforce-tfstate-*) -> <state-bucket>
 #   the audit log bucket ($AUDIT_LOG_BUCKET, or anything named workforce-audit-logs-*) -> <audit-log-bucket>
@@ -19,7 +20,9 @@ args=(
   -e ':a'
   -e 's/(^|[^A-Za-z0-9_-])(ou-[a-z0-9]{4,32}-[a-z0-9]{8,32}|r-[a-z0-9]{4,32}|o-[a-z0-9]{10,32})($|[^A-Za-z0-9_-])/\1<org-id>\3/g'
   -e 'ta'
-  # UUIDs first: their last group can be 12 digits.
+  # ExternalIds first (docs/AGENT_ROLES.md): a run of 64 hex characters can hold 12 digits.
+  -e 's/[0-9a-fA-F]{64}/<external-id>/g'
+  # UUIDs next: their last group can be 12 digits.
   -e 's/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/<uuid>/g'
   -e 's/[0-9]{12}/<account-id>/g'
   -e 's/(ssoins|ps)-[a-z0-9]{8,32}/<sso-id>/g'
