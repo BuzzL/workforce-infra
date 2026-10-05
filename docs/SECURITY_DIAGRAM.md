@@ -69,6 +69,6 @@ Solid arrows are normal paths, dashed arrows are break-glass or one-off.
 
 ## Not built yet
 
-- The agent, deploy and execution roles of the environment accounts are a decision record (`docs/ENVIRONMENT_PERMISSIONS.md`). The role module exists (`docs/CROSS_ACCOUNT_ROLES.md`) but no stack uses it.
+- The agent and deploy roles of the environment accounts are built (`docs/AGENT_ROLES.md`, `docs/DEPLOY_ROLES.md`) and off until applied locally. The execution roles are still only a decision record (`docs/ENVIRONMENT_PERMISSIONS.md`).
 - The agent task and its ExternalId secret in `workforce` belong to the pipeline.
 - The region SCP and Bedrock cross-region inference profiles are an open risk (`docs/GUARDRAILS_ROLLOUT.md`).
