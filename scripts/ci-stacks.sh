@@ -3,7 +3,12 @@
 # from the path; an unmapped path fails, so a new stack cannot silently run under the
 # wrong environment.
 #   ci-stacks.sh apply  (default)  [{stack, environment, apply}] for runs after a merge
-#   ci-stacks.sh plan              [{stack, environment}] for plans on pull requests
+#   ci-stacks.sh plan              [{stack, environment}] for plans on pull requests and before an apply
+#   ci-stacks.sh gate              reads "<stack> <plan exit code>" lines on stdin, one per stack of `apply`,
+#                                  and prints the `apply` entries whose plan has changes (exit code 2), so only
+#                                  those wait for an approval. It fails, and prints nothing, on a plan with changes
+#                                  in a stack CI does not apply (drift), on any other exit code, and on a missing,
+#                                  duplicated or unknown result.
 #
 #   stack                 apply environment   applied by CI   plan environment
 #   bootstrap             management          no (local)      management-plan
@@ -46,7 +51,12 @@ done < "$keys_file"
 [ -n "$environments" ] || { echo "no account in the Environments OU in $keys_file" >&2; exit 1; }
 
 mode=${1:-apply}
-case "$mode" in apply | plan) ;; *) echo "usage: $0 [apply|plan]" >&2; exit 2 ;; esac
+case "$mode" in apply | plan | gate) ;; *) echo "usage: $0 [apply|plan|gate]" >&2; exit 2 ;; esac
+
+results=""
+if [ "$mode" = gate ]; then results=$(cat); fi
+gate_failed=0
+known=" "
 
 out="["
 sep=""
@@ -78,7 +88,18 @@ while IFS= read -r stack; do
       apply=true plan_env=$env-plan ;;
     *)                     echo "unmapped stack: $stack" >&2; exit 1 ;;
   esac
-  if [ "$mode" = plan ]; then
+  if [ "$mode" = gate ]; then
+    known+="$stack "
+    code=$(awk -v s="$stack" '$1 == s { print $2 }' <<< "$results")
+    case "$code" in
+      0) continue ;;
+      2) if [ "$apply" = true ]; then :; else echo "drift in $stack, which CI does not apply: its plan has changes" >&2; gate_failed=1; continue; fi ;;
+      "") echo "no plan result for $stack" >&2; gate_failed=1; continue ;;
+      *[!0-9]*) echo "invalid plan result for $stack: $code" >&2; gate_failed=1; continue ;;
+      *) echo "the plan of $stack failed (exit code $code)" >&2; gate_failed=1; continue ;;
+    esac
+    out+="$sep{\"stack\":\"$stack\",\"environment\":\"$env\",\"apply\":$apply}"
+  elif [ "$mode" = plan ]; then
     [ -n "$plan_env" ] || continue
     out+="$sep{\"stack\":\"$stack\",\"environment\":\"$plan_env\"}"
   else
@@ -86,4 +107,16 @@ while IFS= read -r stack; do
   fi
   sep=","
 done < <(scripts/stacks.sh roots)
+if [ "$mode" = gate ]; then
+  # A result for a stack that is not in the CI set, or two for the same stack, means the plan jobs and
+  # this script disagree about the stacks: fail rather than guess.
+  seen=" "
+  while read -r stack _; do
+    [ -n "$stack" ] || continue
+    case "$known" in *" $stack "*) ;; *) echo "plan result for an unknown stack: $stack" >&2; gate_failed=1 ;; esac
+    case "$seen" in *" $stack "*) echo "duplicate plan result for $stack" >&2; gate_failed=1 ;; esac
+    seen+="$stack "
+  done <<< "$results"
+  [ "$gate_failed" = 0 ] || exit 1
+fi
 echo "$out]"

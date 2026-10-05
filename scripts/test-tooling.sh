@@ -198,6 +198,28 @@ case "$got" in *'"stack":"bootstrap/accounts/test"'*) echo "FAIL ci-stacks: the 
 rm live/environments/test/.ci-enabled
 expect fail:unmapped "ci-stacks does not map bootstrap/accounts/staging" sh -c 'mkdir -p bootstrap/accounts/staging && printf "terraform {}\n" > bootstrap/accounts/staging/main.tf && scripts/ci-stacks.sh; rc=$?; rm -rf bootstrap/accounts/staging; exit $rc'
 expect fail:usage "ci-stacks rejects an unknown mode" scripts/ci-stacks.sh nonsense
+# Gate: after a merge only the stacks whose plan has changes wait for an approval. Stacks here: bootstrap
+# (drift check only), live/management and live/environments/test (applied by CI).
+touch live/environments/test/.ci-enabled
+gate() { printf '%s\n' "$@" | scripts/ci-stacks.sh gate; }
+got=$(gate "bootstrap 0" "live/environments/test 0" "live/management 0")
+if [ "$got" = "[]" ]; then echo "ok   ci-stacks gate: no change anywhere asks for no approval"; else echo "FAIL ci-stacks gate no-op"; echo "$got"; failed=1; fi
+got=$(gate "bootstrap 0" "live/environments/test 2" "live/management 0")
+want='[{"stack":"live/environments/test","environment":"test","apply":true}]'
+if [ "$got" = "$want" ]; then echo "ok   ci-stacks gate: one changed stack asks once, for its own environment"; else echo "FAIL ci-stacks gate one change"; echo "$got"; failed=1; fi
+got=$(gate "bootstrap 0" "live/environments/test 2" "live/management 2")
+want='[{"stack":"live/environments/test","environment":"test","apply":true},{"stack":"live/management","environment":"management","apply":true}]'
+if [ "$got" = "$want" ]; then echo "ok   ci-stacks gate: every changed stack is kept"; else echo "FAIL ci-stacks gate two changes"; echo "$got"; failed=1; fi
+expect fail:drift "ci-stacks gate fails on changes in a stack CI does not apply" gate "bootstrap 2" "live/environments/test 0" "live/management 0"
+expect fail:drift "ci-stacks gate fails on drift even when another stack has changes to apply" gate "bootstrap 2" "live/environments/test 2" "live/management 0"
+expect fail:failed "ci-stacks gate fails when a plan failed (exit code 1)" gate "bootstrap 0" "live/environments/test 1" "live/management 0"
+expect fail:failed "ci-stacks gate fails on any other exit code" gate "bootstrap 0" "live/environments/test 0" "live/management 137"
+expect fail:"no plan result" "ci-stacks gate fails on a missing result" gate "bootstrap 0" "live/management 0"
+expect fail:"no plan result" "ci-stacks gate fails on empty input" gate ""
+expect fail:"unknown stack" "ci-stacks gate fails on a result for an unknown stack" gate "bootstrap 0" "live/environments/test 0" "live/management 0" "live/other 0"
+expect fail:duplicate "ci-stacks gate fails on a duplicated result" gate "bootstrap 0" "live/environments/test 0" "live/management 0" "live/management 2"
+expect fail:invalid "ci-stacks gate fails on a result that is not a number" gate "bootstrap 0" "live/environments/test 0" "live/management x"
+rm live/environments/test/.ci-enabled
 # Names are explanatory, keys are four lowercase letters, unique (scripts/environment-keys.tsv).
 # The shipped table passes (every mapping above), and each way of breaking it is refused.
 printf 'quality\tEnvironments\tqa\tx\n' > bad-keys.tsv
@@ -358,7 +380,7 @@ CASES = [
     ("plan job cannot have write-all", PLAN_PERMS, "    permissions: write-all\n    env:", "plan: permissions must be exactly"),
     ("plan job cannot write issues (comments)", PLAN_PERMS, "    permissions:\n      id-token: write\n      contents: read\n      issues: write\n    env:", "plan: permissions must be exactly"),
     ("no workflow-level write", "permissions: {}\n\njobs:", "permissions:\n  pull-requests:  write\n\njobs:", "workflow-level permissions"),
-    ("forks must be skipped, however the condition is written", "github.event.pull_request.head.repo.full_name == github.repository &&", "(github.event.pull_request.head.repo.full_name == github.repository || true) &&", "plan: the condition"),
+    ("forks must be skipped, however the condition is written", "github.event.pull_request.head.repo.full_name == github.repository)) &&", "(github.event.pull_request.head.repo.full_name == github.repository || true))) &&", "plan: the condition"),
     ("Apply guard cannot be widened", "if: matrix.apply == true && steps.plan", "if: matrix.apply == true || steps.plan", "Apply must be guarded"),
     ("the account ID stays masked, even next to a comment", "mask-aws-account-id: true", "mask-aws-account-id: false # mask-aws-account-id: true", "must mask the account ID"),
     ("the role stays a secret (bracket syntax)", "role-to-assume: ${{ secrets.AWS_ROLE_ARN }}", "role-to-assume: ${{ vars['AWS_ROLE_ARN'] }}", "must come from the secret"),
@@ -383,6 +405,18 @@ CASES = [
     ("checkout does not persist credentials", "        with:\n          persist-credentials: false\n", "        with: {}\n", "must not persist credentials"),
     ("the comment job only posts a finished plan", "needs.plan.result == 'failure')", "needs.plan.result == 'failure' || true)", "comment: it must only post a finished plan"),
     ("the comment is updated in place", "--edit-last --create-if-none", "--create-if-none", "updated in place"),
+    ("changes has no environment, so it never waits for an approval", "  changes:\n    needs: plan\n", "  changes:\n    needs: plan\n    environment: management\n", "changes: it must have no environment"),
+    ("changes cannot get AWS credentials", "  changes:\n    needs: plan\n    if: github.event_name == 'push'\n    runs-on: ubuntu-latest\n    permissions:\n      contents: read\n", "  changes:\n    needs: plan\n    if: github.event_name == 'push'\n    runs-on: ubuntu-latest\n    permissions:\n      id-token: write\n      contents: read\n", "changes: permissions must be exactly"),
+    ("changes only runs after a merge", "  changes:\n    needs: plan\n    if: github.event_name == 'push'", "  changes:\n    needs: plan\n    if: always()", "changes: it must only run on push"),
+    ("changes does not run after a failed plan", "  changes:\n    needs: plan\n", "  changes:\n    needs: [discover, plan]\n", "changes: it must wait for the plans"),
+    ("changes passes the plan results through the gate", "scripts/ci-stacks.sh gate", "scripts/ci-stacks.sh apply", "must go through scripts/ci-stacks.sh gate"),
+    ("apply waits for changes, not only for the stack list", "  apply:\n    needs: changes\n", "  apply:\n    needs: discover\n", "apply: it must wait for changes"),
+    ("apply only runs the stacks that changes passed", "fromJSON(needs.changes.outputs.apply_stacks)", "fromJSON(needs.discover.outputs.plan_stacks)", "apply: the matrix must be the stacks that changes passed"),
+    ("changes downloads every plan artifact", "          pattern: plan-*\n          merge-multiple: true\n          path: plans\n      - id: gate", "          pattern: plan-1\n          merge-multiple: true\n          path: plans\n      - id: gate", "changes: it must download every plan artifact"),
+    ("changes fails when the gate fails", "          set -euo pipefail\n          apply=$(cat", "          apply=$(cat", "changes: the gate step must fail on a failed gate"),
+    ("changes passes on the output of the gate", "apply_stacks: ${{ steps.gate.outputs.apply }}", "apply_stacks: '[]'", "changes: apply_stacks must be the output of the gate"),
+    ("the plan job uploads its result file", "            ${{ runner.temp }}/result-${{ strategy.job-index }}.txt\n", "", "plan: the result file must be uploaded"),
+    ("the comment is only posted on a pull request", "always() && github.event_name == 'pull_request' &&", "always() &&", "comment: it must only post a finished plan"),
     ("an apply is never cancelled", "cancel-in-progress: false", "cancel-in-progress: true", "never be cancelled"),
     ("only the comment job uses github.token", "      STACK: ${{ matrix.stack }}\n      INDEX", "      X: ${{ github.token }}\n      STACK: ${{ matrix.stack }}\n      INDEX", "only the comment job may use github.token"),
     ("no manual trigger", "on:\n  pull_request:", "on:\n  workflow_dispatch:\n  pull_request:", "only the pull_request and push triggers"),

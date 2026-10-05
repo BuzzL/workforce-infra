@@ -42,7 +42,6 @@ jobs:
     permissions:
       contents: read
     outputs:
-      apply_stacks: ${{ steps.stacks.outputs.apply }}
       plan_stacks: ${{ steps.stacks.outputs.plan }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -50,19 +49,20 @@ jobs:
           persist-credentials: false
       - id: stacks
         run: |
-          apply=$(scripts/ci-stacks.sh apply)
           plan=$(scripts/ci-stacks.sh plan)
-          echo "apply=$apply" >> "$GITHUB_OUTPUT"
           echo "plan=$plan" >> "$GITHUB_OUTPUT"
 
   # Runs the code of the pull request (providers, data sources) with a role that can only
   # read. No pull-requests permission here: the comment is posted by the job below.
-  # Pull requests from forks get no OIDC token, so they are skipped.
+  # Pull requests from forks get no OIDC token, so they are skipped. After a merge it plans
+  # every stack the same way, so that `changes` can keep the stacks without changes away
+  # from the approval of their environment.
   plan:
     needs: discover
     if: >
-      github.event_name == 'pull_request' &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event_name == 'push' ||
+      (github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository)) &&
       needs.discover.outputs.plan_stacks != '[]'
     name: plan ${{ matrix.stack }}
     runs-on: ubuntu-latest
@@ -72,7 +72,7 @@ jobs:
         include: ${{ fromJSON(needs.discover.outputs.plan_stacks) }}
     environment: ${{ matrix.environment }}
     concurrency:
-      group: plan-${{ github.event.pull_request.number }}-${{ matrix.stack }}
+      group: plan-${{ github.event.pull_request.number || github.run_id }}-${{ matrix.stack }}
       cancel-in-progress: true
     permissions:
       id-token: write
@@ -142,27 +142,36 @@ jobs:
             echo
             head -c 20000 "$RUNNER_TEMP/plan.txt"
           } > "$RUNNER_TEMP/plan-$INDEX.md"
+          echo "$STACK $code" > "$RUNNER_TEMP/result-$INDEX.txt"
           echo "exitcode=$code" >> "$GITHUB_OUTPUT"
           [ "$code" -eq 0 ] || [ "$code" -eq 2 ]
-      # A failure before the plan (for example in init) must still replace the comment.
+      # A failure before the plan (for example in init) must still replace the comment, and
+      # must not look like a plan without changes: `changes` fails on the code 1.
       - name: Placeholder when there is no plan
         if: always()
         run: |
           f="$RUNNER_TEMP/plan-$INDEX.md"
           [ -s "$f" ] || printf '%s\n\n%s\n' "### \`$STACK\`: The plan failed." "The job failed before the plan; see the job log." > "$f"
+          [ -s "$RUNNER_TEMP/result-$INDEX.txt" ] || echo "$STACK 1" > "$RUNNER_TEMP/result-$INDEX.txt"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: plan-${{ strategy.job-index }}
-          path: ${{ runner.temp }}/plan-${{ strategy.job-index }}.md
+          path: |
+            ${{ runner.temp }}/plan-${{ strategy.job-index }}.md
+            ${{ runner.temp }}/result-${{ strategy.job-index }}.txt
           retention-days: 3
           if-no-files-found: error
+          # Re-running a failed job after a local apply uploads the same name again.
+          overwrite: true
 
   # Redacts, fences and posts what the plan job produced, which it treats as untrusted text.
   # No AWS credentials and no environment; it checks out one script, nothing else.
   comment:
     needs: plan
-    if: always() && (needs.plan.result == 'success' || needs.plan.result == 'failure')
+    if: >
+      always() && github.event_name == 'pull_request' &&
+      (needs.plan.result == 'success' || needs.plan.result == 'failure')
     runs-on: ubuntu-latest
     concurrency:
       group: comment-${{ github.event.pull_request.number }}
@@ -211,16 +220,44 @@ jobs:
           head -c 60000 full.md > body.md
           gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --edit-last --create-if-none --body-file body.md
 
+  # After a merge, keeps the stacks whose plan has no changes away from the approval of their
+  # environment: it passes on the ones CI applies and whose plan has changes, and fails on drift
+  # in a stack CI does not apply and on a plan that failed. No AWS credentials and no environment.
+  changes:
+    needs: plan
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      apply_stacks: ${{ steps.gate.outputs.apply }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: plan-*
+          merge-multiple: true
+          path: plans
+      - id: gate
+        run: |
+          set -euo pipefail
+          apply=$(cat plans/result-*.txt | scripts/ci-stacks.sh gate)
+          echo "apply=$apply" >> "$GITHUB_OUTPUT"
+
+  # Only the stacks with changes get here, one approval each. The plan is made again with the
+  # write role, and that plan is the one applied.
   apply:
-    needs: discover
-    if: github.event_name == 'push' && needs.discover.outputs.apply_stacks != '[]'
+    needs: changes
+    if: github.event_name == 'push' && needs.changes.outputs.apply_stacks != '[]'
     name: ${{ matrix.stack }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       max-parallel: 1
       matrix:
-        include: ${{ fromJSON(needs.discover.outputs.apply_stacks) }}
+        include: ${{ fromJSON(needs.changes.outputs.apply_stacks) }}
     environment: ${{ matrix.environment }}
     concurrency:
       group: terraform-${{ matrix.stack }}
@@ -280,8 +317,8 @@ jobs:
           code=${PIPESTATUS[0]}
           echo "exitcode=$code" >> "$GITHUB_OUTPUT"
           [ "$code" -eq 0 ] || [ "$code" -eq 2 ]
-      # A bootstrap plan with changes means the local apply has not been done yet (or the
-      # account drifted): approve this job after the local apply.
+      # `changes` only passes stacks that CI applies, so this is unreachable unless the matrix
+      # and the gate disagree: then fail rather than skip the drift.
       - name: Drift in a stack that CI does not apply
         if: matrix.apply == false && steps.plan.outputs.exitcode == '2'
         run: |
