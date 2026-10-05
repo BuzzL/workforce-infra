@@ -29,7 +29,7 @@ Rejected: letting CI apply its own baseline. It needs `iam:PutRolePolicy` on its
 
 ### 3. State stays in the management bucket
 
-One bucket, one key per stack: the key CI derives from the stack path. The apply role reaches `live/accounts/<account>/terraform.tfstate` (and its `.tflock`) only. For the accounts of the Environments OU the account's own stack is `live/environments/<name>`, so that key is `live/environments/<name>/terraform.tfstate`. Both roles read `bootstrap/accounts/<account>/terraform.tfstate`, the state of the baseline stack, and the apply role takes its lock (the job after a merge plans the stack as a drift check), but neither can write it: it is written locally with the maintainer's own credentials, so CI cannot change its own role. The bucket policy in `bootstrap/` names those roles, one exact ARN per Allow and no wildcard. It is driven by the local variable `member_account_ids`, empty until the account's stack exists: S3 rejects a policy that names a principal that is not there yet.
+One bucket, one key per stack: the key CI derives from the stack path. The apply role reaches `live/accounts/<account>/terraform.tfstate` (and its `.tflock`) only. For the accounts of the Environments OU the account's own stack is `live/environments/<name>`, so that key is `live/environments/<name>/terraform.tfstate`. Both roles read `bootstrap/accounts/<account>/terraform.tfstate`, the state of the baseline stack, and neither can write it (the job after a merge plans the stack as a drift check with the plan role, without a lock): it is written locally with the maintainer's own credentials, so CI cannot change its own role. The bucket policy in `bootstrap/` names those roles, one exact ARN per Allow and no wildcard. It is driven by the local variable `member_account_ids`, empty until the account's stack exists: S3 rejects a policy that names a principal that is not there yet.
 
 Rejected: a bucket per account, which needs a second bootstrap for every account and splits the state.
 
@@ -77,7 +77,7 @@ Done for `security` and `workforce`. The `imports.tf` files and the `removed` bl
 3. `security`: in `live/accounts/security`, `terraform plan` must read only that the resources are removed from the state and **0 to destroy**. Apply.
    `workforce`: from the checkout of `main`, where `live/accounts/workforce` still exists, `terraform state rm module.baseline`. The state is versioned, so the previous version is the way back.
 4. Both baseline stacks and `live/accounts/security` plan clean. Commit the `.ci-enabled` markers of `bootstrap/accounts/<account>`; the next pull request plans them through OIDC, which must be a no-op.
-5. **Do not merge before step 3.** After the merge the post-merge job fails for a stack that CI does not apply when its plan has changes, and the plan of `live/accounts/security` has the removals until step 3 is applied.
+5. **Do not merge before step 3.** After the merge the post-merge plan fails the run for a stack that CI does not apply when its plan has changes, and the plan of `live/accounts/security` has the removals until step 3 is applied.
 6. `live/accounts/workforce` returns when the account owns resources.
 
 If step 2 shows a destroy or an add, do not apply: the baseline in the account differs from the module, which is a finding to understand first.
