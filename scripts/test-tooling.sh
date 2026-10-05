@@ -267,6 +267,11 @@ sed 's#live/environments/quality#live/environments/qualx#' fixture-root/live/env
 expect fail:"backend.hcl.example must hold" "check-accounts refuses a backend key that is not the stack path" env ACCOUNTS_FILE=accounts.tf ROOT_DIR=fixture-root scripts/check-accounts.sh
 rm -rf fixture-root
 rm -f accounts.tf accounts-comment.tf accounts-extra.tf keys-no-demo.tsv keys-wrong-ou.tsv empty-accounts.tf
+# The accounts MEMBER_ACCOUNT_IDS may name are the same in the script that sets the secret and in the variable of bootstrap/.
+for acct in security workforce test quality demo; do
+  grep -q "member_account_ids.*\"$acct\"" "$root/bootstrap/variables.tf" && grep -q "(security|workforce|test|quality|demo)" "$root/scripts/set-environment-secrets.sh" \
+    && echo "ok   member accounts: $acct is accepted by bootstrap/variables.tf and set-environment-secrets.sh" || { echo "FAIL member accounts: $acct differs between bootstrap/variables.tf and set-environment-secrets.sh"; failed=1; }
+done
 expect fail:usage "account secrets script rejects a missing account" scripts/set-account-environment-secrets.sh
 expect fail:usage "account secrets script rejects an unknown account" scripts/set-account-environment-secrets.sh management
 expect fail:usage "account secrets script rejects an unknown option" scripts/set-account-environment-secrets.sh security --nonsense
