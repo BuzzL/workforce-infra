@@ -334,6 +334,7 @@ redacted=$(printf '%s\n' \
   'r-ab12 r-cd34,ou-ab12-cdef5678,ou-ab12-cdef5679 arn:aws:organizations::x:ou/o-abcdefghij/ou-ab12-cdef5678' \
   'contact me@example.com sub repo:BuzzL@6116516/workforce-infra@1394667495:environment:m' \
   'instance_arn = arn:aws:sso:::instance/ssoins-1a2b3c4d5e6f7a8b ps-1a2b3c4d5e6f7a8b principal_id = 11111111-2222-3333-4444-555555555555' \
+  'external_ids = ["0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"] 123456789012' \
   '  ~ resource "aws_iam_role" "x" {' | STATE_BUCKET=other-bucket-77 AUDIT_LOG_BUCKET=my-logs-55 scripts/redact.sh)
 want_redacted=$(printf '%s\n' \
   'id=arn:aws:iam::<account-id>:role/x <aws-id>:GitHubActions' \
@@ -344,8 +345,9 @@ want_redacted=$(printf '%s\n' \
   '<org-id> <org-id>,<org-id>,<org-id> arn:aws:organizations::x:ou/<org-id>/<org-id>' \
   'contact <email> sub repo:BuzzL@6116516/workforce-infra@1394667495:environment:m' \
   'instance_arn = arn:aws:sso:::instance/<sso-id> <sso-id> principal_id = <uuid>' \
+  'external_ids = ["<external-id>"] <account-id>' \
   '  ~ resource "aws_iam_role" "x" {')
-if [ "$redacted" = "$want_redacted" ]; then echo "ok   redact hides account IDs, unique IDs, bucket names, Organization IDs and emails only"; else echo "FAIL redact"; echo "$redacted"; failed=1; fi
+if [ "$redacted" = "$want_redacted" ]; then echo "ok   redact hides account IDs, unique IDs, ExternalIds, bucket names, Organization IDs and emails only"; else echo "FAIL redact"; echo "$redacted"; failed=1; fi
 
 # The public-docs gate passes on placeholders and refuses an account ID, an ARN with an ID and an email.
 mkdir -p docs-ok docs-id docs-arn docs-mail docs-sep docs-letters docs-13 docs-gov
@@ -416,6 +418,11 @@ CASES = [
     ("changes fails when the gate fails", "          set -euo pipefail\n          apply=$(cat", "          apply=$(cat", "changes: the gate step must fail on a failed gate"),
     ("changes passes on the output of the gate", "apply_stacks: ${{ steps.gate.outputs.apply }}", "apply_stacks: '[]'", "changes: apply_stacks must be the output of the gate"),
     ("the plan job uploads its result file", "            ${{ runner.temp }}/result-${{ strategy.job-index }}.txt\n", "", "plan: the result file must be uploaded"),
+    ("the plan job gets the agent role from the secret AGENT", "TF_VAR_agent: ${{ secrets.AGENT || 'null' }}", "TF_VAR_agent: ${{ secrets.AGENT }}", "plan: the agent role must come from the secret AGENT"),
+    ("the agent role is not hardcoded", "TF_VAR_agent: ${{ secrets.AGENT || 'null' }}", "TF_VAR_agent: 'null'", "plan: the agent role must come from the secret AGENT"),
+    ("the apply job never receives the agent role", "      STACK: ${{ matrix.stack }}\n    defaults:", "      TF_VAR_agent: ${{ secrets.AGENT || 'null' }}\n      STACK: ${{ matrix.stack }}\n    defaults:", "the secret AGENT must be used once"),
+    ("no other step of the apply job reads the agent role", "      - name: Apply\n        if:", "      - name: Apply\n        env:\n          LEAK: ${{ secrets.AGENT }}\n        if:", "the secret AGENT must be used once"),
+    ("the Init step of the plan job does not get the agent role", "      - name: Init\n        run: |", "      - name: Init\n        env:\n          TF_VAR_agent: ${{ secrets.AGENT || 'null' }}\n        run: |", "the secret AGENT must be used once"),
     ("the comment is only posted on a pull request", "always() && github.event_name == 'pull_request' &&", "always() &&", "comment: it must only post a finished plan"),
     ("an apply is never cancelled", "cancel-in-progress: false", "cancel-in-progress: true", "never be cancelled"),
     ("only the comment job uses github.token", "      STACK: ${{ matrix.stack }}\n      INDEX", "      X: ${{ github.token }}\n      STACK: ${{ matrix.stack }}\n      INDEX", "only the comment job may use github.token"),
@@ -562,5 +569,47 @@ expect pass "agent vars: a file without a trailing newline gets the block" agent
 expect pass "agent vars: ...and keeps its own line" grep -q '^region = "x"' "$bad"
 cp good.tfvars "$bad"
 expect pass "agent vars: the principal and account are written" grep -q "principal_arn        = \"$agent_arn\"" "$agent_root/bootstrap/accounts/quality/terraform.tfvars"
+
+# --set-secrets: the secret AGENT of each <name>-plan environment, through gh on stdin, never printed.
+mkdir -p fake-gh
+cat > fake-gh/gh <<'SH'
+#!/usr/bin/env bash
+n=$(( $(cat gh.count 2>/dev/null || echo 0) + 1 ))
+echo "$n" > gh.count
+printf '%s\n' "$*" >> gh.args
+cat > "gh.in.$n"
+[ "${FAKE_GH_FAIL_AT:-0}" -ne "$n" ]
+SH
+chmod +x fake-gh/gh
+rm -f gh.args gh.count gh.in.*
+expect pass "agent vars: --set-secrets sets AGENT in the three plan environments" env PATH="$PWD/fake-gh:$PATH" AGENT_ROLE_ARN= "$agent_root/scripts/set-agent-role-vars.sh" --set-secrets
+expect pass "agent vars: ...one call per <name>-plan environment, by name" test "$(sort gh.args | tr '\n' '|')" = "secret set AGENT --repo BuzzL/workforce-infra --env demo-plan|secret set AGENT --repo BuzzL/workforce-infra --env quality-plan|secret set AGENT --repo BuzzL/workforce-infra --env test-plan|"
+expect pass "agent vars: ...the value is on stdin, in the shape Terraform reads from TF_VAR_agent" grep -qE '^\{principal_arn="arn:aws:iam::[0-9]{12}:role/platform/wrkf-foundation-agent-role",workforce_account_id="444455556666",external_ids=\["[0-9a-f]{64}"\]\}$' gh.in.*
+expect pass "agent vars: ...the value is never on a command line" test -z "$(grep -E '[0-9a-f]{64}|444455556666' gh.args)"
+env PATH="$PWD/fake-gh:$PATH" "$agent_root/scripts/set-agent-role-vars.sh" --set-secrets > secrets.out 2>&1 || true
+expect pass "agent vars: ...and never printed" test -z "$(grep -E '[0-9a-f]{64}|arn:aws' secrets.out)"
+cp "$agent_root/bootstrap/accounts/test/terraform.tfvars" before.tfvars
+printf 'region = "x"\n' > "$agent_root/bootstrap/accounts/test/terraform.tfvars"
+expect fail:"no agent block" "agent vars: --set-secrets without a block is refused" env PATH="$PWD/fake-gh:$PATH" "$agent_root/scripts/set-agent-role-vars.sh" --set-secrets
+cp before.tfvars "$agent_root/bootstrap/accounts/test/terraform.tfvars"
+# A bad file in the last stack stops everything before the first call to gh: nothing is half set.
+rm -f gh.args gh.count gh.in.*
+cp "$agent_root/bootstrap/accounts/demo/terraform.tfvars" demo.good
+sed -i.bak 's/wrkf-foundation-agent-role/other-role/' "$agent_root/bootstrap/accounts/demo/terraform.tfvars"
+expect fail:"expected shape" "agent vars: --set-secrets refuses a block that is not in the expected shape" env PATH="$PWD/fake-gh:$PATH" "$agent_root/scripts/set-agent-role-vars.sh" --set-secrets
+expect pass "agent vars: ...and calls gh for none of the environments" test ! -e gh.count
+cp demo.good "$agent_root/bootstrap/accounts/demo/terraform.tfvars"
+sed -i.bak 's/workforce_account_id = "444455556666"/workforce_account_id = "111122223333"/' "$agent_root/bootstrap/accounts/demo/terraform.tfvars"
+expect fail:"expected shape" "agent vars: --set-secrets refuses an account that is not the principal's" env PATH="$PWD/fake-gh:$PATH" "$agent_root/scripts/set-agent-role-vars.sh" --set-secrets
+cp demo.good "$agent_root/bootstrap/accounts/demo/terraform.tfvars"
+# A failing gh call is reported and stops the script; a rerun sets the rest.
+rm -f gh.args gh.count gh.in.*
+expect fail "agent vars: --set-secrets stops when gh fails" env PATH="$PWD/fake-gh:$PATH" FAKE_GH_FAIL_AT=2 "$agent_root/scripts/set-agent-role-vars.sh" --set-secrets
+expect pass "agent vars: ...after the first environment only" test "$(cat gh.count)" -eq 2
+rm -f gh.args gh.count gh.in.*
+# During a rotation the secret carries both ExternalIds, the new one first.
+agent --rotate > /dev/null
+expect pass "agent vars: --set-secrets carries both ExternalIds of a rotation" bash -c "env PATH=\"$PWD/fake-gh:\$PATH\" $agent_root/scripts/set-agent-role-vars.sh --set-secrets >/dev/null && grep -qE 'external_ids=\\[\"[0-9a-f]{64}\",\"[0-9a-f]{64}\"\\]' gh.in.1"
+agent --drop-old > /dev/null
 
 exit "$failed"

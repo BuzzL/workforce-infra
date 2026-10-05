@@ -63,6 +63,12 @@ need.(jobs["apply"].dig("concurrency", "cancel-in-progress") == false, "apply: a
   need.(e["TF_VAR_management_account_id"] == "${{ secrets.MANAGEMENT_ACCOUNT_ID }}", "#{j}: the management account ID must be a secret")
 end
 
+# The agent role variable (IAT-92) reaches the Plan step of the plan job only: the apply job never plans
+# a baseline, and no other step needs the ExternalId.
+plan_step = jobs["plan"]["steps"].find { |s| s["id"] == "plan" } || {}
+need.((plan_step["env"] || {})["TF_VAR_agent"] == "${{ secrets.AGENT || \x27null\x27 }}", "plan: the agent role must come from the secret AGENT, null when unset")
+need.(text.scan(/secrets\s*\.\s*AGENT\b/i).size == 1, "the secret AGENT must be used once, as TF_VAR_agent of the Plan step of the plan job")
+
 # Actions: an allowlist, pinned by commit SHA (case-sensitive), checkout without credentials.
 allowed = %r{\A(actions/checkout|hashicorp/setup-terraform|aws-actions/configure-aws-credentials|actions/upload-artifact|actions/download-artifact)@[0-9a-f]{40}\z}
 jobs.each do |j, job|
@@ -89,10 +95,10 @@ jobs.each do |j, job|
   end
 end
 
-# Contexts: the only variable is AWS_REGION, the only secrets are the twelve below, no bracket syntax.
+# Contexts: the only variable is AWS_REGION, the only secrets are the thirteen below, no bracket syntax.
 text.scan(/\$\{\{(.*?)\}\}/m).flatten.each do |expr|
   expr.scan(/\bvars\s*\.\s*(\w+)/i).flatten.each { |n| need.(n == "AWS_REGION", "variable not allowed: #{n}") }
-  expr.scan(/\bsecrets\s*\.\s*(\w+)/i).flatten.each { |n| need.(%w[AWS_ROLE_ARN AWS_ROLE_ID STATE_BUCKET ORGANIZATION_ROOT_ID ACCOUNT_EMAIL_BASE BUDGET_ALERT_EMAIL MEMBER_ACCOUNT_IDS MAINTAINER_USERNAME ASSIGNMENT_ACCOUNT_IDS AUDIT_LOG_BUCKET ORGANIZATION_ID MANAGEMENT_ACCOUNT_ID].include?(n), "secret not allowed: #{n}") }
+  expr.scan(/\bsecrets\s*\.\s*(\w+)/i).flatten.each { |n| need.(%w[AWS_ROLE_ARN AWS_ROLE_ID STATE_BUCKET ORGANIZATION_ROOT_ID ACCOUNT_EMAIL_BASE BUDGET_ALERT_EMAIL MEMBER_ACCOUNT_IDS MAINTAINER_USERNAME ASSIGNMENT_ACCOUNT_IDS AUDIT_LOG_BUCKET ORGANIZATION_ID MANAGEMENT_ACCOUNT_ID AGENT].include?(n), "secret not allowed: #{n}") }
   need.(expr !~ /\b(vars|secrets)\s*\[/i, "vars and secrets must not use bracket syntax: #{expr.strip}")
   need.(expr !~ /\bsecrets\s*(\}|$)/i, "the whole secrets context must not be used")
 end

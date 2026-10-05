@@ -7,21 +7,26 @@
 #   scripts/set-agent-role-vars.sh --rotate    add a new ExternalId in front, keep the current one
 #   scripts/set-agent-role-vars.sh --drop-old  keep only the first ExternalId (after the rotation)
 #   scripts/set-agent-role-vars.sh --check     names and counts only, writes nothing
+#   scripts/set-agent-role-vars.sh --set-secrets   sets the secret AGENT of the <name>-plan GitHub Environments
+#                                              from the files, so that the CI plan of the baseline is a no-op
+#                                              (needs gh, authenticated as the maintainer; run it after each apply
+#                                              that changes `agent`, and before --drop-old is merged)
 #
 # The principal is the agent task role of workforce, read from the Terraform output
 # `agent_role_arn` of bootstrap/accounts/workforce (initialised, applied), or from the environment
 # variable AGENT_ROLE_ARN. Each ExternalId is 64 random hex characters. The values are written to
-# the files only (mode 600) and are never printed or put on a command line. Rotation order
+# the files only (mode 600) and are never printed or put on a command line; the secret is passed
+# to gh on stdin. Rotation order
 # (docs/ENVIRONMENT_PERMISSIONS.md): --rotate and apply, switch the secret in workforce, --drop-old
 # and apply.
 set -euo pipefail
 
 mode=${1:-create}
 case "$mode" in
-  create | --rotate | --drop-old | --check) ;;
-  *) echo "usage: $0 [--rotate|--drop-old|--check]" >&2; exit 2 ;;
+  create | --rotate | --drop-old | --check | --set-secrets) ;;
+  *) echo "usage: $0 [--rotate|--drop-old|--check|--set-secrets]" >&2; exit 2 ;;
 esac
-[ $# -le 1 ] || { echo "usage: $0 [--rotate|--drop-old|--check]" >&2; exit 2; }
+[ $# -le 1 ] || { echo "usage: $0 [--rotate|--drop-old|--check|--set-secrets]" >&2; exit 2; }
 
 umask 077
 tmp=
@@ -33,7 +38,7 @@ begin='# BEGIN agent (scripts/set-agent-role-vars.sh)'
 end='# END agent'
 
 principal=${AGENT_ROLE_ARN:-}
-if [ -z "$principal" ] && [ "$mode" != "--check" ]; then
+if [ -z "$principal" ] && [ "$mode" != "--check" ] && [ "$mode" != "--set-secrets" ]; then
   principal=$(cd "$root/bootstrap/accounts/workforce" && terraform output -raw agent_role_arn) || {
     echo "cannot read agent_role_arn: apply bootstrap/accounts/workforce first, or set AGENT_ROLE_ARN" >&2
     exit 1
@@ -52,6 +57,23 @@ current_ids() {
   [ -f "$1" ] || return 0
   awk -v b="$begin" -v e="$end" '$0 == b {on = 1} $0 == e {on = 0} on' "$1" |
     grep -E '^[[:space:]]*external_ids' | grep -oE '"[0-9a-f]{64}"' | tr -d '"' || true
+}
+
+# The value of the secret AGENT: the block of a file as one line, which Terraform reads from
+# TF_VAR_agent as an HCL object.
+agent_value() { # agent_value <name> <file>
+  local block principal_arn account ids
+  block=$(awk -v b="$begin" -v e="$end" '$0 == b {on = 1} $0 == e {on = 0} on' "$2")
+  principal_arn=$(printf '%s\n' "$block" | grep -E '^[[:space:]]*principal_arn' | grep -oE '"[^"]+"' | tr -d '"')
+  account=$(printf '%s\n' "$block" | grep -E '^[[:space:]]*workforce_account_id' | grep -oE '"[0-9]{12}"' | tr -d '"')
+  ids=$(current_ids "$2" | awk 'NF {printf "%s\"%s\"", (n++ ? "," : ""), $0}')
+  # The list must close on its line (a hand-edited multi-line list would lose ids), and the account is the principal's.
+  printf '%s\n' "$block" | grep -qE '^[[:space:]]*external_ids[[:space:]]*=[[:space:]]*\[.*\][[:space:]]*$' || ids=
+  [[ $principal_arn =~ ^arn:aws:iam::([0-9]{12}):role(/[A-Za-z0-9+=,.@_-]+)*/wrkf-[A-Za-z0-9+=,.@_-]+$ && -n $account && -n $ids && $account == "${BASH_REMATCH[1]}" ]] || {
+    echo "$1: the agent block of terraform.tfvars is not in the expected shape" >&2
+    return 1
+  }
+  printf '{principal_arn="%s",workforce_account_id="%s",external_ids=[%s]}' "$principal_arn" "$account" "$ids"
 }
 
 # Drops the managed block from a file, keeping the rest as it is.
@@ -78,6 +100,27 @@ check_file() { # check_file <name> <file>
     return 1
   fi
 }
+
+# Every value is built and checked before the first call to gh, so that a bad file leaves all
+# three secrets as they are.
+if [ "$mode" = --set-secrets ]; then
+  values=()
+  for name in $accounts; do
+    file=$root/bootstrap/accounts/$name/terraform.tfvars
+    [ -d "$root/bootstrap/accounts/$name" ] || { echo "$name: no stack at bootstrap/accounts/$name" >&2; exit 1; }
+    check_file "$name" "$file"
+    [ -n "$(current_ids "$file")" ] || { echo "$name: no agent block in terraform.tfvars, run the script without options first" >&2; exit 1; }
+    value=$(agent_value "$name" "$file")
+    values+=("$value")
+  done
+  i=0
+  for name in $accounts; do
+    printf '%s' "${values[$i]}" | gh secret set AGENT --repo BuzzL/workforce-infra --env "$name-plan"
+    echo "$name: AGENT set in $name-plan"
+    i=$((i + 1))
+  done
+  exit 0
+fi
 
 for name in $accounts; do
   dir=$root/bootstrap/accounts/$name
