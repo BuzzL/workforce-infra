@@ -18,6 +18,11 @@ run "provider" {
     condition     = aws_iam_openid_connect_provider.github.url == "https://token.actions.githubusercontent.com" && aws_iam_openid_connect_provider.github.client_id_list == toset(["sts.amazonaws.com"])
     error_message = "The provider must be GitHub's, with the sts.amazonaws.com audience only."
   }
+
+  assert {
+    condition     = output.oidc_provider_arn == aws_iam_openid_connect_provider.github.arn
+    error_message = "The provider ARN is exposed so a stack can trust its GitHub Environments through it."
+  }
 }
 
 run "apply_role_trust" {

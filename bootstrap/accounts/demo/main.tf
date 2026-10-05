@@ -19,5 +19,5 @@ module "baseline" {
   baseline_state_key = local.state_key
   tags               = var.tags
 
-  extra_read_statements = local.agent_read_statements
+  extra_read_statements = concat(local.agent_read_statements, local.deploy_read_statements)
 }

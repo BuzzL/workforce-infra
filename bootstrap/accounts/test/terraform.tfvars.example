@@ -11,3 +11,10 @@ state_bucket_name = "<state-bucket-name>"
 #   workforce_account_id = "<workforce account id>"
 #   external_ids         = ["<ExternalId of this environment>"]
 # }
+
+# The deploy role of the testbed (docs/ENVIRONMENT_PERMISSIONS.md). Leave unset until the artifact bucket exists.
+# deploy = {
+#   github_repository_id = "<numeric GitHub ID of workforce-testbed>"
+#   artifact_bucket      = "<artifact bucket name>"
+#   artifact_prefix      = "<artifact prefix>"
+# }
