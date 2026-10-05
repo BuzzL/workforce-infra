@@ -491,7 +491,7 @@ printf 'region = "eu-west-1"\n' > "$agent_root/bootstrap/accounts/test/terraform
 expect pass "agent vars: create writes the three stacks" agent
 expect pass "agent vars: an existing tfvars keeps its other lines" grep -q '^region = "eu-west-1"' "$agent_root/bootstrap/accounts/test/terraform.tfvars"
 expect pass "agent vars: one ExternalId of 64 hex characters each" test "$(ids test | wc -l)" -eq 1 -a "$(ids quality | wc -l)" -eq 1
-expect pass "agent vars: the files are private (600)" test "$(stat -f %Lp "$agent_root/bootstrap/accounts/demo/terraform.tfvars" 2>/dev/null || stat -c %a "$agent_root/bootstrap/accounts/demo/terraform.tfvars")" = 600
+expect pass "agent vars: the files are private (600)" test "$(stat -c %a "$agent_root/bootstrap/accounts/demo/terraform.tfvars" 2>/dev/null || stat -f %Lp "$agent_root/bootstrap/accounts/demo/terraform.tfvars")" = 600
 expect pass "agent vars: every environment has its own ExternalId" test "$(for a in test quality demo; do ids $a; done | sort -u | wc -l)" -eq 3
 first_id=$(ids test)
 cp "$agent_root/bootstrap/accounts/test/terraform.tfvars" before.tfvars
