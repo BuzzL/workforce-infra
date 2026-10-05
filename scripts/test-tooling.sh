@@ -198,6 +198,28 @@ case "$got" in *'"stack":"bootstrap/accounts/test"'*) echo "FAIL ci-stacks: the 
 rm live/environments/test/.ci-enabled
 expect fail:unmapped "ci-stacks does not map bootstrap/accounts/staging" sh -c 'mkdir -p bootstrap/accounts/staging && printf "terraform {}\n" > bootstrap/accounts/staging/main.tf && scripts/ci-stacks.sh; rc=$?; rm -rf bootstrap/accounts/staging; exit $rc'
 expect fail:usage "ci-stacks rejects an unknown mode" scripts/ci-stacks.sh nonsense
+# Gate: after a merge only the stacks whose plan has changes wait for an approval. Stacks here: bootstrap
+# (drift check only), live/management and live/environments/test (applied by CI).
+touch live/environments/test/.ci-enabled
+gate() { printf '%s\n' "$@" | scripts/ci-stacks.sh gate; }
+got=$(gate "bootstrap 0" "live/environments/test 0" "live/management 0")
+if [ "$got" = "[]" ]; then echo "ok   ci-stacks gate: no change anywhere asks for no approval"; else echo "FAIL ci-stacks gate no-op"; echo "$got"; failed=1; fi
+got=$(gate "bootstrap 0" "live/environments/test 2" "live/management 0")
+want='[{"stack":"live/environments/test","environment":"test","apply":true}]'
+if [ "$got" = "$want" ]; then echo "ok   ci-stacks gate: one changed stack asks once, for its own environment"; else echo "FAIL ci-stacks gate one change"; echo "$got"; failed=1; fi
+got=$(gate "bootstrap 0" "live/environments/test 2" "live/management 2")
+want='[{"stack":"live/environments/test","environment":"test","apply":true},{"stack":"live/management","environment":"management","apply":true}]'
+if [ "$got" = "$want" ]; then echo "ok   ci-stacks gate: every changed stack is kept"; else echo "FAIL ci-stacks gate two changes"; echo "$got"; failed=1; fi
+expect fail:drift "ci-stacks gate fails on changes in a stack CI does not apply" gate "bootstrap 2" "live/environments/test 0" "live/management 0"
+expect fail:drift "ci-stacks gate fails on drift even when another stack has changes to apply" gate "bootstrap 2" "live/environments/test 2" "live/management 0"
+expect fail:failed "ci-stacks gate fails when a plan failed (exit code 1)" gate "bootstrap 0" "live/environments/test 1" "live/management 0"
+expect fail:failed "ci-stacks gate fails on any other exit code" gate "bootstrap 0" "live/environments/test 0" "live/management 137"
+expect fail:"no plan result" "ci-stacks gate fails on a missing result" gate "bootstrap 0" "live/management 0"
+expect fail:"no plan result" "ci-stacks gate fails on empty input" gate ""
+expect fail:"unknown stack" "ci-stacks gate fails on a result for an unknown stack" gate "bootstrap 0" "live/environments/test 0" "live/management 0" "live/other 0"
+expect fail:duplicate "ci-stacks gate fails on a duplicated result" gate "bootstrap 0" "live/environments/test 0" "live/management 0" "live/management 2"
+expect fail:invalid "ci-stacks gate fails on a result that is not a number" gate "bootstrap 0" "live/environments/test 0" "live/management x"
+rm live/environments/test/.ci-enabled
 # Names are explanatory, keys are four lowercase letters, unique (scripts/environment-keys.tsv).
 # The shipped table passes (every mapping above), and each way of breaking it is refused.
 printf 'quality\tEnvironments\tqa\tx\n' > bad-keys.tsv
