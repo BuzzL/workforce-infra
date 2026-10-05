@@ -13,16 +13,17 @@ The role is an IAM resource, and the CI apply role of an account has no IAM writ
 
 ## Applying
 
-The trusted principal is the agent task role in `workforce`, which does not exist until the ECS stack (IAT-60). IAM refuses a trust policy that names a role that is not there, so the variable stays unset until then.
+The trusted principal is the agent task role of `workforce`, `wrkf-foundation-agent-role` under `/platform/`, defined in `bootstrap/accounts/workforce/agent_role.tf`. ECS tasks of that account assume it and it starts with no permissions: each one arrives with the change that needs it (the ECS stack IAT-60, and the permission to assume the three agent roles). Applied locally, like every IAM resource of a baseline.
 
-1. Generate one ExternalId per environment and store it in Secrets Manager in `workforce` (readable by the agent task role only), see `docs/ENVIRONMENT_PERMISSIONS.md`.
-2. Set `agent` in the gitignored `terraform.tfvars` of `bootstrap/accounts/<name>` (shape in `terraform.tfvars.example`): principal ARN, workforce account ID, ExternalId.
-3. `terraform plan`, review (one role, one inline policy, and the read of that one role added to the plan role), then `terraform apply`.
-4. Check with a real call from the task: `sts:AssumeRole` with session name `agent-<task id>` and the ExternalId succeeds, any other session name or a missing ExternalId is denied.
+1. Apply `bootstrap/accounts/workforce` (the maintainer's session in the account). Merging before this apply makes the post-merge drift job fail until it is applied, so apply from the pull request branch first.
+2. `scripts/set-agent-role-vars.sh` creates one ExternalId per environment (64 random hex characters) and writes `agent` into the gitignored `terraform.tfvars` of `bootstrap/accounts/test`, `quality` and `demo`, between marker lines, with the principal read from step 1. Existing values are never overwritten; the file is mode 600; nothing is printed except names and counts. `--check` lists the counts.
+3. In each of the three stacks: `terraform plan`, review (one role, one inline policy, and the read of that one role added to the plan role), then `terraform apply`.
+4. Store each ExternalId in Secrets Manager in `workforce`, readable by the agent task role only (the secret containers are IAT-54).
+5. Check with a real call from the task: `sts:AssumeRole` with session name `agent-<task id>` and the ExternalId succeeds, any other session name or a missing ExternalId is denied. Prove first whether `aws:PrincipalArn` carries the IAM path of the task role (open item of `docs/ENVIRONMENT_PERMISSIONS.md`): if the assume is denied with the path-bearing ARN, the task role needs no path or the condition value must change.
 
-4b. The ExternalId and the principal ARN sit in the gitignored `terraform.tfvars` of the baseline stack, which supersedes the GitHub Environment secret mentioned in `docs/ENVIRONMENT_PERMISSIONS.md` (that stack is applied locally, so CI never reads it). They reach the baseline state, which the decision accepts for the ExternalId. Prove first whether `aws:PrincipalArn` carries the IAM path of the task role (open item of that document): if the assume is denied with the real path-bearing ARN, the task role needs no path or the condition value must change.
+The ExternalId and the principal ARN sit in the `terraform.tfvars` files, which supersedes the GitHub Environment secret mentioned in `docs/ENVIRONMENT_PERMISSIONS.md` (these stacks are applied locally, so CI never reads them). They reach the baseline state, which the decision accepts for the ExternalId.
 
-Rotation: set both ExternalIds, apply, switch the secret in `workforce`, remove the old value, apply.
+Rotation: `scripts/set-agent-role-vars.sh --rotate` (new value in front, current kept) and apply; switch the secret in `workforce`; `--drop-old` and apply.
 
 ## Before CI plans these stacks
 
