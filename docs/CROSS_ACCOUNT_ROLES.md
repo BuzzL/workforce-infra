@@ -1,6 +1,6 @@
 # Cross-account role module
 
-`modules/cross-account-role` creates every role of the environment model (`docs/ENVIRONMENT_PERMISSIONS.md`) so that least privilege is enforced in one place. It implements the decision and does not change it. No stack uses it yet.
+`modules/cross-account-role` creates every role of the environment model (`docs/ENVIRONMENT_PERMISSIONS.md`) so that least privilege is enforced in one place. It implements the decision and does not change it. The agent roles use it through `modules/agent-role` (`docs/AGENT_ROLES.md`).
 
 ## What it creates
 
