@@ -122,6 +122,10 @@ need.(norm.(apply_step["if"]) == "matrix.apply == true && steps.plan.outputs.exi
 g = jobs["changes"]["steps"]
 need.(g.map { |s| s["uses"].to_s.split("@").first.to_s }.reject(&:empty?).sort == %w[actions/checkout actions/download-artifact], "changes: only checkout and download-artifact are allowed")
 need.(g.map { |s| s["run"].to_s }.join.include?("scripts/ci-stacks.sh gate"), "changes: the plan results must go through scripts/ci-stacks.sh gate")
+need.(g.map { |s| s["run"].to_s }.join.include?("set -euo pipefail"), "changes: the gate step must fail on a failed gate")
+need.(((g.find { |s| s["uses"].to_s.start_with?("actions/download-artifact") } || {})["with"] || {}).values_at("pattern", "merge-multiple") == ["plan-*", true], "changes: it must download every plan artifact")
+need.(jobs["changes"].dig("outputs", "apply_stacks") == "${{ steps.gate.outputs.apply }}", "changes: apply_stacks must be the output of the gate")
+need.(jobs["plan"]["steps"].any? { |s| s["uses"].to_s.start_with?("actions/upload-artifact") && s.dig("with", "path").to_s.include?("result-") }, "plan: the result file must be uploaded")
 
 # The comment job: one script checked out, an artifact downloaded, the comment updated in place.
 c = jobs["comment"]["steps"]

@@ -162,6 +162,8 @@ jobs:
             ${{ runner.temp }}/result-${{ strategy.job-index }}.txt
           retention-days: 3
           if-no-files-found: error
+          # Re-running a failed job after a local apply uploads the same name again.
+          overwrite: true
 
   # Redacts, fences and posts what the plan job produced, which it treats as untrusted text.
   # No AWS credentials and no environment; it checks out one script, nothing else.

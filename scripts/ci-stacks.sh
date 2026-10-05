@@ -95,7 +95,7 @@ while IFS= read -r stack; do
       0) continue ;;
       2) if [ "$apply" = true ]; then :; else echo "drift in $stack, which CI does not apply: its plan has changes" >&2; gate_failed=1; continue; fi ;;
       "") echo "no plan result for $stack" >&2; gate_failed=1; continue ;;
-      *[!0-9]* | *" "*) echo "invalid plan result for $stack: $code" >&2; gate_failed=1; continue ;;
+      *[!0-9]*) echo "invalid plan result for $stack: $code" >&2; gate_failed=1; continue ;;
       *) echo "the plan of $stack failed (exit code $code)" >&2; gate_failed=1; continue ;;
     esac
     out+="$sep{\"stack\":\"$stack\",\"environment\":\"$env\",\"apply\":$apply}"
