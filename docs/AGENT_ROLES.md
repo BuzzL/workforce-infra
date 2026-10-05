@@ -17,7 +17,13 @@ The trusted principal is the agent task role in `workforce`, which does not exis
 
 1. Generate one ExternalId per environment and store it in Secrets Manager in `workforce` (readable by the agent task role only), see `docs/ENVIRONMENT_PERMISSIONS.md`.
 2. Set `agent` in the gitignored `terraform.tfvars` of `bootstrap/accounts/<name>` (shape in `terraform.tfvars.example`): principal ARN, workforce account ID, ExternalId.
-3. `terraform plan`, review (one role, one inline policy, two read statements for the plan role), then `terraform apply`.
+3. `terraform plan`, review (one role, one inline policy, and the read of that one role added to the plan role), then `terraform apply`.
 4. Check with a real call from the task: `sts:AssumeRole` with session name `agent-<task id>` and the ExternalId succeeds, any other session name or a missing ExternalId is denied.
 
+4b. The ExternalId and the principal ARN sit in the gitignored `terraform.tfvars` of the baseline stack, which supersedes the GitHub Environment secret mentioned in `docs/ENVIRONMENT_PERMISSIONS.md` (that stack is applied locally, so CI never reads it). They reach the baseline state, which the decision accepts for the ExternalId. Prove first whether `aws:PrincipalArn` carries the IAM path of the task role (open item of that document): if the assume is denied with the real path-bearing ARN, the task role needs no path or the condition value must change.
+
 Rotation: set both ExternalIds, apply, switch the secret in `workforce`, remove the old value, apply.
+
+## Before CI plans these stacks
+
+`.ci-enabled` must not be added to `bootstrap/accounts/test`, `quality` or `demo` until the value of `agent` reaches CI as a secret (`TF_VAR_agent`, like `audit_log_bucket_name`, with `scripts/redact.sh` checked so that the ExternalId never appears in a plan comment). CI plans without it see `agent = null` and propose to destroy the role, which fails the drift check on every run. This belongs to the change that enables these stacks in CI (IAT-79).
