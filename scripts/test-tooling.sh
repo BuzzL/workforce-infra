@@ -615,6 +615,21 @@ agent --rotate > /dev/null
 expect pass "agent vars: --set-secrets carries both ExternalIds of a rotation" bash -c "env PATH=\"$PWD/fake-gh:\$PATH\" $agent_root/scripts/set-agent-role-vars.sh --set-secrets >/dev/null && grep -qE 'external_ids=\\[\"[0-9a-f]{64}\",\"[0-9a-f]{64}\"\\]' gh.in.1"
 agent --drop-old > /dev/null
 
+# The runner roles of the matrix (IAT-46): written as extra_principal_arns, carried into the secret,
+# and only the matrix role of the same environment in the same account is accepted.
+runner_json='{"demo":"arn:aws:iam::444455556666:role/platform/wrkf-foundation-matrix-demo-role","quality":"arn:aws:iam::444455556666:role/platform/wrkf-foundation-matrix-quality-role","test":"arn:aws:iam::444455556666:role/platform/wrkf-foundation-matrix-test-role"}'
+runner_tfvars=$agent_root/bootstrap/accounts/quality/terraform.tfvars
+expect pass "agent vars: the runner role of each environment is written as an extra principal" env MATRIX_ROLE_ARNS="$runner_json" AGENT_ROLE_ARN="$agent_arn" "$agent_root/scripts/set-agent-role-vars.sh"
+expect pass "agent vars: ...the one of its own environment" grep -q 'extra_principal_arns = \["arn:aws:iam::444455556666:role/platform/wrkf-foundation-matrix-quality-role"\]' "$runner_tfvars"
+cp "$runner_tfvars" before.tfvars
+expect pass "agent vars: ...and a second run changes nothing" env MATRIX_ROLE_ARNS="$runner_json" AGENT_ROLE_ARN="$agent_arn" "$agent_root/scripts/set-agent-role-vars.sh"
+expect pass "agent vars: ...not even a byte of the file" cmp before.tfvars "$runner_tfvars"
+rm -f gh.count gh.args gh.in.*
+expect pass "agent vars: --set-secrets carries the runner role" bash -c "env PATH=\"$PWD/fake-gh:\$PATH\" $agent_root/scripts/set-agent-role-vars.sh --set-secrets >/dev/null && grep -q 'extra_principal_arns=\\[\"arn:aws:iam::444455556666:role/platform/wrkf-foundation-matrix-test-role\"\\]' gh.in.1"
+expect pass "agent vars: the runner role of another environment is not written" bash -c "env AGENT_ROLE_ARN=$agent_arn MATRIX_ROLE_ARNS='{\"quality\":\"arn:aws:iam::444455556666:role/platform/wrkf-foundation-matrix-test-role\"}' $agent_root/scripts/set-agent-role-vars.sh && ! grep -q matrix-test-role $runner_tfvars"
+expect pass "agent vars: a runner role of another account is not written" bash -c "env AGENT_ROLE_ARN=$agent_arn MATRIX_ROLE_ARNS='{\"quality\":\"arn:aws:iam::111122223333:role/platform/wrkf-foundation-matrix-quality-role\"}' $agent_root/scripts/set-agent-role-vars.sh && ! grep -q extra_principal_arns $runner_tfvars"
+agent --drop-old > /dev/null
+
 # check-permission-matrix.sh: the matrix and the role modules must agree.
 mx=$work/matrix
 rm -rf "$mx" && mkdir -p "$mx/agent-role" "$mx/deploy-role"

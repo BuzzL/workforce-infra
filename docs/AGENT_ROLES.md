@@ -5,6 +5,7 @@ The developer agent reads the `test`, `quality` and `demo` accounts through one 
 ## What exists
 
 - `modules/agent-role`: the read only permission set of the decision, for the registered applications (`testbed`), on top of `modules/cross-account-role`. The set is identical in every environment, so `demo` ⊆ `quality` ⊆ `test` holds with equality. Its tests assert the set literally, the trust literally, the inclusions and that nothing writes, escalates or downloads code or templates.
+- `matrix_roles.tf` in `bootstrap/accounts/workforce`: the matrix runner roles, off until the variable `matrix` is set (see "Matrix runner roles").
 - `agent.tf` in `bootstrap/accounts/test`, `quality` and `demo`: instantiates the module, off until the variable `agent` is set.
 
 ## Why a local apply
@@ -34,3 +35,14 @@ CI plans `bootstrap/accounts/test`, `quality` and `demo` (`.ci-enabled`) through
 - Only the Plan step of the `plan` job gets it (`TF_VAR_agent: ${{ secrets.AGENT || 'null' }}`), and `scripts/check-workflow.sh` rejects any other use of the secret. The `apply` job never plans a baseline, so the `<name>` environments do not hold it either. Stacks that do not declare `agent` ignore it, and an environment without the secret plans with `null`.
 - The ExternalId is a confused-deputy guard, not a credential: the trust also names the exact task role in `workforce` and the session name. The `-plan` environments accept any branch, so code of a pull request of this repository could print the value: masking prevents accidents only, as for the other secrets (`docs/BOOTSTRAP.md`, section 7). `scripts/redact.sh` replaces any run of 64 hex characters with `<external-id>` before output reaches a log, artifact or comment, and Terraform shows `agent` as sensitive.
 - A stack whose local `agent` differs from the secret fails the drift check: run `--set-secrets` after each change of `agent`.
+
+## Matrix runner roles
+
+The permission matrix job of this repository (`.github/workflows/permission-matrix.yml`, `scripts/run-permission-matrix.sh`) proves the agent role of each environment with real calls. It cannot use the agent task role, which only ECS tasks assume, so each environment has a runner role in `workforce`: `wrkf-foundation-matrix-<environment>-role` under `/platform/`.
+
+- **Trust:** GitHub OIDC, `StringEquals` on the audience and on one exact subject, this repository in the `<environment>-matrix` GitHub Environment. The subject prefix comes from `modules/account-ci-baseline` (`github_subject_prefix`).
+- **Permission:** `sts:AssumeRole` on the agent role of its own environment, nothing else.
+- **In return,** the agent role of that environment trusts the runner role as a second exact principal (`extra_principal_arns` of `modules/agent-role`), with the same ExternalId and the `agent-*` session name pattern as for the task role. The chain is `GitHub OIDC → matrix runner role → agent role`, so the live proof covers the agent role's permissions and its trust conditions, not the task role's link to it, which the module tests assert literally.
+- **Variables:** `matrix` (`bootstrap/accounts/workforce`) holds the account ID of each environment account, in the gitignored `terraform.tfvars` and in the secret `MATRIX` of `workforce-plan`, which only the Plan step receives (`TF_VAR_matrix`, checked by `scripts/check-workflow.sh`). Without it no runner role exists.
+- **Applying:** the roles are IAM resources of a baseline, so they are applied locally: `workforce` first, then `scripts/set-agent-role-vars.sh` (it reads `matrix_role_arns` from the workforce outputs, or `MATRIX_ROLE_ARNS`, and writes `extra_principal_arns` into the `agent` block), then each environment stack, then `--set-secrets` so that the CI plan stays a no-op. The role ARN of each environment is the secret `MATRIX_RUNNER_ROLE_ARN` of its `<environment>-matrix` GitHub Environment (`workforce-github`).
+- **Deploy roles:** not assumed from this repository. They belong to the application's own deployment flow, which keeps the `demo` reviewer gate in the trust (`docs/ENVIRONMENT_PERMISSIONS.md`).

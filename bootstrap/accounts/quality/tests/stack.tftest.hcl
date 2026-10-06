@@ -160,3 +160,27 @@ run "deploy_role_needs_a_numeric_repository_id" {
 
   expect_failures = [var.deploy]
 }
+
+# The matrix runner role of this environment (IAT-46) may assume the agent role, next to the task role.
+run "agent_role_trusts_the_matrix_runner_role_of_this_environment" {
+  command = apply
+
+  variables {
+    agent = {
+      principal_arn        = "arn:aws:iam::444455556666:role/wrkf-foundation-agent-task-role"
+      workforce_account_id = "444455556666"
+      external_ids         = ["0123456789abcdef-current"]
+      extra_principal_arns = ["arn:aws:iam::444455556666:role/platform/wrkf-foundation-matrix-quality-role"]
+    }
+  }
+
+  assert {
+    condition = jsondecode(module.agent_role[0].trust_policy).Statement[0].Principal == {
+      AWS = [
+        "arn:aws:iam::444455556666:role/wrkf-foundation-agent-task-role",
+        "arn:aws:iam::444455556666:role/platform/wrkf-foundation-matrix-quality-role",
+      ]
+    }
+    error_message = "The agent task role and the quality matrix runner role, and nobody else, may assume the qual agent role."
+  }
+}

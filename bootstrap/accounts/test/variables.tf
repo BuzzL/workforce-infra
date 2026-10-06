@@ -32,11 +32,12 @@ variable "tags" {
 }
 
 variable "agent" {
-  description = "The agent role of this account (docs/AGENT_ROLES.md): the exact ARN of the agent task role in workforce, that account's ID and the ExternalId of this environment (two during a rotation). Null creates no role. Set in the gitignored terraform.tfvars; never committed."
+  description = "The agent role of this account (docs/AGENT_ROLES.md): the exact ARN of the agent task role in workforce, that account's ID and the ExternalId of this environment (two during a rotation), and the matrix runner role of this environment when it exists. Null creates no role. Set in the gitignored terraform.tfvars; never committed."
   type = object({
     principal_arn        = string
     workforce_account_id = string
     external_ids         = list(string)
+    extra_principal_arns = optional(list(string), [])
   })
   default   = null
   sensitive = true
