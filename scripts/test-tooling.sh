@@ -423,6 +423,9 @@ CASES = [
     ("the apply job never receives the agent role", "      STACK: ${{ matrix.stack }}\n    defaults:", "      TF_VAR_agent: ${{ secrets.AGENT || 'null' }}\n      STACK: ${{ matrix.stack }}\n    defaults:", "the secret AGENT must be used once"),
     ("no other step of the apply job reads the agent role", "      - name: Apply\n        if:", "      - name: Apply\n        env:\n          LEAK: ${{ secrets.AGENT }}\n        if:", "the secret AGENT must be used once"),
     ("the Init step of the plan job does not get the agent role", "      - name: Init\n        run: |", "      - name: Init\n        env:\n          TF_VAR_agent: ${{ secrets.AGENT || 'null' }}\n        run: |", "the secret AGENT must be used once"),
+    ("the plan job gets the matrix runner roles from the secret MATRIX", "TF_VAR_matrix: ${{ secrets.MATRIX || 'null' }}", "TF_VAR_matrix: ${{ secrets.MATRIX }}", "plan: the matrix runner roles must come from the secret MATRIX"),
+    ("the matrix runner roles are not hardcoded", "TF_VAR_matrix: ${{ secrets.MATRIX || 'null' }}", "TF_VAR_matrix: 'null'", "plan: the matrix runner roles must come from the secret MATRIX"),
+    ("the Init step of the plan job does not get the matrix runner roles", "      - name: Init\n        run: |", "      - name: Init\n        env:\n          TF_VAR_matrix: ${{ secrets.MATRIX || 'null' }}\n        run: |", "the secret MATRIX must be used once"),
     ("the comment is only posted on a pull request", "always() && github.event_name == 'pull_request' &&", "always() &&", "comment: it must only post a finished plan"),
     ("an apply is never cancelled", "cancel-in-progress: false", "cancel-in-progress: true", "never be cancelled"),
     ("only the comment job uses github.token", "      STACK: ${{ matrix.stack }}\n      INDEX", "      X: ${{ github.token }}\n      STACK: ${{ matrix.stack }}\n      INDEX", "only the comment job may use github.token"),
@@ -611,5 +614,54 @@ rm -f gh.args gh.count gh.in.*
 agent --rotate > /dev/null
 expect pass "agent vars: --set-secrets carries both ExternalIds of a rotation" bash -c "env PATH=\"$PWD/fake-gh:\$PATH\" $agent_root/scripts/set-agent-role-vars.sh --set-secrets >/dev/null && grep -qE 'external_ids=\\[\"[0-9a-f]{64}\",\"[0-9a-f]{64}\"\\]' gh.in.1"
 agent --drop-old > /dev/null
+
+# The runner roles of the matrix (IAT-46): written as extra_principal_arns, carried into the secret,
+# and only the matrix role of the same environment in the same account is accepted.
+runner_json='{"demo":"arn:aws:iam::444455556666:role/platform/wrkf-foundation-matrix-demo-role","quality":"arn:aws:iam::444455556666:role/platform/wrkf-foundation-matrix-quality-role","test":"arn:aws:iam::444455556666:role/platform/wrkf-foundation-matrix-test-role"}'
+runner_tfvars=$agent_root/bootstrap/accounts/quality/terraform.tfvars
+expect pass "agent vars: the runner role of each environment is written as an extra principal" env MATRIX_ROLE_ARNS="$runner_json" AGENT_ROLE_ARN="$agent_arn" "$agent_root/scripts/set-agent-role-vars.sh"
+expect pass "agent vars: ...the one of its own environment" grep -q 'extra_principal_arns = \["arn:aws:iam::444455556666:role/platform/wrkf-foundation-matrix-quality-role"\]' "$runner_tfvars"
+cp "$runner_tfvars" before.tfvars
+expect pass "agent vars: ...and a second run changes nothing" env MATRIX_ROLE_ARNS="$runner_json" AGENT_ROLE_ARN="$agent_arn" "$agent_root/scripts/set-agent-role-vars.sh"
+expect pass "agent vars: ...not even a byte of the file" cmp before.tfvars "$runner_tfvars"
+rm -f gh.count gh.args gh.in.*
+expect pass "agent vars: --set-secrets carries the runner role" bash -c "env PATH=\"$PWD/fake-gh:\$PATH\" $agent_root/scripts/set-agent-role-vars.sh --set-secrets >/dev/null && grep -q 'extra_principal_arns=\\[\"arn:aws:iam::444455556666:role/platform/wrkf-foundation-matrix-test-role\"\\]' gh.in.1"
+expect pass "agent vars: the runner role of another environment is not written" bash -c "env AGENT_ROLE_ARN=$agent_arn MATRIX_ROLE_ARNS='{\"quality\":\"arn:aws:iam::444455556666:role/platform/wrkf-foundation-matrix-test-role\"}' $agent_root/scripts/set-agent-role-vars.sh && ! grep -q matrix-test-role $runner_tfvars"
+expect pass "agent vars: a runner role of another account is not written" bash -c "env AGENT_ROLE_ARN=$agent_arn MATRIX_ROLE_ARNS='{\"quality\":\"arn:aws:iam::111122223333:role/platform/wrkf-foundation-matrix-quality-role\"}' $agent_root/scripts/set-agent-role-vars.sh && ! grep -q extra_principal_arns $runner_tfvars"
+agent --drop-old > /dev/null
+
+# check-permission-matrix.sh: the matrix and the role modules must agree.
+mx=$work/matrix
+rm -rf "$mx" && mkdir -p "$mx/agent-role" "$mx/deploy-role"
+printf '"lambda:GetAlias"\n' > "$mx/agent-role/main.tf"
+printf '"cloudformation:CreateStack"\n' > "$mx/deploy-role/main.tf"
+printf 'agent\tlambda:GetAlias\tallow\tallow\tallow\nagent\tcloudformation:CreateStack\tdeny\tdeny\tdeny\ndeploy\tcloudformation:CreateStack\tallow\tdeny\tdeny\n' > "$mx/m.tsv"
+matrix() { env MATRIX_FILE="$mx/m.tsv" MODULES_DIR="$mx" scripts/check-permission-matrix.sh; }
+expect pass "matrix  accepts a matrix that matches the modules" matrix
+printf '"cloudformation:CreateStack"\n' >> "$mx/agent-role/main.tf"
+expect fail:"denied in the matrix, written in" "matrix  catches a widened agent role" matrix
+printf '"lambda:GetAlias"\n' > "$mx/agent-role/main.tf"
+printf '"cloudformation:CreateStack"\n"iam:PassRole"\n' > "$mx/deploy-role/main.tf"
+expect fail:"in $mx/deploy-role/main.tf but not in the matrix" "matrix  catches an action without a row" matrix
+printf '"cloudformation:CreateStack"\n' > "$mx/deploy-role/main.tf"
+printf 'deploy\tcloudformation:CreateStack\tdeny\tallow\tdeny\n' >> "$mx/m.tsv"
+expect fail:"allowed in quality but not in test" "matrix  catches a broken narrowing rule" matrix
+
+# run-permission-matrix.sh: an allowed row must not be refused, a denied row must be, and nothing sensitive is printed.
+rm -rf fake-aws && mkdir -p fake-aws
+cat > fake-aws/aws <<'SH'
+#!/usr/bin/env bash
+if [ "$1 $2" = "sts assume-role" ]; then printf 'AKIAFAKEFAKEFAKE0\tsecret\ttoken\n'; exit 0; fi
+case " $FAKE_DENY " in *" $1:$2 "*) echo "An error occurred (AccessDenied) when calling the $2 operation: not authorized" >&2; exit 254 ;; esac
+echo "An error occurred (ResourceNotFoundException) when calling the $2 operation: not found" >&2; exit 254
+SH
+chmod +x fake-aws/aws
+printf 'agent\tlambda:GetAlias\tallow\tallow\tallow\nagent\tlambda:GetFunction\tdeny\tdeny\tdeny\n' > run.tsv
+run_matrix() { env PATH="$PWD/fake-aws:$PATH" MATRIX_FILE="$PWD/run.tsv" ROLE_ARN=arn:aws:iam::123456789012:role/platform/test-foundation-agent-role AWS_REGION=eu-west-1 "$@" scripts/run-permission-matrix.sh agent test; }
+expect pass:"agent test: 2 calls, passed" "run matrix: passes when IAM answers as the matrix says" run_matrix FAKE_DENY=lambda:get-function
+expect fail:"FAIL agent test lambda:GetFunction: wanted deny, got allow" "run matrix: catches a denied row that succeeds (widened role)" run_matrix FAKE_DENY=
+expect fail:"FAIL agent test lambda:GetAlias: wanted allow, got deny" "run matrix: catches an allowed row that is refused" run_matrix FAKE_DENY="lambda:get-function lambda:get-alias"
+expect pass "run matrix: prints no account ID" bash -c '! grep -q 123456789012 out.log'
+expect fail:"no call defined" "run matrix: an action without a call fails" env PATH="$PWD/fake-aws:$PATH" MATRIX_FILE="$PWD/run.tsv" ROLE_ARN=arn:aws:iam::123456789012:role/x AWS_REGION=eu-west-1 bash -c 'printf "agent\tnope:Nope\tallow\tallow\tallow\n" > run2.tsv; MATRIX_FILE=$PWD/run2.tsv scripts/run-permission-matrix.sh agent test'
 
 exit "$failed"

@@ -1,0 +1,56 @@
+name: Permission matrix
+
+# Proves the agent rows of the allowed/denied matrix of docs/ENVIRONMENT_PERMISSIONS.md with real
+# calls: for every environment, the agent role is assumed and each row of
+# scripts/permission-matrix.tsv is called (scripts/run-permission-matrix.sh).
+#
+# The deploy role is not assumed from this repository: it belongs to the application's own
+# deployment flow. Its rows are proven offline by `make matrix`, and live by the application's
+# workflow in its GitHub Environment, which calls the same script.
+#
+# Manual until the roles and the <environment>-matrix GitHub Environments exist (IAT-46). It then
+# runs on every pull request and its job name becomes a required check. Output names roles,
+# environments and actions only: the role ARNs are environment SECRETS (masked everywhere) and
+# the runner pipes everything through scripts/redact.sh.
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  matrix:
+    name: permission-matrix ${{ matrix.role }} ${{ matrix.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ matrix.environment }}-matrix
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        role: [agent]
+        environment: [test, quality, demo]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.MATRIX_RUNNER_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          mask-aws-account-id: true
+      - name: Run the matrix
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          ROLE_ARN: ${{ secrets.MATRIX_AGENT_ROLE_ARN }}
+          VIA_ROLE_ARN: ${{ secrets.MATRIX_VIA_ROLE_ARN }}
+          EXTERNAL_ID: ${{ secrets.MATRIX_EXTERNAL_ID }}
+          MATRIX_ROLE: ${{ matrix.role }}
+          MATRIX_ENVIRONMENT: ${{ matrix.environment }}
+        run: scripts/run-permission-matrix.sh "$MATRIX_ROLE" "$MATRIX_ENVIRONMENT"
+      - name: Summary
+        if: always()
+        env:
+          MATRIX_ROLE: ${{ matrix.role }}
+          MATRIX_ENVIRONMENT: ${{ matrix.environment }}
+        run: echo "$MATRIX_ROLE $MATRIX_ENVIRONMENT - see the step above" >> "$GITHUB_STEP_SUMMARY"

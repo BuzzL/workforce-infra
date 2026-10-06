@@ -12,6 +12,10 @@
 #                                              (needs gh, authenticated as the maintainer; run it after each apply
 #                                              that changes `agent`, and before --drop-old is merged)
 #
+# When the matrix runner roles exist (Terraform output `matrix_role_arns` of the same stack, or the
+# variable MATRIX_ROLE_ARNS in the shape `terraform output -json` prints), the runner role of each
+# environment is written as `extra_principal_arns`, so that the agent role of that environment trusts it.
+#
 # The principal is the agent task role of workforce, read from the Terraform output
 # `agent_role_arn` of bootstrap/accounts/workforce (initialised, applied), or from the environment
 # variable AGENT_ROLE_ARN. Each ExternalId is 64 random hex characters. The values are written to
@@ -52,6 +56,20 @@ if [ -n "$principal" ]; then
   workforce_id=${BASH_REMATCH[1]}
 fi
 
+# The runner roles of the matrix (IAT-46): read only where the principal is read from Terraform too,
+# so that a given AGENT_ROLE_ARN keeps the script from touching Terraform at all.
+matrix_json=${MATRIX_ROLE_ARNS:-}
+if [ -z "$matrix_json" ] && [ -z "${AGENT_ROLE_ARN:-}" ] && [ -n "$principal" ]; then
+  matrix_json=$(cd "$root/bootstrap/accounts/workforce" && terraform output -json matrix_role_arns 2>/dev/null) || matrix_json=
+fi
+# matrix_arn <name>: the runner role of that environment, empty when there is none. It must be the
+# matrix role of that environment in the workforce account, nothing else.
+matrix_arn() {
+  [ -n "$matrix_json" ] || return 0
+  printf '%s' "$matrix_json" | tr -d ' \n' |
+    grep -oE "\"$1\":\"arn:aws:iam::${workforce_id}:role(/[A-Za-z0-9+=,.@_-]+)*/wrkf-foundation-matrix-$1-role\"" | cut -d'"' -f4 || true
+}
+
 # The ExternalIds of a file, one per line (empty when there is no block).
 current_ids() {
   [ -f "$1" ] || return 0
@@ -62,7 +80,7 @@ current_ids() {
 # The value of the secret AGENT: the block of a file as one line, which Terraform reads from
 # TF_VAR_agent as an HCL object.
 agent_value() { # agent_value <name> <file>
-  local block principal_arn account ids
+  local block principal_arn account ids extra
   block=$(awk -v b="$begin" -v e="$end" '$0 == b {on = 1} $0 == e {on = 0} on' "$2")
   principal_arn=$(printf '%s\n' "$block" | grep -E '^[[:space:]]*principal_arn' | grep -oE '"[^"]+"' | tr -d '"')
   account=$(printf '%s\n' "$block" | grep -E '^[[:space:]]*workforce_account_id' | grep -oE '"[0-9]{12}"' | tr -d '"')
@@ -73,7 +91,12 @@ agent_value() { # agent_value <name> <file>
     echo "$1: the agent block of terraform.tfvars is not in the expected shape" >&2
     return 1
   }
-  printf '{principal_arn="%s",workforce_account_id="%s",external_ids=[%s]}' "$principal_arn" "$account" "$ids"
+  extra=$(printf '%s\n' "$block" | grep -E '^[[:space:]]*extra_principal_arns' | grep -oE '"[^"]+"' | tr -d '"' || true)
+  [[ -z $extra || $extra =~ ^arn:aws:iam::${account}:role(/[A-Za-z0-9+=,.@_-]+)*/wrkf-foundation-matrix-(test|quality|demo)-role$ ]] || {
+    echo "$1: extra_principal_arns of terraform.tfvars is not a matrix runner role of the workforce account" >&2
+    return 1
+  }
+  printf '{principal_arn="%s",workforce_account_id="%s",external_ids=[%s]%s}' "$principal_arn" "$account" "$ids" "${extra:+,extra_principal_arns=[\"$extra\"]}"
 }
 
 # Drops the managed block from a file, keeping the rest as it is.
@@ -150,11 +173,14 @@ for name in $accounts; do
     echo "$name: the principal differs from the one in terraform.tfvars, edit it by hand to change it" >&2
     exit 1
   fi
+  runner=$(matrix_arn "$name")
   tmp=$(mktemp "$dir/tmp.XXXXXX.tfvars")
   {
     [ -f "$file" ] && without_block "$file"
-    printf '%s\nagent = {\n  principal_arn        = "%s"\n  workforce_account_id = "%s"\n  external_ids         = [%s]\n}\n%s\n' \
-      "$begin" "$principal" "$workforce_id" "$list" "$end"
+    printf '%s\nagent = {\n  principal_arn        = "%s"\n  workforce_account_id = "%s"\n  external_ids         = [%s]\n' \
+      "$begin" "$principal" "$workforce_id" "$list"
+    [ -z "$runner" ] || printf '  extra_principal_arns = ["%s"]\n' "$runner"
+    printf '}\n%s\n' "$end"
   } > "$tmp"
   if [ -f "$file" ] && cmp -s "$tmp" "$file"; then
     rm -f "$tmp"

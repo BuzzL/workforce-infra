@@ -31,6 +31,7 @@ module "role" {
     mode = "assume_role"
     assume_role = {
       principal_arn        = var.principal_arn
+      extra_principal_arns = var.extra_principal_arns
       source_account_id    = var.workforce_account_id
       external_ids         = var.external_ids
       session_name_pattern = "agent-*"
