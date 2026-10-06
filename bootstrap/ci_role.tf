@@ -41,6 +41,7 @@ resource "aws_iam_role_policies_exclusive" "github_infra_management" {
     aws_iam_role_policy.plan_bootstrap.name,
     aws_iam_role_policy.organization_units.name,
     aws_iam_role_policy.budget.name,
+    aws_iam_role_policy.cost_controls.name,
     aws_iam_role_policy.service_control_policies.name,
   ], [for p in aws_iam_role_policy.audit_trail : p.name])
 }

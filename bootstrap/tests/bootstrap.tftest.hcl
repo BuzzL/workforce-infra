@@ -149,8 +149,8 @@ run "role_has_no_other_permissions" {
 
   # The exclusive resources make Terraform remove anything else attached to the role.
   assert {
-    condition     = aws_iam_role_policies_exclusive.github_infra_management.policy_names == toset(["terraform-state", "plan-bootstrap-stack", "organization-units", "budget", "service-control-policies", "audit-trail"])
-    error_message = "Only the six documented inline policies may exist on the role."
+    condition     = aws_iam_role_policies_exclusive.github_infra_management.policy_names == toset(["terraform-state", "plan-bootstrap-stack", "organization-units", "budget", "cost-controls", "service-control-policies", "audit-trail"])
+    error_message = "Only the seven documented inline policies may exist on the role."
   }
 
   assert {
@@ -226,11 +226,12 @@ run "plan_role_is_read_only" {
         jsondecode(aws_iam_role_policy.plan_bootstrap_read.policy).Statement,
         jsondecode(aws_iam_role_policy.plan_organization_units.policy).Statement,
         jsondecode(aws_iam_role_policy.plan_budget.policy).Statement,
+        jsondecode(aws_iam_role_policy.plan_cost_controls.policy).Statement,
         ) : alltrue([
-          for a in flatten([s.Action]) : can(regex("^((s3|iam|organizations):(Get|List|Describe)[A-Za-z]*|budgets:(ViewBudget|ListTagsForResource))$", a))
+          for a in flatten([s.Action]) : can(regex("^((s3|iam|organizations):(Get|List|Describe)[A-Za-z]*|budgets:(ViewBudget|ListTagsForResource)|ce:(GetAnomalyMonitors|GetAnomalySubscriptions|ListTagsForResource|ListCostAllocationTags))$", a))
       ])
     ])
-    error_message = "The plan role may only have S3, IAM and Organizations Get, List and Describe actions and the two read actions on its budget, and exactly the documented ones (see the literals above and below)."
+    error_message = "The plan role may only have S3, IAM and Organizations Get, List and Describe actions the two read actions on its budgets and the read actions of Cost Explorer, and exactly the documented ones (see the literals above and below)."
   }
 
   assert {
@@ -248,7 +249,9 @@ run "plan_role_is_read_only" {
       aws_iam_role_policy.organization_units.role == aws_iam_role.github_infra_management.id &&
       aws_iam_role_policy.plan_organization_units.role == aws_iam_role.github_infra_management_plan.id &&
       aws_iam_role_policy.budget.role == aws_iam_role.github_infra_management.id &&
-      aws_iam_role_policy.plan_budget.role == aws_iam_role.github_infra_management_plan.id
+      aws_iam_role_policy.plan_budget.role == aws_iam_role.github_infra_management_plan.id &&
+      aws_iam_role_policy.cost_controls.role == aws_iam_role.github_infra_management.id &&
+      aws_iam_role_policy.plan_cost_controls.role == aws_iam_role.github_infra_management_plan.id
     )
     error_message = "Every inline policy must be attached to its own role."
   }
@@ -274,8 +277,8 @@ run "plan_role_is_read_only" {
   }
 
   assert {
-    condition     = aws_iam_role_policies_exclusive.github_infra_management_plan.policy_names == toset(["terraform-state-read", "plan-bootstrap-stack", "plan-organization-units", "plan-budget", "plan-service-control-policies", "plan-audit-trail"])
-    error_message = "Only the six documented inline policies may exist on the plan role."
+    condition     = aws_iam_role_policies_exclusive.github_infra_management_plan.policy_names == toset(["terraform-state-read", "plan-bootstrap-stack", "plan-organization-units", "plan-budget", "plan-cost-controls", "plan-service-control-policies", "plan-audit-trail"])
+    error_message = "Only the seven documented inline policies may exist on the plan role."
   }
 
   assert {
@@ -363,6 +366,76 @@ run "budget_permissions_are_exactly_the_documented_ones" {
   assert {
     condition     = jsondecode(aws_iam_role_policy.plan_budget.policy).Statement == slice(jsondecode(aws_iam_role_policy.budget.policy).Statement, 0, 1)
     error_message = "The plan role must have exactly the read statement of the management role, without the write statement."
+  }
+}
+
+run "cost_controls_permissions_are_exactly_the_documented_ones" {
+  command = apply
+
+  assert {
+    condition = jsondecode(aws_iam_role_policy.cost_controls.policy) == {
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Sid    = "ReadAccountBudgets"
+          Effect = "Allow"
+          Action = ["budgets:ViewBudget", "budgets:ListTagsForResource"]
+          Resource = [
+            "arn:aws:budgets::111122223333:budget/scrt-foundation-cost-budget",
+            "arn:aws:budgets::111122223333:budget/wrkf-foundation-cost-budget",
+            "arn:aws:budgets::111122223333:budget/test-foundation-cost-budget",
+            "arn:aws:budgets::111122223333:budget/qual-foundation-cost-budget",
+            "arn:aws:budgets::111122223333:budget/demo-foundation-cost-budget",
+          ]
+        },
+        {
+          Sid      = "ReadAnomalyDetection"
+          Effect   = "Allow"
+          Action   = ["ce:GetAnomalyMonitors", "ce:GetAnomalySubscriptions", "ce:ListTagsForResource"]
+          Resource = ["arn:aws:ce::111122223333:anomalymonitor/*", "arn:aws:ce::111122223333:anomalysubscription/*"]
+        },
+        {
+          Sid      = "ReadCostAllocationTags"
+          Effect   = "Allow"
+          Action   = ["ce:ListCostAllocationTags"]
+          Resource = ["*"]
+        },
+        {
+          Sid    = "ManageAccountBudgets"
+          Effect = "Allow"
+          Action = ["budgets:ModifyBudget", "budgets:TagResource", "budgets:UntagResource"]
+          Resource = [
+            "arn:aws:budgets::111122223333:budget/scrt-foundation-cost-budget",
+            "arn:aws:budgets::111122223333:budget/wrkf-foundation-cost-budget",
+            "arn:aws:budgets::111122223333:budget/test-foundation-cost-budget",
+            "arn:aws:budgets::111122223333:budget/qual-foundation-cost-budget",
+            "arn:aws:budgets::111122223333:budget/demo-foundation-cost-budget",
+          ]
+        },
+        {
+          Sid    = "ManageAnomalyDetection"
+          Effect = "Allow"
+          Action = [
+            "ce:CreateAnomalyMonitor", "ce:UpdateAnomalyMonitor", "ce:DeleteAnomalyMonitor",
+            "ce:CreateAnomalySubscription", "ce:UpdateAnomalySubscription", "ce:DeleteAnomalySubscription",
+            "ce:TagResource", "ce:UntagResource",
+          ]
+          Resource = ["arn:aws:ce::111122223333:anomalymonitor/*", "arn:aws:ce::111122223333:anomalysubscription/*"]
+        },
+        {
+          Sid      = "ActivateCostAllocationTags"
+          Effect   = "Allow"
+          Action   = ["ce:UpdateCostAllocationTagsStatus"]
+          Resource = ["*"]
+        }
+      ]
+    }
+    error_message = "The management role may manage the five account budgets, Cost Anomaly Detection of the account and the activation of cost allocation tags, and nothing else in Budgets or Cost Explorer."
+  }
+
+  assert {
+    condition     = jsondecode(aws_iam_role_policy.plan_cost_controls.policy).Statement == slice(jsondecode(aws_iam_role_policy.cost_controls.policy).Statement, 0, 3)
+    error_message = "The plan role must have exactly the read statements of the management role, without the write statements."
   }
 }
 
@@ -730,11 +803,13 @@ run "ci_roles_cannot_assume_roles_in_member_accounts" {
           aws_iam_role_policy.plan_bootstrap.policy,
           aws_iam_role_policy.organization_units.policy,
           aws_iam_role_policy.budget.policy,
+          aws_iam_role_policy.cost_controls.policy,
           aws_iam_role_policy.service_control_policies.policy,
           aws_iam_role_policy.plan_state_read.policy,
           aws_iam_role_policy.plan_bootstrap_read.policy,
           aws_iam_role_policy.plan_organization_units.policy,
           aws_iam_role_policy.plan_budget.policy,
+          aws_iam_role_policy.plan_cost_controls.policy,
           aws_iam_role_policy.plan_service_control_policies.policy,
         ],
         [for p in aws_iam_role_policy.audit_trail : p.policy],
@@ -750,7 +825,7 @@ run "ci_roles_cannot_assume_roles_in_member_accounts" {
   }
 
   assert {
-    condition     = aws_iam_role_policies_exclusive.github_infra_management.policy_names == toset(["terraform-state", "plan-bootstrap-stack", "organization-units", "budget", "service-control-policies", "audit-trail"]) && aws_iam_role_policies_exclusive.github_infra_management_plan.policy_names == toset(["terraform-state-read", "plan-bootstrap-stack", "plan-organization-units", "plan-budget", "plan-service-control-policies", "plan-audit-trail"])
+    condition     = aws_iam_role_policies_exclusive.github_infra_management.policy_names == toset(["terraform-state", "plan-bootstrap-stack", "organization-units", "budget", "cost-controls", "service-control-policies", "audit-trail"]) && aws_iam_role_policies_exclusive.github_infra_management_plan.policy_names == toset(["terraform-state-read", "plan-bootstrap-stack", "plan-organization-units", "plan-budget", "plan-cost-controls", "plan-service-control-policies", "plan-audit-trail"])
     error_message = "Listing member accounts must not add an inline policy to either role."
   }
 }
@@ -1101,7 +1176,7 @@ run "audit_trail_grants_are_exactly_the_documented_ones" {
   }
 
   assert {
-    condition     = aws_iam_role_policies_exclusive.github_infra_management.policy_names == toset(["terraform-state", "plan-bootstrap-stack", "organization-units", "budget", "service-control-policies", "audit-trail"]) && aws_iam_role_policies_exclusive.github_infra_management_plan.policy_names == toset(["terraform-state-read", "plan-bootstrap-stack", "plan-organization-units", "plan-budget", "plan-service-control-policies", "plan-audit-trail"])
+    condition     = aws_iam_role_policies_exclusive.github_infra_management.policy_names == toset(["terraform-state", "plan-bootstrap-stack", "organization-units", "budget", "cost-controls", "service-control-policies", "audit-trail"]) && aws_iam_role_policies_exclusive.github_infra_management_plan.policy_names == toset(["terraform-state-read", "plan-bootstrap-stack", "plan-organization-units", "plan-budget", "plan-cost-controls", "plan-service-control-policies", "plan-audit-trail"])
     error_message = "The new policies must be owned by the exclusive resources, so nothing else can be attached."
   }
 }

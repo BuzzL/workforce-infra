@@ -24,6 +24,18 @@ The budget was created by hand. `live/management/budget.tf` has an `import` bloc
 
 `metrics` is ignored in `modules/budget`: AWS sets `UnblendedCost` itself and the provider only accepts the attribute together with a filter expression, so leaving it unmanaged avoids a diff on every plan. Once the first apply has run, the `import` block does nothing and is removed in a later PR.
 
+## CI permissions of the other cost controls
+
+The `management` apply role holds the permissions of the remaining cost controls (`bootstrap/cost_controls.tf`, policy `cost-controls`, asserted literally in `bootstrap/tests/bootstrap.tftest.hcl`). The plan role holds only the read statements.
+
+| Control | Permission | Scope |
+|---|---|---|
+| Budget per member account | `budgets:ModifyBudget`, `TagResource`, `UntagResource` (and the two reads) | the five budgets named `<key>-foundation-cost-budget`, for the keys `scrt`, `wrkf`, `test`, `qual`, `demo` |
+| Cost Anomaly Detection | `ce:Create/Update/Delete` of `AnomalyMonitor` and `AnomalySubscription`, `ce:TagResource`, `ce:UntagResource` (and the reads) | `anomalymonitor/*` and `anomalysubscription/*` of the account: AWS names them with a generated ID, so a name cannot narrow them |
+| Cost allocation tags | `ce:UpdateCostAllocationTagsStatus`, `ce:ListCostAllocationTags` | `*`: IAM has no resource type for either action |
+
+The policy is applied locally, before the stack changes that use it.
+
 ## Changing it
 
 - Limit: change `budget_limit_usd` (and the literal in `live/management/tests/budget.tftest.hcl`).
