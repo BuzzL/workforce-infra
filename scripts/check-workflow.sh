@@ -63,12 +63,12 @@ need.(jobs["apply"].dig("concurrency", "cancel-in-progress") == false, "apply: a
   need.(e["TF_VAR_management_account_id"] == "${{ secrets.MANAGEMENT_ACCOUNT_ID }}", "#{j}: the management account ID must be a secret")
 end
 
-# The agent role variable (IAT-92) reaches the Plan step of the plan job only: the apply job never plans
+# The agent role variable reaches the Plan step of the plan job only: the apply job never plans
 # a baseline, and no other step needs the ExternalId.
 plan_step = jobs["plan"]["steps"].find { |s| s["id"] == "plan" } || {}
 need.((plan_step["env"] || {})["TF_VAR_agent"] == "${{ secrets.AGENT || \x27null\x27 }}", "plan: the agent role must come from the secret AGENT, null when unset")
 need.(text.scan(/secrets\s*\.\s*AGENT\b/i).size == 1, "the secret AGENT must be used once, as TF_VAR_agent of the Plan step of the plan job")
-# Same for the matrix runner roles of the workforce account (IAT-46).
+# Same for the matrix runner roles of the workforce account.
 need.((plan_step["env"] || {})["TF_VAR_matrix"] == "${{ secrets.MATRIX || \x27null\x27 }}", "plan: the matrix runner roles must come from the secret MATRIX, null when unset")
 need.(text.scan(/secrets\s*\.\s*MATRIX\b/i).size == 1, "the secret MATRIX must be used once, as TF_VAR_matrix of the Plan step of the plan job")
 

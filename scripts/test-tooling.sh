@@ -615,7 +615,7 @@ agent --rotate > /dev/null
 expect pass "agent vars: --set-secrets carries both ExternalIds of a rotation" bash -c "env PATH=\"$PWD/fake-gh:\$PATH\" $agent_root/scripts/set-agent-role-vars.sh --set-secrets >/dev/null && grep -qE 'external_ids=\\[\"[0-9a-f]{64}\",\"[0-9a-f]{64}\"\\]' gh.in.1"
 agent --drop-old > /dev/null
 
-# The runner roles of the matrix (IAT-46): written as extra_principal_arns, carried into the secret,
+# The runner roles of the matrix: written as extra_principal_arns, carried into the secret,
 # and only the matrix role of the same environment in the same account is accepted.
 runner_json='{"demo":"arn:aws:iam::444455556666:role/platform/wrkf-foundation-matrix-demo-role","quality":"arn:aws:iam::444455556666:role/platform/wrkf-foundation-matrix-quality-role","test":"arn:aws:iam::444455556666:role/platform/wrkf-foundation-matrix-test-role"}'
 runner_tfvars=$agent_root/bootstrap/accounts/quality/terraform.tfvars

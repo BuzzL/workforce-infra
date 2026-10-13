@@ -91,7 +91,7 @@ run "agent_task_role_is_assumed_by_ecs_tasks_of_this_account_only" {
   }
 }
 
-# The matrix runner roles (IAT-46): one per environment, one exact OIDC subject each, and the
+# The matrix runner roles: one per environment, one exact OIDC subject each, and the
 # agent role of that environment is the only thing each may assume.
 run "no_matrix_roles_while_the_variable_is_unset" {
   command = apply

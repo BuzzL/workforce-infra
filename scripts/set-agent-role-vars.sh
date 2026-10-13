@@ -56,7 +56,7 @@ if [ -n "$principal" ]; then
   workforce_id=${BASH_REMATCH[1]}
 fi
 
-# The runner roles of the matrix (IAT-46): read only where the principal is read from Terraform too,
+# The runner roles of the matrix: read only where the principal is read from Terraform too,
 # so that a given AGENT_ROLE_ARN keeps the script from touching Terraform at all.
 matrix_json=${MATRIX_ROLE_ARNS:-}
 if [ -z "$matrix_json" ] && [ -z "${AGENT_ROLE_ARN:-}" ] && [ -n "$principal" ]; then

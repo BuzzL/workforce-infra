@@ -161,7 +161,7 @@ run "deploy_role_needs_a_numeric_repository_id" {
   expect_failures = [var.deploy]
 }
 
-# The matrix runner role of this environment (IAT-46) may assume the agent role, next to the task role.
+# The matrix runner role of this environment may assume the agent role, next to the task role.
 run "agent_role_trusts_the_matrix_runner_role_of_this_environment" {
   command = apply
 
