@@ -21,6 +21,23 @@ variable "break_glass_account_id" {
   }
 }
 
+variable "matrix" {
+  description = "The matrix runner roles (docs/AGENT_ROLES.md): the account ID of each environment account, whose agent role the runner of that environment may assume. Null creates no role. Set in the gitignored terraform.tfvars and in the secret MATRIX of workforce-plan; never committed."
+  type = object({
+    environment_account_ids = map(string)
+  })
+  default   = null
+  sensitive = true
+
+  validation {
+    condition = var.matrix == null || (
+      toset(keys(var.matrix.environment_account_ids)) == toset(["demo", "quality", "test"]) &&
+      alltrue([for id in values(var.matrix.environment_account_ids) : can(regex("^[0-9]{12}$", id))])
+    )
+    error_message = "matrix.environment_account_ids needs the 12-digit account ID of test, quality and demo, and nothing else."
+  }
+}
+
 variable "tags" {
   description = "Tags applied to every resource."
   type        = map(string)

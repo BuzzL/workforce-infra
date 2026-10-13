@@ -137,7 +137,120 @@ run "service_trust" {
   }
 }
 
+run "assume_role_trust_with_an_extra_principal" {
+  command = apply
+
+  variables {
+    trust = {
+      mode = "assume_role"
+      assume_role = {
+        principal_arn        = "arn:aws:iam::111122223333:role/platform/wrkf-foundation-agent-role"
+        source_account_id    = "111122223333"
+        external_ids         = ["0123456789abcdef-current"]
+        session_name_pattern = "agent-*"
+        extra_principal_arns = ["arn:aws:iam::111122223333:role/platform/wrkf-foundation-matrix-test-role"]
+      }
+    }
+  }
+
+  assert {
+    condition = jsondecode(aws_iam_role.this.assume_role_policy) == {
+      Version = "2012-10-17"
+      Statement = [{
+        Effect = "Allow"
+        Principal = { AWS = [
+          "arn:aws:iam::111122223333:role/platform/wrkf-foundation-agent-role",
+          "arn:aws:iam::111122223333:role/platform/wrkf-foundation-matrix-test-role",
+        ] }
+        Action = "sts:AssumeRole"
+        Condition = {
+          StringEquals = {
+            "aws:PrincipalAccount" = "111122223333"
+            "sts:ExternalId"       = ["0123456789abcdef-current"]
+          }
+          ArnEquals = { "aws:PrincipalArn" = [
+            "arn:aws:iam::111122223333:role/platform/wrkf-foundation-agent-role",
+            "arn:aws:iam::111122223333:role/platform/wrkf-foundation-matrix-test-role",
+          ] }
+          StringLike = { "sts:RoleSessionName" = "agent-*" }
+        }
+      }]
+    }
+    error_message = "An extra principal must be named exactly in Principal and in aws:PrincipalArn, with the account, the ExternalId and the session pattern still required."
+  }
+}
+
+run "matrix_role_name_is_accepted" {
+  command = plan
+
+  variables {
+    name = "wrkf-foundation-matrix-quality-role"
+    trust = {
+      mode = "web_identity"
+      web_identity = {
+        provider_arn = "arn:aws:iam::111122223333:oidc-provider/token.actions.githubusercontent.com"
+        subject      = "repo:BuzzL@6116516/workforce-infra@1:environment:quality-matrix"
+      }
+    }
+  }
+
+  assert {
+    condition     = aws_iam_role.this.name == "wrkf-foundation-matrix-quality-role"
+    error_message = "matrix-<env>-role is a platform role name."
+  }
+}
+
 # Refusals: every one of these must fail at plan time.
+run "refuses_wildcard_extra_principal" {
+  command         = plan
+  expect_failures = [var.trust]
+
+  variables {
+    trust = {
+      mode = "assume_role"
+      assume_role = {
+        principal_arn        = "arn:aws:iam::111122223333:role/platform/wrkf-foundation-agent-role"
+        source_account_id    = "111122223333"
+        external_ids         = ["0123456789abcdef-current"]
+        extra_principal_arns = ["arn:aws:iam::111122223333:role/platform/wrkf-*"]
+      }
+    }
+  }
+}
+
+run "refuses_extra_principal_of_another_account" {
+  command         = plan
+  expect_failures = [var.trust]
+
+  variables {
+    trust = {
+      mode = "assume_role"
+      assume_role = {
+        principal_arn        = "arn:aws:iam::111122223333:role/platform/wrkf-foundation-agent-role"
+        source_account_id    = "111122223333"
+        external_ids         = ["0123456789abcdef-current"]
+        extra_principal_arns = ["arn:aws:iam::444455556666:role/platform/wrkf-foundation-matrix-test-role"]
+      }
+    }
+  }
+}
+
+run "refuses_duplicate_extra_principal" {
+  command         = plan
+  expect_failures = [var.trust]
+
+  variables {
+    trust = {
+      mode = "assume_role"
+      assume_role = {
+        principal_arn        = "arn:aws:iam::111122223333:role/platform/wrkf-foundation-agent-role"
+        source_account_id    = "111122223333"
+        external_ids         = ["0123456789abcdef-current"]
+        extra_principal_arns = ["arn:aws:iam::111122223333:role/platform/wrkf-foundation-agent-role"]
+      }
+    }
+  }
+}
 run "refuses_wildcard_principal" {
   command         = plan
   expect_failures = [var.trust]

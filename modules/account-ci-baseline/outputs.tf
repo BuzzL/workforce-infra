@@ -48,3 +48,8 @@ output "oidc_provider_arn" {
   value       = aws_iam_openid_connect_provider.github.arn
   sensitive   = true
 }
+
+output "github_subject_prefix" {
+  description = "The OIDC subject of the repository up to the environment (repo:<owner>@<id>/<repository>@<id>:environment), for the roles a stack trusts to one more GitHub Environment of the same repository. Public values, not AWS IDs."
+  value       = local.github_sub_prefix
+}

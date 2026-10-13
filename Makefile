@@ -1,7 +1,7 @@
 # Every gate that loops over stacks lives in scripts/each.sh. Recipes stay one-liners
 # because macOS ships Make 3.81, which cannot make recipes fail fast on its own.
-.PHONY: fmt validate lint versions dependabot sec test workflows lifecycle accounts docs codeowners selftest check
-check: fmt validate lint versions dependabot sec test workflows lifecycle accounts docs codeowners selftest
+.PHONY: fmt validate lint versions dependabot sec test workflows lifecycle accounts docs codeowners matrix selftest check
+check: fmt validate lint versions dependabot sec test workflows lifecycle accounts docs codeowners matrix selftest
 
 fmt:
 	terraform fmt -check -recursive -diff
@@ -43,6 +43,10 @@ docs:
 # The paths that decide what CI may do are listed in CODEOWNERS and exist.
 codeowners:
 	scripts/check-codeowners.sh
+
+# The allowed/denied matrix agrees with the narrowing rule and with the Allow statements of the role modules.
+matrix:
+	scripts/check-permission-matrix.sh
 
 # Proves the gates above pass on valid code and fail on broken code.
 selftest:

@@ -89,6 +89,40 @@ run "trust_names_the_agent_task_role_only" {
   }
 }
 
+run "trust_adds_the_matrix_runner_role_when_given" {
+  command = apply
+
+  variables {
+    key                  = "qual"
+    extra_principal_arns = ["arn:aws:iam::444455556666:role/platform/wrkf-foundation-matrix-quality-role"]
+  }
+
+  assert {
+    condition = jsondecode(output.trust_policy).Statement[0].Principal == {
+      AWS = [
+        "arn:aws:iam::444455556666:role/wrkf-foundation-agent-task-role",
+        "arn:aws:iam::444455556666:role/platform/wrkf-foundation-matrix-quality-role",
+      ]
+    }
+    error_message = "The agent task role and the matrix runner role of the environment, and nobody else, may assume the role."
+  }
+
+  assert {
+    condition     = jsondecode(output.trust_policy).Statement[0].Condition.StringEquals["sts:ExternalId"] == ["0123456789abcdef-current"] && jsondecode(output.trust_policy).Statement[0].Condition.StringLike["sts:RoleSessionName"] == "agent-*"
+    error_message = "The runner is held to the same ExternalId and session name as the agent task role."
+  }
+}
+
+run "refuses_an_extra_principal_outside_workforce" {
+  command         = plan
+  expect_failures = [var.extra_principal_arns]
+
+  variables {
+    key                  = "qual"
+    extra_principal_arns = ["arn:aws:iam::111122223333:role/platform/test-foundation-agent-role"]
+  }
+}
+
 # Narrowing rule of docs/ENVIRONMENT_PERMISSIONS.md: allowed(demo) ⊆ allowed(quality) ⊆ allowed(test),
 # as the set of (action, resource) pairs once the account key is taken out of the names. The agent
 # role is identical everywhere, so both inclusions hold with equality.

@@ -27,3 +27,9 @@ output "agent_role_arn" {
   value       = module.agent_role.arn
   sensitive   = true
 }
+
+output "matrix_role_arns" {
+  description = "ARN of the matrix runner role of each environment, or empty while var.matrix is unset: the secret MATRIX_RUNNER_ROLE_ARN of the <environment>-matrix GitHub Environment, and extra_principal_arns of the agent role of that environment (scripts/set-agent-role-vars.sh). Sensitive: public repository."
+  value       = { for env, m in module.matrix_role : env => m.arn }
+  sensitive   = true
+}
