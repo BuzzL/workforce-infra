@@ -8,11 +8,15 @@ name: Permission matrix
 # deployment flow. Its rows are proven offline by `make matrix`, and live by the application's
 # workflow in its GitHub Environment, which calls the same script.
 #
-# Manual until the roles and the <environment>-matrix GitHub Environments exist. It then
-# runs on every pull request and its job name becomes a required check. Output names roles,
-# environments and actions only: the role ARNs are environment SECRETS (masked everywhere) and
-# the runner pipes everything through scripts/redact.sh.
+# Runs on every pull request, and on demand. The job is gated on the repository variable
+# MATRIX_ENABLED: it stays skipped (so main stays green) until the <environment>-matrix GitHub
+# Environments, their secrets and the required-check ruleset exist (the workforce-github slice),
+# at which point the maintainer sets MATRIX_ENABLED to "true" and the job runs for real on every
+# pull request. The demo reviewer gate is the demo-matrix environment, not this file. Output names
+# roles, environments and actions only: the role ARNs are environment SECRETS (masked everywhere)
+# and the runner pipes everything through scripts/redact.sh.
 on:
+  pull_request:
   workflow_dispatch:
 
 permissions: {}
@@ -20,8 +24,18 @@ permissions: {}
 jobs:
   matrix:
     name: permission-matrix ${{ matrix.role }} ${{ matrix.environment }}
+    # Skipped (never failing) until the matrix infrastructure exists; forked pull requests get no
+    # OIDC token, so they are skipped too.
+    if: >
+      vars.MATRIX_ENABLED == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-latest
     environment: ${{ matrix.environment }}-matrix
+    concurrency:
+      group: permission-matrix-${{ github.event.pull_request.number || github.run_id }}-${{ matrix.role }}-${{ matrix.environment }}
+      cancel-in-progress: true
     permissions:
       id-token: write
       contents: read
