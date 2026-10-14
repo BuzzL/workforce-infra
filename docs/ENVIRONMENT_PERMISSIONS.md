@@ -63,7 +63,7 @@ with the extra rules that `<app>-<qualifier>` is at most 39 characters (checked 
 Platform resources, enumerated exactly (the roles of the CI baselines (`infra`, `github`) live in the account of their key, so the account slot also admits `root`, `wrkf` and `scrt` here):
 
 ```
-^(test|qual|demo|root|wrkf|scrt)-<project>-(agent-role|infra-role|infra-plan-role|github-role|github-plan-role|[a-z0-9]{1,16}-(deploy-role|exec-role|boundary))$
+^(test|qual|demo|root|wrkf|scrt)-<project>-(agent-role|infra-role|infra-plan-role|github-role|github-plan-role|matrix-(test|quality|demo)-role|[a-z0-9]{1,16}-(deploy-role|exec-role|boundary))$
 ```
 
 The Lambda alias is the one resource with a fixed name, `live`: it is scoped by its function, so a prefix adds nothing. The log group of a function is named after it, `/aws/lambda/<function name>`.

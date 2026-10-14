@@ -29,5 +29,6 @@ module "agent_role" {
   principal_arn        = var.agent.principal_arn
   workforce_account_id = var.agent.workforce_account_id
   external_ids         = var.agent.external_ids
+  extra_principal_arns = var.agent.extra_principal_arns
   tags                 = var.tags
 }
