@@ -38,6 +38,19 @@ variable "matrix" {
   }
 }
 
+variable "pipeline" {
+  description = "The CDK deployment of workforce-pipeline (docs/CDK_BOOTSTRAP.md): the numeric GitHub ID of its repository, public and not an AWS ID. Null creates neither role nor the boundary. Set in the gitignored terraform.tfvars."
+  type = object({
+    github_repository_id = string
+  })
+  default = null
+
+  validation {
+    condition     = var.pipeline == null || can(regex("^[0-9]+$", var.pipeline.github_repository_id))
+    error_message = "The repository ID must be the numeric GitHub ID of workforce-pipeline."
+  }
+}
+
 variable "tags" {
   description = "Tags applied to every resource."
   type        = map(string)

@@ -33,3 +33,15 @@ output "matrix_role_arns" {
   value       = { for env, m in module.matrix_role : env => m.arn }
   sensitive   = true
 }
+
+output "pipeline_deploy_role_arn" {
+  description = "ARN of the workforce-pipeline deploy role, or null while var.pipeline is unset: the secret AWS_ROLE_ARN of the workforce GitHub Environment of workforce-pipeline. Sensitive: public repository."
+  value       = one(module.pipeline_deploy_role[*].arn)
+  sensitive   = true
+}
+
+output "pipeline_exec_role_arn" {
+  description = "ARN of the CloudFormation execution role of workforce-pipeline, or null while var.pipeline is unset: what its CI passes to cdk deploy --role-arn. Sensitive: public repository."
+  value       = one(module.pipeline_exec_role[*].arn)
+  sensitive   = true
+}

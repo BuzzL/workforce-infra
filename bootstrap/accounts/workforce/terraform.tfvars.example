@@ -4,3 +4,8 @@ state_bucket_name = "<state-bucket-name>"
 
 # Only for the one-time bootstrap, never in CI: the workforce account ID.
 # break_glass_account_id = "<12 digits>"
+
+# The CDK deployment of workforce-pipeline (docs/CDK_BOOTSTRAP.md). Leave unset until the repository exists.
+# pipeline = {
+#   github_repository_id = "<numeric GitHub ID of workforce-pipeline>"
+# }
