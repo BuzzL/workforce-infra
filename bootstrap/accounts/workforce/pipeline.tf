@@ -24,14 +24,15 @@ locals {
   pipeline_stacks    = "arn:aws:cloudformation:${var.region}:${local.pipeline_account}:stack/${local.pipeline_base}-*-stack/*"
   pipeline_app_roles = "arn:aws:iam::${local.pipeline_account}:role/apps/pipeline/${local.pipeline_base}-*-role"
 
-  # The staging bucket and stack of the custom bootstrap. The qualifier is CDK's, at most 10 characters.
-  cdk_qualifier      = "wrkf"
-  cdk_toolkit_stack  = "wrkf-foundation-cdktoolkit-stack"
-  cdk_assets_bucket  = "cdk-${local.cdk_qualifier}-assets-${local.pipeline_account}-${var.region}"
-  cdk_assets_arn     = "arn:aws:s3:::${local.cdk_assets_bucket}"
-  cdk_template_urls  = ["https://s3.${var.region}.amazonaws.com/${local.cdk_assets_bucket}/*", "https://${local.cdk_assets_bucket}.s3.${var.region}.amazonaws.com/*"]
-  pipeline_tag_keys  = ["App", "Archetype", "Environment", "ManagedBy", "Project", "Repository", "Stack", "Target"]
-  pipeline_tag_rules = { "ForAllValues:StringEquals" = { "aws:TagKeys" = local.pipeline_tag_keys } }
+  # The staging bucket and stack of the custom bootstrap; the qualifier is the template's own.
+  cdk_bootstrap_template = yamldecode(file("${path.module}/cdk-bootstrap.yaml"))
+  cdk_qualifier          = local.cdk_bootstrap_template.Parameters.Qualifier.Default
+  cdk_toolkit_stack      = "wrkf-foundation-cdktoolkit-stack"
+  cdk_assets_bucket      = "cdk-${local.cdk_qualifier}-assets-${local.pipeline_account}-${var.region}"
+  cdk_assets_arn         = "arn:aws:s3:::${local.cdk_assets_bucket}"
+  cdk_template_urls      = ["https://s3.${var.region}.amazonaws.com/${local.cdk_assets_bucket}/*", "https://${local.cdk_assets_bucket}.s3.${var.region}.amazonaws.com/*"]
+  pipeline_tag_keys      = ["App", "Archetype", "Environment", "ManagedBy", "Project", "Repository", "Stack", "Target"]
+  pipeline_tag_rules     = { "ForAllValues:StringEquals" = { "aws:TagKeys" = local.pipeline_tag_keys } }
 
   # The boundary: everything a role of the pipeline's stacks may ever do. Writing its own Lambda
   # log streams, and nothing else until a workload needs more (each addition is approved).

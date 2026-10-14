@@ -435,3 +435,73 @@ run "pipeline_policies_have_no_wildcard_principal_action_or_not_element" {
     error_message = "Every statement of the pipeline is an Allow with named actions and resources, and no Not* element."
   }
 }
+
+# The custom CDK bootstrap template (cdk-bootstrap.yaml): the staging bucket and nothing else.
+run "cdk_bootstrap_template_holds_only_the_staging_bucket" {
+  command = plan
+
+  assert {
+    condition = { for k, r in local.cdk_bootstrap_template.Resources : k => r.Type } == {
+      StagingBucket       = "AWS::S3::Bucket"
+      StagingBucketPolicy = "AWS::S3::BucketPolicy"
+    }
+    error_message = "The bootstrap template creates the staging bucket and its policy, and no role or other resource."
+  }
+
+  assert {
+    condition = { for k, p in local.cdk_bootstrap_template.Parameters : k => p.AllowedValues if k != "BootstrapVariant" } == {
+      Qualifier                      = ["wrkf"]
+      FileAssetsBucketKmsKeyId       = ["AWS_MANAGED_KEY"]
+      PublicAccessBlockConfiguration = ["true"]
+    }
+    error_message = "The parameters the CDK CLI sends accept one value each: the qualifier wrkf, the managed key marker and a blocked public access."
+  }
+
+  assert {
+    condition     = local.cdk_qualifier == "wrkf" && local.cdk_bootstrap_template.Resources.StagingBucket.Properties.BucketName == { "Fn::Sub" = "cdk-$${Qualifier}-assets-$${AWS::AccountId}-$${AWS::Region}" }
+    error_message = "The bucket must be cdk-wrkf-assets-<account>-<region>, the one the deploy role names."
+  }
+
+  assert {
+    condition = local.cdk_bootstrap_template.Resources.StagingBucket.Properties.PublicAccessBlockConfiguration == {
+      BlockPublicAcls = true, BlockPublicPolicy = true, IgnorePublicAcls = true, RestrictPublicBuckets = true
+    }
+    error_message = "The staging bucket must block every form of public access."
+  }
+
+  assert {
+    condition = (
+      local.cdk_bootstrap_template.Resources.StagingBucket.Properties.BucketEncryption.ServerSideEncryptionConfiguration[0].ServerSideEncryptionByDefault.SSEAlgorithm == "AES256" &&
+      local.cdk_bootstrap_template.Resources.StagingBucket.Properties.OwnershipControls.Rules[0].ObjectOwnership == "BucketOwnerEnforced" &&
+      local.cdk_bootstrap_template.Resources.StagingBucket.Properties.VersioningConfiguration.Status == "Enabled" &&
+      local.cdk_bootstrap_template.Resources.StagingBucket.DeletionPolicy == "Retain"
+    )
+    error_message = "The staging bucket is encrypted, owner-enforced, versioned and retained."
+  }
+
+  assert {
+    condition     = contains(local.cdk_bootstrap_template.Resources.StagingBucket.Properties.Tags, { Key = "Stack", Value = local.cdk_toolkit_stack })
+    error_message = "The bucket's Stack tag must name the toolkit stack the deploy role reads."
+  }
+
+  # The one statement: a Deny whose "*" principal and s3:* are narrowed by the TLS condition.
+  assert {
+    condition = local.cdk_bootstrap_template.Resources.StagingBucketPolicy.Properties.PolicyDocument == {
+      Version = "2012-10-17"
+      Statement = [{
+        Sid       = "DenyInsecureTransport"
+        Effect    = "Deny"
+        Principal = { AWS = "*" }
+        Action    = "s3:*"
+        Resource  = [{ "Fn::GetAtt" = ["StagingBucket", "Arn"] }, { "Fn::Sub" = "$${StagingBucket.Arn}/*" }]
+        Condition = { Bool = { "aws:SecureTransport" = "false" } }
+      }]
+    }
+    error_message = "The bucket policy is exactly the TLS-only Deny: no Allow, and its wildcards narrowed by aws:SecureTransport."
+  }
+
+  assert {
+    condition     = local.cdk_bootstrap_template.Outputs.BootstrapVersion.Value == "1" && local.cdk_bootstrap_template.Outputs.BucketName.Value == { Ref = "StagingBucket" }
+    error_message = "The CDK CLI reads BootstrapVersion and BucketName from the toolkit stack's outputs."
+  }
+}

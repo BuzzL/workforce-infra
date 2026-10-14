@@ -48,9 +48,30 @@ It lists what a role of the pipeline may ever do: `logs:CreateLogStream` and `lo
 
 **The boundary needs the maintainer's explicit approval before it is applied** (`CLAUDE.md`): a boundary can lock a role out.
 
+## The custom bootstrap template
+
+`bootstrap/accounts/workforce/cdk-bootstrap.yaml` replaces the default `cdk bootstrap` template. It creates the asset staging bucket `cdk-wrkf-assets-<account>-<region>` and its policy, and nothing else: no `cdk-*` roles, no ECR repository, no SSM parameter (`CliCredentialsStackSynthesizer` reads none of them).
+
+- The bucket: SSE-S3 (no customer-managed key, as for the audit log bucket; trivy's CMK finding is ignored inline with that reason), all public access blocked, `BucketOwnerEnforced`, versioned with old versions expired after 30 days, `DeletionPolicy: Retain`, the tags of `docs/TAG_CONVENTION.md`.
+- The policy: one Deny, `s3:*` for any principal when `aws:SecureTransport` is `false`. Its wildcards are narrowed by the condition and the two bucket resources, and the test asserts it literally, as for the state bucket.
+- The parameters the CDK CLI sends (`Qualifier`, `FileAssetsBucketKmsKeyId`, `PublicAccessBlockConfiguration`) accept one value each. The CLI does not send `CloudFormationExecutionPolicies` unless asked, and the template does not declare it. Its warning about a default `AdministratorAccess` execution policy is about the default template and does not apply: nothing here reads that value.
+- The outputs the CLI reads: `BucketName`, `BucketDomainName`, `BootstrapVersion` (`1`, this template's own version line). `BootstrapVariant` stops the CLI from overwriting it with the default template.
+- Long-form intrinsics only (`Fn::Sub`, not `!Sub`), so that Terraform can `yamldecode()` the file. The stack takes its qualifier from the template, so the deploy role and the bucket cannot drift apart.
+
+Bootstrapping is the maintainer's, with the SSO admin session of `workforce`. It needs no IAM permission beyond creating a bucket and its policy:
+
+```sh
+npx aws-cdk@2 bootstrap aws://<workforce account id>/<region> \
+  --template bootstrap/accounts/workforce/cdk-bootstrap.yaml \
+  --toolkit-stack-name wrkf-foundation-cdktoolkit-stack \
+  --qualifier wrkf \
+  --termination-protection \
+  --profile <workforce admin profile>
+```
+
 ## Tests
 
-`bootstrap/accounts/workforce/tests/stack.tftest.hcl`, mocked provider: the trust and the permission set of both roles and the boundary, literally; the plan role's read of exactly these three; nothing exists while `pipeline` is unset; and, over every policy of the pipeline, no `*` principal, no action containing `*`, no `NotAction`, `NotResource`, `NotPrincipal` or `Principal` in a statement, no bare `*` resource, and no Deny.
+`bootstrap/accounts/workforce/tests/stack.tftest.hcl`, mocked provider: the trust and the permission set of both roles and the boundary, literally; the plan role's read of exactly these three; nothing exists while `pipeline` is unset; the bootstrap template (only the bucket and its policy, the parameters, the bucket's protection, the TLS-only Deny literally, the outputs the CLI reads); and, over every policy of the pipeline, no `*` principal, no action containing `*`, no `NotAction`, `NotResource`, `NotPrincipal` or `Principal` in a statement, no bare `*` resource, and no Deny.
 
 ## Why a local apply
 

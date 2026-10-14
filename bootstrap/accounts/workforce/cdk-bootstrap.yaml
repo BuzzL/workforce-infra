@@ -1,0 +1,97 @@
+# Custom CDK bootstrap of the workforce account (docs/CDK_BOOTSTRAP.md): the asset staging bucket
+# and nothing else. No roles: the deploy and execution roles of workforce-pipeline are Terraform's
+# (pipeline.tf), and the CDK app synthesizes with CliCredentialsStackSynthesizer. Long-form
+# intrinsics only, so that Terraform can yamldecode() it for the tests.
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CDK bootstrap of the workforce account, asset staging bucket only (workforce-infra).
+
+Parameters:
+  Qualifier:
+    Type: String
+    Default: wrkf
+    AllowedValues: [wrkf]
+    Description: CDK qualifier. The deploy role of workforce-pipeline names the bucket that carries it.
+  FileAssetsBucketKmsKeyId:
+    Type: String
+    Default: AWS_MANAGED_KEY
+    AllowedValues: [AWS_MANAGED_KEY]
+    Description: Sent by the CDK CLI. The bucket uses SSE-S3 whatever its value.
+  PublicAccessBlockConfiguration:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true"]
+    Description: Sent by the CDK CLI. Public access is always blocked.
+  BootstrapVariant:
+    Type: String
+    Default: "workforce-infra: staging bucket only"
+    Description: Tells this template apart from the default CDK bootstrap, which the CLI refuses to overwrite it with.
+
+Resources:
+  # SSE-S3, not a customer-managed KMS key: a key costs money every month, as for the audit log bucket.
+  # trivy:ignore:AVD-AWS-0132
+  StagingBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName:
+        Fn::Sub: cdk-${Qualifier}-assets-${AWS::AccountId}-${AWS::Region}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: CleanupOldVersions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+      Tags:
+        - { Key: Project, Value: foundation }
+        - { Key: Environment, Value: workforce }
+        - { Key: App, Value: pipeline }
+        - { Key: Repository, Value: workforce-infra }
+        - { Key: ManagedBy, Value: cloudformation }
+        - { Key: Stack, Value: wrkf-foundation-cdktoolkit-stack }
+
+  StagingBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket:
+        Ref: StagingBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal:
+              AWS: "*"
+            Action: s3:*
+            Resource:
+              - Fn::GetAtt: [StagingBucket, Arn]
+              - Fn::Sub: "${StagingBucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+Outputs:
+  BucketName:
+    Value:
+      Ref: StagingBucket
+  BucketDomainName:
+    Value:
+      Fn::Sub: "${StagingBucket}.s3.${AWS::Region}.${AWS::URLSuffix}"
+  BootstrapVersion:
+    Value: "1"
